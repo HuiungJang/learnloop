@@ -91,6 +91,29 @@ a {
   outline: none;
 }
 
+.demo-password-field {
+  display: grid;
+  gap: 8px;
+  color: #5f5f5d;
+  font-size: 14px;
+}
+
+.demo-password-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid #eceae4;
+  border-radius: 6px;
+  color: #1c1c1c;
+  background: #f7f4ed;
+  font: inherit;
+}
+
+.demo-password-field input:focus-visible {
+  outline: none;
+  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px;
+}
+
 .sidebar-status {
   display: inline-flex;
   align-items: center;

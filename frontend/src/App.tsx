@@ -45,6 +45,7 @@ const workflowCards = [
 
 export function App() {
   const [selectedUser, setSelectedUser] = useState<DemoUser>("contributor");
+  const [demoPassword, setDemoPassword] = useState("");
   const [sessionLabel, setSessionLabel] = useState("No session");
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
@@ -79,6 +80,17 @@ export function App() {
             </button>
           ))}
         </nav>
+
+        <label className="demo-password-field">
+          <span>Demo password</span>
+          <input
+            autoComplete="current-password"
+            onChange={(event) => setDemoPassword(event.target.value)}
+            placeholder="From .env"
+            type="password"
+            value={demoPassword}
+          />
+        </label>
 
         <div className="sidebar-status">
           <ShieldCheck aria-hidden="true" size={18} />
@@ -204,17 +216,29 @@ export function App() {
   );
 
   async function loginSelected(user: DemoUser) {
-    const session = await createSession(user);
+    const password = demoPassword.trim();
+    if (password.length === 0) {
+      setActivity(["Enter demo password"]);
+      return;
+    }
+
+    const session = await createSession(user, password);
     const nextProviders = await listProviders(session.token);
     setSessionLabel(`${session.user.displayName}`);
     setProviders(nextProviders);
   }
 
   async function runDemo() {
+    const password = demoPassword.trim();
+    if (password.length === 0) {
+      setActivity(["Enter demo password"]);
+      return;
+    }
+
     setIsRunning(true);
     setActivity(["Creating evidence"]);
     try {
-      const result = await runLearningDemo();
+      const result = await runLearningDemo(password);
       setProviders(result.providers);
       setLatestCard(result.patternCard);
       setProgress(result.progress);

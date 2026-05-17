@@ -62,7 +62,6 @@ export type ProgressResponse = {
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
-
 const userEmails: Record<DemoUser, string> = {
   admin: "admin@example.com",
   contributor: "contributor@example.com",
@@ -74,12 +73,12 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
 }
 
-export async function createSession(user: DemoUser): Promise<SessionResponse> {
+export async function createSession(user: DemoUser, password: string): Promise<SessionResponse> {
   return request<SessionResponse>("/api/session", {
     method: "POST",
     body: {
       email: userEmails[user],
-      password: "demo-password"
+      password
     }
   });
 }
@@ -89,7 +88,7 @@ export async function listProviders(token: string): Promise<ProviderResponse[]> 
   return response.providers;
 }
 
-export async function runLearningDemo(): Promise<{
+export async function runLearningDemo(password: string): Promise<{
   providers: ProviderResponse[];
   codeBundle: SourceBundleResponse;
   conversationBundle: SourceBundleResponse;
@@ -98,9 +97,9 @@ export async function runLearningDemo(): Promise<{
   patternCard: PatternCardResponse;
   progress: ProgressResponse;
 }> {
-  const contributor = await createSession("contributor");
-  const reviewer = await createSession("reviewer");
-  const learner = await createSession("learner");
+  const contributor = await createSession("contributor", password);
+  const reviewer = await createSession("reviewer", password);
+  const learner = await createSession("learner", password);
   const providers = await listProviders(contributor.token);
 
   const code = await request<{ bundle: SourceBundleResponse }>("/api/ingest/manual", {

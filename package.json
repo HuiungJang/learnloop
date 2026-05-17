@@ -14,6 +14,10 @@
     "frontend:typecheck": "./scripts/frontend-typecheck.sh",
     "db:up": "./scripts/db-up.sh",
     "db:down": "./scripts/db-down.sh",
-    "split:check": "./scripts/check-split.sh"
+    "split:check": "./scripts/check-split.sh",
+    "install:app": "./scripts/install.sh",
+    "start:app": "./scripts/start.sh",
+    "stop:app": "./scripts/stop.sh",
+    "status:app": "./scripts/status.sh"
   }
 }

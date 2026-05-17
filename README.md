@@ -2,6 +2,44 @@
 
 Local MVP for turning AI-assisted coding evidence into reviewed learning assets.
 
+## Install
+
+The easiest way to run the platform is the Docker Compose installer. It builds the Spring Boot API, builds the React app, starts PostgreSQL, keeps data in a Docker volume, and exposes one browser URL.
+
+Requirements:
+
+- Docker Desktop or Docker Engine with Compose v2
+
+Install and start:
+
+```sh
+./scripts/install.sh
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+The installer creates `.env` with generated local credentials. It also prints the generated demo password after startup; enter that password in the UI to use the seeded demo roles.
+
+Installed app commands:
+
+```sh
+./scripts/start.sh
+./scripts/status.sh
+./scripts/stop.sh
+```
+
+To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then run:
+
+```sh
+./scripts/start.sh
+```
+
+Data is stored in the `ai-code-learning-platform_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
+
 ## Runtime
 
 The system Node installation on this machine may be broken. The scripts use the bundled Codex Node runtime automatically:
@@ -20,7 +58,7 @@ http://localhost:4173
 
 ## Split Stack Preview
 
-The Spring Boot and React migration lives beside the Node MVP until parity is complete.
+For development, run the Spring Boot and React services directly:
 
 ```sh
 ./scripts/db-up.sh
@@ -60,8 +98,8 @@ Use the UI role selector or create a session with `POST /api/session`:
 - `u-reviewer`
 - `u-learner`
 
-Default local password: `demo-password`. Set `APP_DEMO_PASSWORD` for non-local environments.
+Default local development password: `demo-password`. The Docker installer generates `APP_DEMO_PASSWORD` in `.env`; the installed UI asks for that password instead of embedding it in the static frontend bundle.
 
 ## Scope
 
-This MVP is intentionally dependency-free. It uses a JSON file store and deterministic local pattern generation instead of real external AI calls. Provider credentials are represented by non-reversible references only.
+The Node MVP remains as a parity oracle. The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and deterministic local pattern generation. Provider credentials are represented by non-reversible references only.

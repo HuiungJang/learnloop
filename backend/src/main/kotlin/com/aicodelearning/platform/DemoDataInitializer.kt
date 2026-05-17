@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Component
-@Profile("local")
+@Profile("local", "install")
 class DemoDataInitializer(
     private val organizationRepository: OrganizationRepository,
     private val teamRepository: TeamRepository,
