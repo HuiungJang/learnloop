@@ -31,6 +31,8 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - [x] Local mock generation creates draft pattern cards, tags, problems, and review tasks.
 - [x] Review approval publishes cards to the learner library.
 - [x] Learner submissions reveal answers and update proficiency/recommendations.
+- [x] OpenAPI endpoint is available for the Spring backend contract.
+- [x] React frontend is connected to session, provider, ingestion, generation, review, library, submission, and progress APIs.
 - [ ] Each implementation phase has verification evidence before commit.
 - [ ] Codex Security scan runs after implementation and validated findings are fixed.
 
@@ -117,5 +119,23 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 **Verification:**
 - `./scripts/backend-test.sh`
 - `./scripts/backend-dev.sh` with local Docker PostgreSQL migration from V3 to V4.
+- `./scripts/check-split.sh`
+- `./scripts/npm.sh --prefix frontend audit`
+
+### 2026-05-17 - Phase 20-27 Frontend Contract Flow Complete
+
+**By:** Codex
+
+**Actions:**
+- Verified Spring OpenAPI at `/v3/api-docs`.
+- Replaced the static React shell with a connected workbench that can create sessions, list providers, run the full evidence-to-learning demo flow, and show card/progress state.
+- Kept the Lovable-inspired visual direction while shifting the first screen to an operational workspace.
+
+**Verification:**
+- `./scripts/frontend-typecheck.sh`
+- `./scripts/frontend-build.sh`
+- Backend + Vite dev servers with `curl http://127.0.0.1:5173/`
+- Vite proxy check with `curl http://127.0.0.1:5173/api/health`
+- OpenAPI check with `curl http://localhost:8080/v3/api-docs`
 - `./scripts/check-split.sh`
 - `./scripts/npm.sh --prefix frontend audit`

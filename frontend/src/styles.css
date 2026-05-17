@@ -74,15 +74,19 @@ a {
   gap: 8px;
 }
 
-.nav-list a {
+.nav-list button {
   padding: 10px 12px;
   border: 1px solid transparent;
   border-radius: 6px;
   color: rgba(28, 28, 28, 0.82);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
-.nav-list a:hover,
-.nav-list a:focus-visible {
+.nav-list button:hover,
+.nav-list button:focus-visible,
+.nav-list .nav-active {
   border-color: rgba(28, 28, 28, 0.4);
   outline: none;
 }
@@ -250,6 +254,85 @@ h1 {
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px;
 }
 
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary-button {
+  border: 1px solid #1c1c1c;
+  color: #fcfbf8;
+  background: #1c1c1c;
+  box-shadow: rgba(255, 255, 255, 0.2) 0 0.5px 0 0 inset, rgba(0, 0, 0, 0.2) 0 0 0 0.5px inset, rgba(0, 0, 0, 0.05) 0 1px 2px 0;
+}
+
+.primary-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.secondary-button {
+  border: 1px solid rgba(28, 28, 28, 0.4);
+  color: #1c1c1c;
+  background: #f7f4ed;
+}
+
+.status-list,
+.tag-row,
+.problem-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-list span,
+.tag-row span,
+.problem-list span {
+  padding: 6px 9px;
+  border: 1px solid #eceae4;
+  border-radius: 9999px;
+  color: rgba(28, 28, 28, 0.82);
+  background: rgba(28, 28, 28, 0.03);
+  font-size: 13px;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.card-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.card-detail strong {
+  color: #1c1c1c;
+  font-size: 18px;
+}
+
+.card-detail p,
+.muted-copy {
+  margin: 0;
+  color: #5f5f5d;
+  line-height: 1.5;
+}
+
 .review-table {
   display: grid;
   gap: 10px;
@@ -299,7 +382,8 @@ h1 {
   }
 
   .summary-grid,
-  .workbench {
+  .workbench,
+  .split-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -319,6 +403,7 @@ h1 {
 
   .summary-grid,
   .workbench,
+  .split-grid,
   .bundle-list,
   .nav-list {
     grid-template-columns: 1fr;

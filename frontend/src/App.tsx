@@ -7,11 +7,14 @@ import {
   ListChecks,
   ShieldCheck,
   Sparkles,
-  UploadCloud
+  UploadCloud,
+  Play,
+  RefreshCw
 } from "lucide-react";
-import { fetchHealth } from "./api/client";
+import { createSession, fetchHealth, listProviders, runLearningDemo, type DemoUser, type PatternCardResponse, type ProgressResponse, type ProviderResponse } from "./api/client";
+import { useState } from "react";
 
-const navItems = ["Evidence", "Patterns", "Review", "Learning"];
+const demoUsers: DemoUser[] = ["admin", "contributor", "reviewer", "learner"];
 
 const workflowCards = [
   {
@@ -40,13 +43,15 @@ const workflowCards = [
   }
 ];
 
-const reviewRows = [
-  ["Diff-driven repository layer", "Spring Data JPA", "Needs review"],
-  ["OAuth provider registration", "Security", "Draft"],
-  ["React Query cache invalidation", "Frontend", "Published"]
-];
-
 export function App() {
+  const [selectedUser, setSelectedUser] = useState<DemoUser>("contributor");
+  const [sessionLabel, setSessionLabel] = useState("No session");
+  const [providers, setProviders] = useState<ProviderResponse[]>([]);
+  const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
+  const [progress, setProgress] = useState<ProgressResponse | null>(null);
+  const [activity, setActivity] = useState<string[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+
   const healthQuery = useQuery({
     queryKey: ["health"],
     queryFn: fetchHealth
@@ -68,10 +73,10 @@ export function App() {
         </a>
 
         <nav className="nav-list">
-          {navItems.map((item) => (
-            <a href={`#${item.toLowerCase()}`} key={item}>
-              {item}
-            </a>
+          {demoUsers.map((user) => (
+            <button className={selectedUser === user ? "nav-active" : ""} key={user} onClick={() => setSelectedUser(user)} type="button">
+              {user}
+            </button>
           ))}
         </nav>
 
@@ -116,33 +121,114 @@ export function App() {
           <div className="panel panel-wide">
             <div className="panel-title">
               <GitPullRequest aria-hidden="true" size={20} />
-              <h2>Source Bundle Queue</h2>
+              <h2>Workflow Run</h2>
             </div>
-            <div className="bundle-list">
-              <button type="button">Codex Obsidian Sync</button>
-              <button type="button">Pull Request URL</button>
-              <button type="button">Commit SHA</button>
-              <button type="button">Manual Diff</button>
+            <div className="action-row">
+              <button className="secondary-button" onClick={() => loginSelected(selectedUser)} type="button">
+                <RefreshCw aria-hidden="true" size={16} />
+                {sessionLabel}
+              </button>
+              <button className="primary-button" disabled={isRunning} onClick={runDemo} type="button">
+                <Play aria-hidden="true" size={16} />
+                {isRunning ? "Running" : "Run flow"}
+              </button>
+            </div>
+            <div className="status-list">
+              {activity.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+              {activity.length === 0 ? <span>Ready</span> : null}
             </div>
           </div>
 
           <div className="panel" id="review">
             <div className="panel-title">
               <BookOpen aria-hidden="true" size={20} />
-              <h2>Review Queue</h2>
+              <h2>Latest Card</h2>
             </div>
-            <div className="review-table" role="table" aria-label="Review queue">
-              {reviewRows.map(([name, tag, status]) => (
-                <div className="review-row" role="row" key={name}>
-                  <span>{name}</span>
-                  <small>{tag}</small>
-                  <strong>{status}</strong>
+            {latestCard ? (
+              <div className="card-detail">
+                <strong>{latestCard.title}</strong>
+                <p>{latestCard.summary}</p>
+                <div className="tag-row">
+                  {latestCard.tags.map((tag) => (
+                    <span key={`${tag.tagType}:${tag.name}`}>{tag.name}</span>
+                  ))}
+                </div>
+                <div className="problem-list">
+                  {latestCard.problems.map((problem) => (
+                    <span key={problem.id}>{problem.referenceAnswer ? "Answered" : problem.difficulty}</span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="muted-copy">No published card yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="split-grid">
+          <div className="panel">
+            <div className="panel-title">
+              <ShieldCheck aria-hidden="true" size={20} />
+              <h2>Providers</h2>
+            </div>
+            <div className="review-table">
+              {providers.map((provider) => (
+                <div className="review-row" key={provider.id}>
+                  <span>{provider.provider} / {provider.model}</span>
+                  <small>{provider.scope}</small>
+                  <strong>{provider.status}</strong>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">
+              <Library aria-hidden="true" size={20} />
+              <h2>Progress</h2>
+            </div>
+            <div className="review-table">
+              {progress?.proficiency.map((item) => (
+                <div className="review-row" key={item.tagName}>
+                  <span>{item.tagName}</span>
+                  <strong>{item.score}</strong>
+                </div>
+              )) ?? <p className="muted-copy">No submissions yet.</p>}
             </div>
           </div>
         </section>
       </main>
     </div>
   );
+
+  async function loginSelected(user: DemoUser) {
+    const session = await createSession(user);
+    const nextProviders = await listProviders(session.token);
+    setSessionLabel(`${session.user.displayName}`);
+    setProviders(nextProviders);
+  }
+
+  async function runDemo() {
+    setIsRunning(true);
+    setActivity(["Creating evidence"]);
+    try {
+      const result = await runLearningDemo();
+      setProviders(result.providers);
+      setLatestCard(result.patternCard);
+      setProgress(result.progress);
+      setActivity([
+        `Code ${result.codeBundle.status}`,
+        `Conversation ${result.conversationBundle.status}`,
+        `Link ${result.sourceLink.status}`,
+        `Review ${result.reviewTask.status}`,
+        "Submission accepted"
+      ]);
+    } catch (error) {
+      setActivity([error instanceof Error ? error.message : "Flow failed"]);
+    } finally {
+      setIsRunning(false);
+    }
+  }
 }
