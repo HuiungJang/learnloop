@@ -20,7 +20,7 @@ http://localhost:4173
 
 ## Demo Users
 
-Use the UI role selector or send `x-user-id` headers:
+Use the UI role selector or create a session with `POST /api/session`:
 
 - `u-admin`
 - `u-contributor`

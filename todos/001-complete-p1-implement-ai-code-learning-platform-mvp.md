@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "001"
 tags: [mvp, node, security, ai-learning-platform]
@@ -32,16 +32,16 @@ Implement the MVP as a local web app and API with tests and security checks. Use
 
 ## Acceptance Criteria
 
-- [ ] Local app can start without external package installation.
-- [ ] Admin, contributor, reviewer, learner flows work through API and UI.
-- [ ] Provider credentials are not exposed through API responses or logs.
-- [ ] Evidence ingestion scans and blocks test secrets.
-- [ ] Draft generation creates reviewable pattern cards with problems.
-- [ ] Review publication makes assets visible to learners.
-- [ ] Submissions update proficiency and recommendations.
-- [ ] Automated tests cover core flows, permissions, and security cases.
-- [ ] Codex Security scan runs and findings are fixed or documented as false positives.
-- [ ] Smoke test verifies the app works in a local environment.
+- [x] Local app can start without external package installation.
+- [x] Admin, contributor, reviewer, learner flows work through API and UI.
+- [x] Provider credentials are not exposed through API responses or logs.
+- [x] Evidence ingestion scans and blocks test secrets.
+- [x] Draft generation creates reviewable pattern cards with problems.
+- [x] Review publication makes assets visible to learners.
+- [x] Submissions update proficiency and recommendations.
+- [x] Automated tests cover core flows, permissions, and security cases.
+- [x] Codex Security scan runs and findings are fixed or documented as false positives.
+- [x] Smoke test verifies the app works in a local environment.
 
 ## Work Log
 
@@ -56,3 +56,16 @@ Implement the MVP as a local web app and API with tests and security checks. Use
 
 **Learnings:**
 - Avoid relying on system Node in this environment; use the bundled runtime path in scripts.
+
+### 2026-05-17 - MVP Complete
+
+**By:** Codex
+
+**Actions:**
+- Implemented a zero-dependency Node HTTP app with JSON persistence and static UI.
+- Added session-token authentication, scoped authorization, provider registration, evidence ingestion, source linking, deterministic draft generation, review/publication, learner submission, proficiency, and recommendations.
+- Added automated tests and smoke environment.
+- Ran Codex Security scan and fixed discovered authentication/rate-limit/bootstrap issues.
+
+**Learnings:**
+- The initial `x-user-id` development shortcut was unsafe; even local MVPs need a real session boundary before security review.

@@ -30,6 +30,7 @@ const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const MAX_JSON_BYTES = 1_000_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 180;
+const SESSION_RATE_LIMIT_MAX_REQUESTS = 20;
 
 function userIdFrom(req, store) {
   const authorization = req.headers.authorization || "";
@@ -133,6 +134,18 @@ export async function createApp(store) {
   await bootstrapDemo(store);
   const requestBuckets = new Map();
 
+  function applyRateLimit(key, maxRequests = RATE_LIMIT_MAX_REQUESTS) {
+    const currentTime = Date.now();
+    const bucket = requestBuckets.get(key) ?? { count: 0, resetAt: currentTime + RATE_LIMIT_WINDOW_MS };
+    if (currentTime > bucket.resetAt) {
+      bucket.count = 0;
+      bucket.resetAt = currentTime + RATE_LIMIT_WINDOW_MS;
+    }
+    bucket.count += 1;
+    requestBuckets.set(key, bucket);
+    return bucket.count <= maxRequests;
+  }
+
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     let actorUserId = null;
@@ -144,7 +157,13 @@ export async function createApp(store) {
       }
 
       if (req.method === "POST" && url.pathname === "/api/session") {
-        sendJsonRaw(res, 201, await createSession(store, await parseJson(req)));
+        const payload = await parseJson(req);
+        const sessionKey = `session:${req.socket.remoteAddress}:${payload.email ?? "unknown"}`;
+        if (!applyRateLimit(sessionKey, SESSION_RATE_LIMIT_MAX_REQUESTS)) {
+          sendJson(res, 429, { error: { message: "Rate limit exceeded", status: 429 } });
+          return;
+        }
+        sendJsonRaw(res, 201, await createSession(store, payload));
         return;
       }
 
@@ -160,16 +179,7 @@ export async function createApp(store) {
 
       actorUserId = userIdFrom(req, store);
 
-      const bucketKey = `${actorUserId}:${url.pathname}`;
-      const currentTime = Date.now();
-      const bucket = requestBuckets.get(bucketKey) ?? { count: 0, resetAt: currentTime + RATE_LIMIT_WINDOW_MS };
-      if (currentTime > bucket.resetAt) {
-        bucket.count = 0;
-        bucket.resetAt = currentTime + RATE_LIMIT_WINDOW_MS;
-      }
-      bucket.count += 1;
-      requestBuckets.set(bucketKey, bucket);
-      if (bucket.count > RATE_LIMIT_MAX_REQUESTS) {
+      if (!applyRateLimit(`${actorUserId}:${url.pathname}`)) {
         sendJson(res, 429, { error: { message: "Rate limit exceeded", status: 429 } });
         return;
       }
