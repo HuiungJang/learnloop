@@ -1,0 +1,1 @@
+-- Initial Flyway baseline for the split Spring Boot service.

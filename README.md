@@ -18,6 +18,31 @@ Default dev URL:
 http://localhost:4173
 ```
 
+## Split Stack Preview
+
+The Spring Boot and React migration lives beside the Node MVP until parity is complete.
+
+```sh
+./scripts/db-up.sh
+./scripts/backend-dev.sh
+./scripts/frontend-dev.sh
+```
+
+Default split-stack URLs:
+
+```text
+Backend API: http://localhost:8080
+Frontend: http://127.0.0.1:5173
+Health: http://localhost:8080/api/health
+```
+
+Run the current split-stack verification:
+
+```sh
+./scripts/check-split.sh
+./scripts/npm.sh --prefix frontend audit
+```
+
 ## Demo Users
 
 Use the UI role selector or create a session with `POST /api/session`:

@@ -6,6 +6,14 @@
   "scripts": {
     "dev": "./scripts/dev.sh",
     "test": "./scripts/test.sh",
-    "smoke": "./scripts/smoke.sh"
+    "smoke": "./scripts/smoke.sh",
+    "backend:dev": "./scripts/backend-dev.sh",
+    "backend:test": "./scripts/backend-test.sh",
+    "frontend:dev": "./scripts/frontend-dev.sh",
+    "frontend:build": "./scripts/frontend-build.sh",
+    "frontend:typecheck": "./scripts/frontend-typecheck.sh",
+    "db:up": "./scripts/db-up.sh",
+    "db:down": "./scripts/db-down.sh",
+    "split:check": "./scripts/check-split.sh"
   }
 }

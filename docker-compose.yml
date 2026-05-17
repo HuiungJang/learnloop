@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aicodelearning
+      POSTGRES_USER: aicodelearning
+      POSTGRES_PASSWORD: aicodelearning
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aicodelearning -d aicodelearning"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - aicodelearning-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  aicodelearning-postgres-data:
