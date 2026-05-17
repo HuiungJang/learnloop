@@ -2,19 +2,29 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   CheckCircle2,
+  Code2,
+  GraduationCap,
   GitPullRequest,
   Library,
   ListChecks,
+  PenLine,
   ShieldCheck,
   Sparkles,
   UploadCloud,
   Play,
-  RefreshCw
+  RefreshCw,
+  UserCog,
+  type LucideIcon
 } from "lucide-react";
 import { createSession, fetchHealth, listProviders, runLearningDemo, type DemoUser, type PatternCardResponse, type ProgressResponse, type ProviderResponse } from "./api/client";
 import { useState } from "react";
 
-const demoUsers: DemoUser[] = ["admin", "contributor", "reviewer", "learner"];
+const demoUsers: Array<{ id: DemoUser; label: string; icon: LucideIcon }> = [
+  { id: "admin", label: "Admin", icon: UserCog },
+  { id: "contributor", label: "Contributor", icon: Code2 },
+  { id: "reviewer", label: "Reviewer", icon: PenLine },
+  { id: "learner", label: "Learner", icon: GraduationCap }
+];
 
 const workflowCards = [
   {
@@ -74,11 +84,22 @@ export function App() {
         </a>
 
         <nav className="nav-list">
-          {demoUsers.map((user) => (
-            <button className={selectedUser === user ? "nav-active" : ""} key={user} onClick={() => setSelectedUser(user)} type="button">
-              {user}
-            </button>
-          ))}
+          {demoUsers.map((user) => {
+            const Icon = user.icon;
+
+            return (
+              <button
+                aria-pressed={selectedUser === user.id}
+                className={selectedUser === user.id ? "nav-active" : ""}
+                key={user.id}
+                onClick={() => setSelectedUser(user.id)}
+                type="button"
+              >
+                <Icon aria-hidden="true" size={16} />
+                <span>{user.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <label className="demo-password-field">
