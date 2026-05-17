@@ -1,7 +1,7 @@
 import path from "node:path";
 import { assertRole, canViewPattern, hasRole } from "./authz.js";
 import { PROVIDER_TASKS } from "./config.js";
-import { id, now, scanSecrets, sealCredential, sha256 } from "./security.js";
+import { createSessionToken, hashPassword, id, now, scanSecrets, sealCredential, sha256, verifyPassword } from "./security.js";
 
 const ALLOWED_PROVIDER_SCOPES = new Set(["organization", "personal"]);
 const ALLOWED_VISIBILITY = new Set(["private", "organization", "public"]);
@@ -153,11 +153,19 @@ export async function bootstrapDemo(store) {
   store.db.organizations.push({ id: "org-demo", name: "Demo Organization", defaultVisibility: "organization", createdAt });
   store.db.teams.push({ id: "team-platform", organizationId: "org-demo", name: "Platform Team", createdAt });
   store.db.projects.push({ id: "project-learning", organizationId: "org-demo", teamId: "team-platform", name: "Learning Platform", createdAt });
+  const password = process.env.APP_DEMO_PASSWORD || (process.env.NODE_ENV === "production" ? null : "demo-password");
+  if (!password) {
+    throw new Error("APP_DEMO_PASSWORD is required in production");
+  }
+  const adminPassword = hashPassword(password, "demo-admin-salt");
+  const contributorPassword = hashPassword(password, "demo-contributor-salt");
+  const reviewerPassword = hashPassword(password, "demo-reviewer-salt");
+  const learnerPassword = hashPassword(password, "demo-learner-salt");
   store.db.users.push(
-    { id: "u-admin", email: "admin@example.com", displayName: "Admin", createdAt },
-    { id: "u-contributor", email: "contributor@example.com", displayName: "Contributor", createdAt },
-    { id: "u-reviewer", email: "reviewer@example.com", displayName: "Reviewer", createdAt },
-    { id: "u-learner", email: "learner@example.com", displayName: "Learner", createdAt }
+    { id: "u-admin", email: "admin@example.com", displayName: "Admin", passwordSalt: adminPassword.salt, passwordHash: adminPassword.hash, createdAt },
+    { id: "u-contributor", email: "contributor@example.com", displayName: "Contributor", passwordSalt: contributorPassword.salt, passwordHash: contributorPassword.hash, createdAt },
+    { id: "u-reviewer", email: "reviewer@example.com", displayName: "Reviewer", passwordSalt: reviewerPassword.salt, passwordHash: reviewerPassword.hash, createdAt },
+    { id: "u-learner", email: "learner@example.com", displayName: "Learner", passwordSalt: learnerPassword.salt, passwordHash: learnerPassword.hash, createdAt }
   );
   store.db.memberships.push(
     { id: "mem-admin", organizationId: "org-demo", userId: "u-admin", role: "admin", createdAt },
@@ -190,7 +198,36 @@ export function bootstrapPayload(store) {
     organizations: store.db.organizations,
     teams: store.db.teams,
     projects: store.db.projects,
-    users: store.db.users.map(({ id: userId, email, displayName }) => ({ id: userId, email, displayName }))
+    authRequired: true
+  };
+}
+
+export async function createSession(store, input) {
+  const { email, password } = input;
+  const user = store.db.users.find((candidate) => candidate.email === email && !candidate.deactivatedAt);
+  if (!user || !verifyPassword(password ?? "", user.passwordSalt, user.passwordHash)) {
+    const error = new Error("Invalid email or password");
+    error.status = 401;
+    throw error;
+  }
+  const token = createSessionToken();
+  const row = {
+    id: id("session"),
+    userId: user.id,
+    tokenHash: sha256(token),
+    createdAt: now(),
+    expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+    revokedAt: null
+  };
+  await store.insert("sessionTokens", row);
+  return {
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName
+    },
+    expiresAt: row.expiresAt
   };
 }
 

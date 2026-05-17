@@ -44,6 +44,21 @@ export function sealCredential(secret) {
   };
 }
 
+export function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.pbkdf2Sync(String(password), salt, 120_000, 32, "sha256").toString("hex");
+  return { salt, hash };
+}
+
+export function verifyPassword(password, salt, expectedHash) {
+  const actual = crypto.pbkdf2Sync(String(password), salt, 120_000, 32, "sha256");
+  const expected = Buffer.from(expectedHash, "hex");
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+export function createSessionToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
 export function redactForApi(value) {
   if (Array.isArray(value)) return value.map(redactForApi);
   if (!value || typeof value !== "object") return value;

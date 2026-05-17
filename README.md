@@ -27,6 +27,8 @@ Use the UI role selector or send `x-user-id` headers:
 - `u-reviewer`
 - `u-learner`
 
+Default local password: `demo-password`. Set `APP_DEMO_PASSWORD` for non-local environments.
+
 ## Scope
 
 This MVP is intentionally dependency-free. It uses a JSON file store and deterministic local pattern generation instead of real external AI calls. Provider credentials are represented by non-reversible references only.

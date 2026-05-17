@@ -4,6 +4,15 @@ import path from "node:path";
 import { createApp } from "../src/app.js";
 import { JsonStore } from "../src/store.js";
 
+const USER_EMAILS = {
+  "u-admin": "admin@example.com",
+  "u-contributor": "contributor@example.com",
+  "u-reviewer": "reviewer@example.com",
+  "u-learner": "learner@example.com"
+};
+
+const tokenCache = new Map();
+
 export async function withServer(testFn) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "ai-code-learning-"));
   const store = new JsonStore(dataDir);
@@ -21,11 +30,23 @@ export async function withServer(testFn) {
 }
 
 export async function request(baseUrl, path, { userId = "u-admin", method = "GET", body } = {}) {
+  let token = tokenCache.get(`${baseUrl}:${userId}`);
+  if (!token) {
+    const sessionResponse = await fetch(`${baseUrl}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: USER_EMAILS[userId], password: "demo-password" })
+    });
+    const session = await sessionResponse.json();
+    if (!sessionResponse.ok) throw new Error(session.error?.message || "Login failed");
+    token = session.token;
+    tokenCache.set(`${baseUrl}:${userId}`, token);
+  }
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       "content-type": "application/json",
-      "x-user-id": userId
+      authorization: `Bearer ${token}`
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });

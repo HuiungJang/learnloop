@@ -15,11 +15,30 @@ server.listen(port, "127.0.0.1");
 await once(server, "listening");
 
 const baseUrl = `http://127.0.0.1:${port}`;
+const tokenCache = new Map();
+const userEmails = {
+  "u-admin": "admin@example.com",
+  "u-contributor": "contributor@example.com",
+  "u-reviewer": "reviewer@example.com",
+  "u-learner": "learner@example.com"
+};
 
 async function api(path, { userId = "u-admin", method = "GET", body } = {}) {
+  let token = tokenCache.get(userId);
+  if (!token) {
+    const sessionResponse = await fetch(`${baseUrl}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: userEmails[userId], password: "demo-password" })
+    });
+    const session = await sessionResponse.json();
+    if (!sessionResponse.ok) throw new Error(session.error?.message || "Login failed");
+    token = session.token;
+    tokenCache.set(userId, token);
+  }
   const response = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: { "content-type": "application/json", "x-user-id": userId },
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const json = await response.json();

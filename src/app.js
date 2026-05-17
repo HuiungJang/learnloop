@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   bootstrapDemo,
   bootstrapPayload,
+  createSession,
   decideSourceLink,
   generatePatternDraft,
   getEvidenceSummary,
@@ -22,7 +23,7 @@ import {
   suggestSourceLinks
 } from "./platform.js";
 import { assertRole } from "./authz.js";
-import { redactForApi } from "./security.js";
+import { redactForApi, sha256 } from "./security.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -30,12 +31,37 @@ const MAX_JSON_BYTES = 1_000_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 180;
 
-function userIdFrom(req) {
-  return req.headers["x-user-id"] || "u-admin";
+function userIdFrom(req, store) {
+  const authorization = req.headers.authorization || "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    const error = new Error("Authentication required");
+    error.status = 401;
+    throw error;
+  }
+  const tokenHash = sha256(match[1]);
+  const session = store.db.sessionTokens.find((candidate) => {
+    return candidate.tokenHash === tokenHash && !candidate.revokedAt && new Date(candidate.expiresAt).getTime() > Date.now();
+  });
+  if (!session) {
+    const error = new Error("Invalid or expired session");
+    error.status = 401;
+    throw error;
+  }
+  return session.userId;
 }
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(redactForApi(payload), null, 2);
+  writeJson(res, status, body);
+}
+
+function sendJsonRaw(res, status, payload) {
+  const body = JSON.stringify(payload, null, 2);
+  writeJson(res, status, body);
+}
+
+function writeJson(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
@@ -109,13 +135,30 @@ export async function createApp(store) {
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
-    const actorUserId = userIdFrom(req);
+    let actorUserId = null;
 
     try {
       if (!url.pathname.startsWith("/api/")) {
         await sendStatic(req, res, url.pathname);
         return;
       }
+
+      if (req.method === "POST" && url.pathname === "/api/session") {
+        sendJsonRaw(res, 201, await createSession(store, await parseJson(req)));
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/health") {
+        sendJson(res, 200, { ok: true, time: new Date().toISOString() });
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/bootstrap") {
+        sendJson(res, 200, bootstrapPayload(store));
+        return;
+      }
+
+      actorUserId = userIdFrom(req, store);
 
       const bucketKey = `${actorUserId}:${url.pathname}`;
       const currentTime = Date.now();
@@ -128,16 +171,6 @@ export async function createApp(store) {
       requestBuckets.set(bucketKey, bucket);
       if (bucket.count > RATE_LIMIT_MAX_REQUESTS) {
         sendJson(res, 429, { error: { message: "Rate limit exceeded", status: 429 } });
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, time: new Date().toISOString() });
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/api/bootstrap") {
-        sendJson(res, 200, bootstrapPayload(store));
         return;
       }
 

@@ -76,6 +76,17 @@ test("authorization prevents learners from reading raw evidence or review queue"
   });
 });
 
+test("user identity cannot be spoofed with x-user-id without a session token", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/api/audit?organizationId=org-demo`, {
+      headers: { "x-user-id": "u-admin" }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 401);
+    assert.equal(body.error.message, "Authentication required");
+  });
+});
+
 test("provider credentials are stored as references and redacted from API responses", async () => {
   await withServer(async ({ baseUrl, store }) => {
     const secret = "personal-provider-secret-1234";

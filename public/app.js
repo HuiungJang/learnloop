@@ -1,5 +1,6 @@
 const state = {
   userId: "u-admin",
+  sessionToken: null,
   organizationId: "org-demo",
   teamId: "team-platform",
   projectId: "project-learning",
@@ -9,6 +10,13 @@ const state = {
   reviewTaskId: null,
   patternCardId: null,
   problemId: null
+};
+
+const demoEmails = {
+  "u-admin": "admin@example.com",
+  "u-contributor": "contributor@example.com",
+  "u-reviewer": "reviewer@example.com",
+  "u-learner": "learner@example.com"
 };
 
 const logEl = document.querySelector("#log");
@@ -25,7 +33,7 @@ async function api(path, options = {}) {
     ...options,
     headers: {
       "content-type": "application/json",
-      "x-user-id": state.userId,
+      ...(state.sessionToken ? { authorization: `Bearer ${state.sessionToken}` } : {}),
       ...(options.headers || {})
     }
   });
@@ -34,6 +42,22 @@ async function api(path, options = {}) {
     throw new Error(body.error?.message || "Request failed");
   }
   return body;
+}
+
+async function login(userId) {
+  state.userId = userId;
+  const password = document.querySelector("#passwordInput").value;
+  if (!password) throw new Error("Password required");
+  const response = await fetch("/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: demoEmails[userId], password })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error?.message || "Login failed");
+  state.sessionToken = body.token;
+  userSelect.value = userId;
+  return body.user;
 }
 
 function row(title, meta, html = "") {
@@ -48,10 +72,10 @@ function row(title, meta, html = "") {
 async function bootstrap() {
   const data = await api("/api/bootstrap");
   userSelect.innerHTML = "";
-  for (const user of data.users) {
+  for (const [userId, email] of Object.entries(demoEmails)) {
     const option = document.createElement("option");
-    option.value = user.id;
-    option.textContent = `${user.displayName} (${user.id})`;
+    option.value = userId;
+    option.textContent = `${email} (${userId})`;
     userSelect.append(option);
   }
   userSelect.value = state.userId;
@@ -59,8 +83,7 @@ async function bootstrap() {
 }
 
 async function ingest() {
-  state.userId = "u-contributor";
-  userSelect.value = state.userId;
+  await login("u-contributor");
   const code = document.querySelector("#codeInput").value;
   const conversation = document.querySelector("#conversationInput").value;
   const manual = await api("/api/ingest/manual", {
@@ -102,8 +125,7 @@ async function ingest() {
 }
 
 async function linkSources() {
-  state.userId = "u-contributor";
-  userSelect.value = state.userId;
+  await login("u-contributor");
   const result = await api("/api/source-links/suggest", {
     method: "POST",
     body: JSON.stringify({
@@ -117,8 +139,7 @@ async function linkSources() {
 }
 
 async function generateDraft() {
-  state.userId = "u-contributor";
-  userSelect.value = state.userId;
+  await login("u-contributor");
   const result = await api("/api/generation/run", {
     method: "POST",
     body: JSON.stringify({
@@ -134,8 +155,7 @@ async function generateDraft() {
 }
 
 async function loadReview() {
-  state.userId = "u-reviewer";
-  userSelect.value = state.userId;
+  await login("u-reviewer");
   const result = await api(`/api/review/tasks?organizationId=${state.organizationId}`);
   const list = document.querySelector("#reviewList");
   list.innerHTML = "";
@@ -147,8 +167,7 @@ async function loadReview() {
 }
 
 async function approveSelected() {
-  state.userId = "u-reviewer";
-  userSelect.value = state.userId;
+  await login("u-reviewer");
   const result = await api(`/api/review/tasks/${state.reviewTaskId}/decision`, {
     method: "POST",
     body: JSON.stringify({ decision: "approve", comment: "Reviewed for demo publication." })
@@ -157,8 +176,7 @@ async function approveSelected() {
 }
 
 async function loadLibrary() {
-  state.userId = "u-learner";
-  userSelect.value = state.userId;
+  await login("u-learner");
   const result = await api(`/api/library?organizationId=${state.organizationId}`);
   const list = document.querySelector("#libraryList");
   list.innerHTML = "";
@@ -173,8 +191,7 @@ async function loadLibrary() {
 }
 
 async function openCard(cardId) {
-  state.userId = "u-learner";
-  userSelect.value = state.userId;
+  await login("u-learner");
   const result = await api(`/api/pattern-cards/${cardId}`);
   const pane = document.querySelector("#problemPane");
   pane.innerHTML = "";
@@ -204,14 +221,13 @@ async function submitProblem(problemId, answer) {
 }
 
 async function recommendations() {
-  state.userId = "u-learner";
-  userSelect.value = state.userId;
+  await login("u-learner");
   const result = await api(`/api/recommendations?organizationId=${state.organizationId}`);
   log("Recommendations", result.cards.map((card) => card.title));
 }
 
 userSelect.addEventListener("change", () => {
-  state.userId = userSelect.value;
+  login(userSelect.value).catch((error) => log(error.message));
 });
 
 document.querySelector("#ingestBtn").addEventListener("click", () => ingest().catch((error) => log(error.message)));

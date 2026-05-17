@@ -24,6 +24,7 @@ export const EMPTY_DB = {
   submissions: [],
   proficiencyScores: [],
   auditLogs: [],
+  sessionTokens: [],
   jobs: [],
   metrics: []
 };
