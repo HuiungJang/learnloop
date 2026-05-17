@@ -94,6 +94,164 @@ a {
   font-size: 13px;
 }
 
+.auth-shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.74fr) minmax(0, 1.26fr);
+  gap: 40px;
+  min-height: 100vh;
+  padding: 40px;
+}
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 520px;
+}
+
+.auth-panel h1,
+.onboarding-panel h1 {
+  max-width: 680px;
+}
+
+.auth-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: center;
+  gap: 16px;
+}
+
+.auth-tabs,
+.auth-method-row,
+.provider-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-tabs button,
+.auth-method-row button,
+.provider-grid button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: rgba(28, 28, 28, 0.82);
+  background: transparent;
+  cursor: pointer;
+}
+
+.auth-tabs button:hover,
+.auth-tabs button:focus-visible,
+.auth-tabs .nav-active,
+.auth-method-row button:hover,
+.auth-method-row button:focus-visible,
+.auth-method-row .nav-active,
+.provider-grid button:hover,
+.provider-grid button:focus-visible,
+.provider-grid .provider-selected {
+  border-color: var(--interactive-border);
+  background: var(--surface-tint);
+  outline: none;
+}
+
+.auth-method-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.auth-form,
+.onboarding-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-form label,
+.onboarding-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.auth-form input,
+.onboarding-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: var(--cream);
+}
+
+.auth-form input:focus-visible,
+.onboarding-form input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 14px;
+}
+
+.account-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.account-card strong {
+  color: var(--charcoal);
+}
+
+.account-card span,
+.account-card small,
+.local-ai-card small {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.local-ai-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--interactive-border);
+  border-radius: 8px;
+  color: var(--charcoal);
+  background: var(--cream);
+  text-align: left;
+  cursor: pointer;
+}
+
+.local-ai-card > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.local-ai-card:focus-visible,
+.local-ai-card:hover {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+.sidebar-action {
+  justify-content: center;
+}
+
 .nav-list {
   display: grid;
   gap: 8px;
@@ -444,7 +602,54 @@ h1 {
   font-weight: 600;
 }
 
+.onboarding-panel {
+  display: grid;
+  align-content: start;
+  gap: 32px;
+  max-width: 760px;
+  min-height: calc(100vh - 80px);
+  padding-top: 40px;
+}
+
+.provider-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.auth-method-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.local-only-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--success-text);
+  background: var(--success-fill);
+  font-size: 14px;
+}
+
+.oauth-command {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: rgba(28, 28, 28, 0.82);
+  background: var(--surface-tint);
+  font-size: 14px;
+}
+
 @media (max-width: 1040px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel {
+    max-width: none;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -484,6 +689,15 @@ h1 {
 }
 
 @media (max-width: 720px) {
+  .auth-shell {
+    padding: 24px 16px;
+  }
+
+  .auth-preview,
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     grid-template-columns: 1fr;
     padding: 18px 16px;
@@ -533,5 +747,10 @@ h1 {
   .primary-button,
   .secondary-button {
     justify-content: center;
+  }
+
+  .auth-tabs,
+  .auth-method-row {
+    grid-template-columns: 1fr;
   }
 }

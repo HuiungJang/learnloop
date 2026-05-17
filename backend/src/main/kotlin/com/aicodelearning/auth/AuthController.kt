@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
@@ -28,7 +29,7 @@ class AuthController(
         @Valid @RequestBody request: LoginRequest,
         servletRequest: HttpServletRequest,
     ): SessionResponse {
-        val rateLimitKey = "${servletRequest.remoteAddr}:${request.email.lowercase()}"
+        val rateLimitKey = "${servletRequest.remoteAddr}:${request.email.trim().lowercase()}"
         if (!loginRateLimiter.consume(rateLimitKey)) {
             throw RateLimitedException("Rate limit exceeded")
         }
@@ -38,17 +39,22 @@ class AuthController(
                 ?: throw UnauthorizedException("Invalid email or password")
 
         loginRateLimiter.reset(rateLimitKey)
-        return SessionResponse(
-            token = session.token,
-            user =
-                UserResponse(
-                    id = session.user.id,
-                    email = session.user.email,
-                    displayName = session.user.displayName,
-                    memberships = session.user.memberships,
-                ),
-            expiresAt = session.expiresAt,
-        )
+        return session.toResponse()
+    }
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun register(
+        @Valid @RequestBody request: RegisterRequest,
+    ): SessionResponse {
+        val session =
+            sessionService.register(
+                email = request.email,
+                displayName = request.displayName,
+                password = request.password,
+            )
+
+        return session.toResponse()
     }
 
     @GetMapping("/me")
@@ -61,6 +67,19 @@ class AuthController(
             displayName = currentUser.displayName,
             memberships = currentUser.memberships,
         )
+
+    private fun CreatedSession.toResponse(): SessionResponse =
+        SessionResponse(
+            token = token,
+            user =
+                UserResponse(
+                    id = user.id,
+                    email = user.email,
+                    displayName = user.displayName,
+                    memberships = user.memberships,
+                ),
+            expiresAt = expiresAt,
+        )
 }
 
 data class LoginRequest(
@@ -69,6 +88,20 @@ data class LoginRequest(
     val email: String = "",
 
     @field:NotBlank
+    val password: String = "",
+)
+
+data class RegisterRequest(
+    @field:Email
+    @field:NotBlank
+    val email: String = "",
+
+    @field:NotBlank
+    @field:Size(min = 2, max = 80)
+    val displayName: String = "",
+
+    @field:NotBlank
+    @field:Size(min = 8, max = 128)
     val password: String = "",
 )
 

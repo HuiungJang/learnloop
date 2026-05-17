@@ -2,15 +2,23 @@ export type HealthResponse = {
   status: string;
 };
 
-export type DemoUser = "admin" | "contributor" | "reviewer" | "learner";
+export type Membership = {
+  organizationId: string;
+  teamId: string | null;
+  projectId: string | null;
+  role: string;
+};
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  memberships: Membership[];
+};
 
 export type SessionResponse = {
   token: string;
-  user: {
-    id: string;
-    email: string;
-    displayName: string;
-  };
+  user: AuthUser;
   expiresAt: string;
 };
 
@@ -57,58 +65,62 @@ export type PatternCardResponse = {
   }>;
 };
 
-export type ProgressResponse = {
-  proficiency: Array<{ tagName: string; score: number }>;
-};
-
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
-const userEmails: Record<DemoUser, string> = {
-  admin: "admin@example.com",
-  contributor: "contributor@example.com",
-  reviewer: "reviewer@example.com",
-  learner: "learner@example.com"
-};
 
 export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
 }
 
-export async function createSession(user: DemoUser, password: string): Promise<SessionResponse> {
+export async function createSession(email: string, password: string): Promise<SessionResponse> {
   return request<SessionResponse>("/api/session", {
     method: "POST",
     body: {
-      email: userEmails[user],
+      email,
       password
     }
   });
 }
 
-export async function listProviders(token: string): Promise<ProviderResponse[]> {
-  const response = await request<{ providers: ProviderResponse[] }>("/api/providers?organizationId=org-demo", { token });
+export async function registerUser(
+  email: string,
+  displayName: string,
+  password: string
+): Promise<SessionResponse> {
+  return request<SessionResponse>("/api/register", {
+    method: "POST",
+    body: {
+      email,
+      displayName,
+      password
+    }
+  });
+}
+
+export async function listProviders(token: string, organizationId: string): Promise<ProviderResponse[]> {
+  const response = await request<{ providers: ProviderResponse[] }>(`/api/providers?organizationId=${encodeURIComponent(organizationId)}`, { token });
   return response.providers;
 }
 
-export async function runLearningDemo(password: string): Promise<{
+export async function runLearningDemo(token: string, membership: Membership): Promise<{
   providers: ProviderResponse[];
   codeBundle: SourceBundleResponse;
   conversationBundle: SourceBundleResponse;
   sourceLink: SourceLinkResponse;
   reviewTask: ReviewTaskResponse;
   patternCard: PatternCardResponse;
-  progress: ProgressResponse;
 }> {
-  const contributor = await createSession("contributor", password);
-  const reviewer = await createSession("reviewer", password);
-  const learner = await createSession("learner", password);
-  const providers = await listProviders(contributor.token);
+  const organizationId = membership.organizationId;
+  const teamId = membership.teamId;
+  const projectId = membership.projectId;
+  const providers = await listProviders(token, organizationId);
 
   const code = await request<{ bundle: SourceBundleResponse }>("/api/ingest/manual", {
-    token: contributor.token,
+    token,
     method: "POST",
     body: {
-      organizationId: "org-demo",
-      teamId: "team-platform",
-      projectId: "project-learning",
+      organizationId,
+      teamId,
+      projectId,
       title: "React Query timeout evidence",
       sourceKind: "code",
       repositoryUrl: "https://github.com/example/learning-platform",
@@ -119,12 +131,12 @@ export async function runLearningDemo(password: string): Promise<{
   });
 
   const conversation = await request<{ bundle: SourceBundleResponse }>("/api/ingest/codex-obsidian", {
-    token: contributor.token,
+    token,
     method: "POST",
     body: {
-      organizationId: "org-demo",
-      teamId: "team-platform",
-      projectId: "project-learning",
+      organizationId,
+      teamId,
+      projectId,
       exportData: {
         schemaVersion: 1,
         title: "React Query guidance",
@@ -141,7 +153,7 @@ export async function runLearningDemo(password: string): Promise<{
   });
 
   const sourceLinks = await request<{ links: SourceLinkResponse[] }>("/api/source-links/suggest", {
-    token: contributor.token,
+    token,
     method: "POST",
     body: {
       conversationBundleId: conversation.bundle.id,
@@ -149,7 +161,7 @@ export async function runLearningDemo(password: string): Promise<{
     }
   });
   const sourceLink = await request<SourceLinkResponse>(`/api/source-links/${sourceLinks.links[0].id}/confirm`, {
-    token: contributor.token,
+    token,
     method: "POST",
     body: {}
   });
@@ -158,38 +170,19 @@ export async function runLearningDemo(password: string): Promise<{
     reviewTask: ReviewTaskResponse;
     patternCard: PatternCardResponse;
   }>("/api/generation/run", {
-    token: contributor.token,
+    token,
     method: "POST",
     body: {
-      organizationId: "org-demo",
+      organizationId,
       providerConfigId: "provider-local-mock",
       sourceLinkIds: [sourceLink.id],
       visibility: "organization"
     }
   });
 
-  await request(`/api/review/tasks/${generated.reviewTask.id}/decision`, {
-    token: reviewer.token,
-    method: "POST",
-    body: {
-      decision: "approve",
-      comment: "Looks safe."
-    }
-  });
-
   const detail = await request<{ patternCard: PatternCardResponse }>(`/api/pattern-cards/${generated.patternCard.id}`, {
-    token: learner.token
+    token
   });
-  const problemId = detail.patternCard.problems[0].id;
-  const submission = await request<{ patternCard: PatternCardResponse }>(`/api/problems/${problemId}/submissions`, {
-    token: learner.token,
-    method: "POST",
-    body: {
-      textAnswer: "Use explicit query keys and invalidate the smallest practical cache boundary.",
-      resultStatus: "self_marked_complete"
-    }
-  });
-  const progress = await request<ProgressResponse>("/api/progress?organizationId=org-demo", { token: learner.token });
 
   return {
     providers,
@@ -197,8 +190,7 @@ export async function runLearningDemo(password: string): Promise<{
     conversationBundle: conversation.bundle,
     sourceLink,
     reviewTask: generated.reviewTask,
-    patternCard: submission.patternCard,
-    progress
+    patternCard: detail.patternCard
   };
 }
 

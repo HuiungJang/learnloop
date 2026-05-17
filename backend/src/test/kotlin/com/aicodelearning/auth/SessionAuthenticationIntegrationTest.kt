@@ -105,6 +105,38 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `registration creates contributor session without echoing password`() {
+        val email = "new-user-$port-${System.nanoTime()}@example.com"
+        val password = "local-secret-1234"
+
+        val response =
+            restTemplate.postForEntity(
+                "/api/register",
+                RegisterRequest(email = email, displayName = "New User", password = password),
+                String::class.java,
+            )
+
+        assertEquals(HttpStatus.CREATED, response.statusCode)
+        assertFalse(response.body.orEmpty().contains(password))
+        val body = json(response)
+        assertEquals(email, body["user"]["email"].asText())
+        assertEquals(true, body["token"].asText().isNotBlank())
+        assertEquals("contributor", body["user"]["memberships"][0]["role"].asText())
+    }
+
+    @Test
+    fun `registration rejects duplicate email`() {
+        val email = "duplicate-$port-${System.nanoTime()}@example.com"
+        val request = RegisterRequest(email = email, displayName = "Duplicate User", password = "local-secret-1234")
+
+        val created = restTemplate.postForEntity("/api/register", request, String::class.java)
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+
+        val duplicate = restTemplate.postForEntity("/api/register", request, String::class.java)
+        assertEquals(HttpStatus.CONFLICT, duplicate.statusCode)
+    }
+
+    @Test
     fun `missing malformed unknown expired and revoked tokens return unauthorized`() {
         val missing = restTemplate.getForEntity("/api/me", String::class.java)
         assertEquals(HttpStatus.UNAUTHORIZED, missing.statusCode)

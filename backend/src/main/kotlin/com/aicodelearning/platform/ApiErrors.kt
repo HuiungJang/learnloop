@@ -91,4 +91,6 @@ class RateLimitedException(message: String) : ApiException(HttpStatus.TOO_MANY_R
 
 class BadRequestException(message: String) : ApiException(HttpStatus.BAD_REQUEST, message, "bad_request")
 
+class ConflictException(message: String) : ApiException(HttpStatus.CONFLICT, message, "conflict")
+
 class NotFoundException(message: String) : ApiException(HttpStatus.NOT_FOUND, message, "not_found")
