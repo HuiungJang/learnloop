@@ -1,5 +1,5 @@
 ---
-status: ready
+status: complete
 priority: p1
 issue_id: "002"
 tags: [spring, react, kotlin, frontend, backend]
@@ -33,8 +33,8 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - [x] Learner submissions reveal answers and update proficiency/recommendations.
 - [x] OpenAPI endpoint is available for the Spring backend contract.
 - [x] React frontend is connected to session, provider, ingestion, generation, review, library, submission, and progress APIs.
-- [ ] Each implementation phase has verification evidence before commit.
-- [ ] Codex Security scan runs after implementation and validated findings are fixed.
+- [x] Each implementation phase has verification evidence before commit.
+- [x] Codex Security scan runs after implementation and validated findings are fixed.
 
 ## Work Log
 
@@ -139,3 +139,23 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - OpenAPI check with `curl http://localhost:8080/v3/api-docs`
 - `./scripts/check-split.sh`
 - `./scripts/npm.sh --prefix frontend audit`
+
+### 2026-05-17 - Phase 28-32 Security And Final Verification Complete
+
+**By:** Codex
+
+**Actions:**
+- Ran Codex Security with threat-model, discovery, validation, attack-path, and final report artifacts.
+- Reproduced validated findings with red Spring integration tests for scoped source-link/generation access, review queue/decision access, library list filtering, personal provider ownership, and idempotency replay.
+- Fixed the authorization model by separating organization membership checks from object-scope checks.
+- Enforced bundle scope in source-link and generation paths, card scope in review/library paths, provider ownership in generation, and author/current-scope checks for idempotency replay.
+
+**Verification:**
+- `./scripts/backend-test.sh`
+- `./scripts/test.sh`
+- `./scripts/frontend-typecheck.sh`
+- `./scripts/frontend-build.sh`
+- `./scripts/npm.sh --prefix frontend audit`
+- `./scripts/check-split.sh`
+- `git diff --check`
+- Codex Security report: `/tmp/codex-security-scans/spring-react-platform-split/64d1a31_20260517T030413Z/report.md`
