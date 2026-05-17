@@ -10,6 +10,8 @@ import com.aicodelearning.organization.TeamEntity
 import com.aicodelearning.organization.TeamRepository
 import com.aicodelearning.organization.UserEntity
 import com.aicodelearning.organization.UserRepository
+import com.aicodelearning.provider.ProviderEntity
+import com.aicodelearning.provider.ProviderRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
@@ -27,6 +29,7 @@ class DemoDataInitializer(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
     private val membershipRepository: MembershipRepository,
+    private val providerRepository: ProviderRepository,
     private val passwordEncoder: PasswordEncoder,
     @param:Value("\${app.demo-password:demo-password}")
     private val demoPassword: String,
@@ -56,6 +59,7 @@ class DemoDataInitializer(
         seedUser("u-contributor", "contributor@example.com", "Contributor", "contributor", now)
         seedUser("u-reviewer", "reviewer@example.com", "Reviewer", "reviewer", now)
         seedUser("u-learner", "learner@example.com", "Learner", "learner", now)
+        seedLocalMockProvider(now)
     }
 
     private fun seedUser(
@@ -87,6 +91,30 @@ class DemoDataInitializer(
                     teamId = if (role == "admin") null else "team-platform",
                     projectId = if (role == "admin") null else "project-learning",
                     role = role,
+                    createdAt = now,
+                ),
+            )
+        }
+    }
+
+    private fun seedLocalMockProvider(now: Instant) {
+        if (!providerRepository.existsById("provider-local-mock")) {
+            providerRepository.save(
+                ProviderEntity(
+                    id = "provider-local-mock",
+                    organizationId = "org-demo",
+                    ownerUserId = null,
+                    createdByUserId = "u-admin",
+                    provider = "local",
+                    model = "mock-pattern-generator",
+                    scope = "organization",
+                    authType = "local",
+                    retentionMode = "none",
+                    credentialRef = "local://mock",
+                    credentialFingerprint = "local-mock",
+                    secretPreview = null,
+                    status = "active",
+                    orgApproved = true,
                     createdAt = now,
                 ),
             )

@@ -88,3 +88,7 @@ class UnauthorizedException(message: String) : ApiException(HttpStatus.UNAUTHORI
 class ForbiddenException(message: String) : ApiException(HttpStatus.FORBIDDEN, message, "forbidden")
 
 class RateLimitedException(message: String) : ApiException(HttpStatus.TOO_MANY_REQUESTS, message, "rate_limited")
+
+class BadRequestException(message: String) : ApiException(HttpStatus.BAD_REQUEST, message, "bad_request")
+
+class NotFoundException(message: String) : ApiException(HttpStatus.NOT_FOUND, message, "not_found")

@@ -23,6 +23,9 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - [x] Demo organization and users are seeded in the local profile.
 - [x] Session authentication stores token hashes only and rejects invalid tokens.
 - [x] Role authorization foundation covers hierarchy and cross-organization denial.
+- [x] Provider registration stores credential references only and emits audit.
+- [x] Audit logs use redacted metadata and hash chaining.
+- [x] Manual evidence ingestion supports source metadata, secret scanning, dedupe, and learner raw-evidence denial.
 - [ ] Each implementation phase has verification evidence before commit.
 - [ ] Codex Security scan runs after implementation and validated findings are fixed.
 
@@ -76,5 +79,23 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - `./scripts/backend-test.sh`
 - `./scripts/backend-dev.sh` with local Docker PostgreSQL migration from V1 to V2.
 - `POST /api/session` and authenticated `GET /api/me` via curl.
+- `./scripts/check-split.sh`
+- `./scripts/npm.sh --prefix frontend audit`
+
+### 2026-05-17 - Phase 8-10 Provider Audit Evidence Complete
+
+**By:** Codex
+
+**Actions:**
+- Added provider, audit, source bundle, and evidence item migrations.
+- Implemented provider create/list APIs with credential sealing and personal/organization scope authorization.
+- Seeded an organization-approved local mock provider in the local profile.
+- Implemented append-only audit writes with redacted metadata and hash chaining.
+- Implemented `POST /api/ingest/manual` and `GET /api/evidence/{bundleId}` with source metadata, secret scanning, blocked-sensitive handling, dedupe, and raw evidence authorization.
+
+**Verification:**
+- `./scripts/backend-test.sh`
+- `./scripts/backend-dev.sh` with local Docker PostgreSQL migration from V2 to V3.
+- Authenticated curl checks for `GET /api/providers` and `POST /api/ingest/manual`.
 - `./scripts/check-split.sh`
 - `./scripts/npm.sh --prefix frontend audit`

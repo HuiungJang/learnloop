@@ -2,9 +2,13 @@ package com.aicodelearning.auth
 
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.ForbiddenException
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -38,6 +42,9 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var authorizationService: AuthorizationService
+
+    @Autowired
+    private lateinit var objectMapper: ObjectMapper
 
     @LocalServerPort
     private var port: Int = 0
@@ -158,6 +165,154 @@ class SessionAuthenticationIntegrationTest {
         assertEquals("nosniff", health.headers.getFirst("X-Content-Type-Options"))
     }
 
+    @Test
+    fun `provider registration redacts credentials and appends audit`() {
+        val learner = login("learner@example.com")
+        val secret = "personal-provider-secret-1234"
+
+        val created =
+            postJson(
+                "/api/providers",
+                learner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "provider" to "openai",
+                    "model" to "example-model",
+                    "scope" to "personal",
+                    "credential" to secret,
+                    "retentionMode" to "standard",
+                ),
+            )
+
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        assertFalse(created.body.orEmpty().contains(secret))
+        assertTrue(json(created)["provider"]["credentialRef"].asText().startsWith("vault://"))
+
+        val admin = login("admin@example.com")
+        val audit = getJson("/api/audit?organizationId=org-demo", admin.token)
+        assertEquals(HttpStatus.OK, audit.statusCode)
+        assertTrue(audit.body.orEmpty().contains("provider.created"))
+        assertFalse(audit.body.orEmpty().contains(secret))
+    }
+
+    @Test
+    fun `organization provider requires admin role`() {
+        val contributor = login("contributor@example.com")
+
+        val response =
+            postJson(
+                "/api/providers",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "provider" to "anthropic",
+                    "model" to "example-model",
+                    "scope" to "organization",
+                    "credential" to "organization-secret-1234",
+                ),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+    }
+
+    @Test
+    fun `manual evidence blocks secrets without echoing raw value`() {
+        val contributor = login("contributor@example.com")
+        val secret = "sk-testtesttesttesttesttesttesttest"
+        val created =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Unsafe evidence",
+                    "sourceKind" to "code",
+                    "content" to "const key = \"$secret\";",
+                ),
+            )
+
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        assertFalse(created.body.orEmpty().contains(secret))
+        assertEquals("blocked_sensitive", json(created)["bundle"]["status"].asText())
+
+        val bundleId = json(created)["bundle"]["id"].asText()
+        val learner = login("learner@example.com")
+        val learnerRead = getJson("/api/evidence/$bundleId", learner.token)
+        assertEquals(HttpStatus.FORBIDDEN, learnerRead.statusCode)
+
+        val contributorRead = getJson("/api/evidence/$bundleId", contributor.token)
+        assertEquals(HttpStatus.OK, contributorRead.statusCode)
+        assertEquals(true, json(contributorRead)["evidenceItems"][0]["contentText"].isNull)
+    }
+
+    @Test
+    fun `manual evidence stores clean pull request metadata`() {
+        val contributor = login("contributor@example.com")
+        val created =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Repository diff",
+                    "sourceKind" to "pull_request",
+                    "repositoryUrl" to "https://github.com/example/repo",
+                    "pullRequestUrl" to "https://github.com/example/repo/pull/1",
+                    "commitSha" to "0123456789abcdef",
+                    "branchName" to "feature/example",
+                    "filePaths" to listOf("src/App.tsx"),
+                    "provenance" to mapOf("source" to "manual"),
+                    "content" to "function example() { return true; }",
+                ),
+            )
+
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        assertEquals("ready", json(created)["bundle"]["status"].asText())
+
+        val bundleId = json(created)["bundle"]["id"].asText()
+        val detail = getJson("/api/evidence/$bundleId", contributor.token)
+
+        assertEquals(HttpStatus.OK, detail.statusCode)
+        assertTrue(json(detail)["bundle"]["filePathsJson"].asText().contains("src/App.tsx"))
+        assertEquals("function example() { return true; }", json(detail)["evidenceItems"][0]["contentText"].asText())
+
+        val duplicate =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Repository diff duplicate",
+                    "sourceKind" to "pull_request",
+                    "content" to "function example() { return true; }",
+                ),
+            )
+        assertEquals(bundleId, json(duplicate)["bundle"]["id"].asText())
+    }
+
+    @Test
+    fun `oversized evidence returns validation error`() {
+        val contributor = login("contributor@example.com")
+        val response =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "title" to "Too large",
+                    "content" to "a".repeat(20_001),
+                ),
+            )
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
+    }
+
     private fun login(email: String): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
@@ -168,6 +323,19 @@ class SessionAuthenticationIntegrationTest {
         email: String,
         password: String,
     ) = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = password), String::class.java)
+
+    private fun postJson(
+        path: String,
+        token: String,
+        body: Map<String, Any?>,
+    ) = restTemplate.exchange(path, HttpMethod.POST, HttpEntity(body, bearerHeaders(token)), String::class.java)
+
+    private fun getJson(
+        path: String,
+        token: String,
+    ) = restTemplate.exchange(path, HttpMethod.GET, HttpEntity<Void>(bearerHeaders(token)), String::class.java)
+
+    private fun json(response: org.springframework.http.ResponseEntity<String>): JsonNode = objectMapper.readTree(response.body)
 
     private fun headersWithAuthorization(value: String): HttpHeaders =
         HttpHeaders().apply {
