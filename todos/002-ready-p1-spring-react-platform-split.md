@@ -26,6 +26,11 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - [x] Provider registration stores credential references only and emits audit.
 - [x] Audit logs use redacted metadata and hash chaining.
 - [x] Manual evidence ingestion supports source metadata, secret scanning, dedupe, and learner raw-evidence denial.
+- [x] codex-obsidian-sync import creates conversation evidence.
+- [x] Source link suggestion and confirmation gate generation.
+- [x] Local mock generation creates draft pattern cards, tags, problems, and review tasks.
+- [x] Review approval publishes cards to the learner library.
+- [x] Learner submissions reveal answers and update proficiency/recommendations.
 - [ ] Each implementation phase has verification evidence before commit.
 - [ ] Codex Security scan runs after implementation and validated findings are fixed.
 
@@ -97,5 +102,20 @@ The Node MVP validates the product loop, but the long-term platform needs a Kotl
 - `./scripts/backend-test.sh`
 - `./scripts/backend-dev.sh` with local Docker PostgreSQL migration from V2 to V3.
 - Authenticated curl checks for `GET /api/providers` and `POST /api/ingest/manual`.
+- `./scripts/check-split.sh`
+- `./scripts/npm.sh --prefix frontend audit`
+
+### 2026-05-17 - Phase 11-19 Learning Flow Complete
+
+**By:** Codex
+
+**Actions:**
+- Added schema for source links, generation runs, pattern cards, tags, problems, review tasks/decisions, submissions, and proficiency scores.
+- Added codex-obsidian import, source-link suggestion/confirm/reject, deterministic local generation, review queue/decision, library/detail, submission, progress, and recommendations APIs.
+- Added integration coverage for the full Spring workflow from evidence ingestion through learner submission.
+
+**Verification:**
+- `./scripts/backend-test.sh`
+- `./scripts/backend-dev.sh` with local Docker PostgreSQL migration from V3 to V4.
 - `./scripts/check-split.sh`
 - `./scripts/npm.sh --prefix frontend audit`

@@ -98,7 +98,7 @@ data class EvidenceItemResponse(
     val createdAt: Instant,
 )
 
-private fun SourceBundleEntity.toResponse(): SourceBundleResponse =
+fun SourceBundleEntity.toResponse(): SourceBundleResponse =
     SourceBundleResponse(
         id = id,
         organizationId = organizationId,
@@ -118,7 +118,7 @@ private fun SourceBundleEntity.toResponse(): SourceBundleResponse =
         createdAt = createdAt,
     )
 
-private fun EvidenceItemEntity.toResponse(includeContent: Boolean): EvidenceItemResponse =
+fun EvidenceItemEntity.toResponse(includeContent: Boolean): EvidenceItemResponse =
     EvidenceItemResponse(
         id = id,
         bundleId = bundleId,

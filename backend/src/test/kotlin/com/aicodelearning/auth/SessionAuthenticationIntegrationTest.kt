@@ -313,6 +313,107 @@ class SessionAuthenticationIntegrationTest {
         assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
     }
 
+    @Test
+    fun `core learning workflow publishes card and accepts learner submission`() {
+        val contributor = login("contributor@example.com")
+        val code =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Timeout client code",
+                    "sourceKind" to "code",
+                    "content" to "async function fetchOrder(client) { return client.get('/orders', { timeout: 3000 }); }",
+                ),
+            )
+        val conversation =
+            postJson(
+                "/api/ingest/codex-obsidian",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "exportData" to
+                        mapOf(
+                            "schemaVersion" to 1,
+                            "title" to "Timeout guidance",
+                            "conversations" to
+                                listOf(
+                                    mapOf(
+                                        "messages" to
+                                            listOf(
+                                                mapOf("role" to "user", "content" to "Add timeout handling to API client code."),
+                                                mapOf("role" to "assistant", "content" to "Use explicit timeout behavior."),
+                                            ),
+                                    ),
+                                ),
+                        ),
+                ),
+            )
+        val links =
+            postJson(
+                "/api/source-links/suggest",
+                contributor.token,
+                mapOf(
+                    "conversationBundleId" to json(conversation)["bundle"]["id"].asText(),
+                    "codeBundleId" to json(code)["bundle"]["id"].asText(),
+                ),
+            )
+        val linkId = json(links)["links"][0]["id"].asText()
+        val confirmed = postJson("/api/source-links/$linkId/confirm", contributor.token, emptyMap())
+        assertEquals("confirmed", json(confirmed)["status"].asText())
+
+        val generated =
+            postJson(
+                "/api/generation/run",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "organization",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        val reviewTaskId = json(generated)["reviewTask"]["id"].asText()
+        val cardId = json(generated)["patternCard"]["id"].asText()
+
+        val reviewer = login("reviewer@example.com")
+        val queue = getJson("/api/review/tasks?organizationId=org-demo", reviewer.token)
+        assertTrue(queue.body.orEmpty().contains(reviewTaskId))
+        val decision =
+            postJson(
+                "/api/review/tasks/$reviewTaskId/decision",
+                reviewer.token,
+                mapOf("decision" to "approve", "comment" to "Looks safe."),
+            )
+        assertEquals("approved", json(decision)["reviewTask"]["status"].asText())
+
+        val learner = login("learner@example.com")
+        val library = getJson("/api/library?organizationId=org-demo", learner.token)
+        assertTrue(json(library)["cards"].any { it["id"].asText() == cardId })
+
+        val detail = getJson("/api/pattern-cards/$cardId", learner.token)
+        val problemId = json(detail)["patternCard"]["problems"][0]["id"].asText()
+        assertEquals(true, json(detail)["patternCard"]["problems"][0]["referenceAnswer"].isNull)
+
+        val submission =
+            postJson(
+                "/api/problems/$problemId/submissions",
+                learner.token,
+                mapOf("textAnswer" to "Use timeout handling at API boundaries.", "resultStatus" to "self_marked_complete"),
+            )
+        assertEquals(HttpStatus.CREATED, submission.statusCode)
+        assertFalse(json(submission)["patternCard"]["problems"][0]["referenceAnswer"].isNull)
+
+        val progress = getJson("/api/progress?organizationId=org-demo", learner.token)
+        assertTrue(json(progress)["proficiency"].size() > 0)
+    }
+
     private fun login(email: String): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
