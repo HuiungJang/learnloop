@@ -1,19 +1,13 @@
 package com.aicodelearning.platform
 
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
-@WebMvcTest(HealthController::class)
-@AutoConfigureMockMvc(addFilters = false)
 class HealthControllerTest {
-    @Autowired
-    private lateinit var mockMvc: MockMvc
+    private val mockMvc = MockMvcBuilders.standaloneSetup(HealthController()).build()
 
     @Test
     fun `returns health status`() {

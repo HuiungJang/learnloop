@@ -36,6 +36,14 @@ Frontend: http://127.0.0.1:5173
 Health: http://localhost:8080/api/health
 ```
 
+Create a local demo session:
+
+```sh
+curl -X POST http://localhost:8080/api/session \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"demo-password"}'
+```
+
 Run the current split-stack verification:
 
 ```sh

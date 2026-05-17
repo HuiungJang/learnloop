@@ -9,3 +9,6 @@ spring:
 logging:
   level:
     com.aicodelearning: INFO
+
+app:
+  demo-password: ${APP_DEMO_PASSWORD:demo-password}
