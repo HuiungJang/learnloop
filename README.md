@@ -40,6 +40,31 @@ To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then run:
 
 Data is stored in the `ai-code-learning-platform_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
 
+## Release Bundle
+
+Build a distributable `.tar.gz` package for the current machine architecture:
+
+```sh
+./scripts/package-release.sh
+```
+
+The archive is written to `dist/release/` and contains:
+
+- runtime `docker-compose.yml`
+- `install.sh`, `start.sh`, `status.sh`, `stop.sh`
+- generated release metadata
+- backend, web, and PostgreSQL Docker image archives
+
+Install from the release bundle:
+
+```sh
+tar -xzf dist/release/ai-code-learning-platform-0.1.0-*.tar.gz
+cd ai-code-learning-platform-0.1.0-*
+./install.sh
+```
+
+Release-bundle installation does not build from source. It loads the packaged Docker images, starts the stack, and prints the generated demo password.
+
 ## Runtime
 
 The system Node installation on this machine may be broken. The scripts use the bundled Codex Node runtime automatically:

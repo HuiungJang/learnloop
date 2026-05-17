@@ -14,6 +14,7 @@ frontend/*.tsbuildinfo
 .gradle/
 build/
 out/
+dist/
 
 # Local runtime data
 .env

@@ -18,6 +18,7 @@
     "install:app": "./scripts/install.sh",
     "start:app": "./scripts/start.sh",
     "stop:app": "./scripts/stop.sh",
-    "status:app": "./scripts/status.sh"
+    "status:app": "./scripts/status.sh",
+    "package:release": "./scripts/package-release.sh"
   }
 }
