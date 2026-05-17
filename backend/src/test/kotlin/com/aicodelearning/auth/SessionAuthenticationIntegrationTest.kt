@@ -1,7 +1,21 @@
 package com.aicodelearning.auth
 
+import com.aicodelearning.evidence.EvidenceItemEntity
+import com.aicodelearning.evidence.EvidenceItemRepository
+import com.aicodelearning.evidence.SourceBundleEntity
+import com.aicodelearning.evidence.SourceBundleRepository
+import com.aicodelearning.learning.PatternCardEntity
+import com.aicodelearning.learning.PatternCardRepository
+import com.aicodelearning.learning.ReviewTaskEntity
+import com.aicodelearning.learning.ReviewTaskRepository
 import com.aicodelearning.organization.AuthorizationService
+import com.aicodelearning.organization.ProjectEntity
+import com.aicodelearning.organization.ProjectRepository
+import com.aicodelearning.organization.TeamEntity
+import com.aicodelearning.organization.TeamRepository
 import com.aicodelearning.platform.ForbiddenException
+import com.aicodelearning.source.SourceLinkEntity
+import com.aicodelearning.source.SourceLinkRepository
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -25,6 +39,7 @@ import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import java.math.BigDecimal
 import java.time.Instant
 
 @Testcontainers
@@ -45,6 +60,27 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
+
+    @Autowired
+    private lateinit var teamRepository: TeamRepository
+
+    @Autowired
+    private lateinit var projectRepository: ProjectRepository
+
+    @Autowired
+    private lateinit var sourceBundleRepository: SourceBundleRepository
+
+    @Autowired
+    private lateinit var evidenceItemRepository: EvidenceItemRepository
+
+    @Autowired
+    private lateinit var sourceLinkRepository: SourceLinkRepository
+
+    @Autowired
+    private lateinit var patternCardRepository: PatternCardRepository
+
+    @Autowired
+    private lateinit var reviewTaskRepository: ReviewTaskRepository
 
     @LocalServerPort
     private var port: Int = 0
@@ -414,6 +450,197 @@ class SessionAuthenticationIntegrationTest {
         assertTrue(json(progress)["proficiency"].size() > 0)
     }
 
+    @Test
+    fun `source link suggestion rejects inaccessible code bundle scope`() {
+        ensureOtherScope()
+        val contributor = login("contributor@example.com")
+        val conversation =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Accessible conversation",
+                    "sourceKind" to "conversation",
+                    "content" to "Discuss a scoped implementation pattern.",
+                ),
+            )
+        val inaccessibleCodeBundleId = saveScopedBundle("Inaccessible code", "code", "class InternalPattern")
+
+        val suggested =
+            postJson(
+                "/api/source-links/suggest",
+                contributor.token,
+                mapOf(
+                    "conversationBundleId" to json(conversation)["bundle"]["id"].asText(),
+                    "codeBundleId" to inaccessibleCodeBundleId,
+                ),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, suggested.statusCode)
+    }
+
+    @Test
+    fun `generation rejects confirmed source links outside contributor scope`() {
+        ensureOtherScope()
+        val contributor = login("contributor@example.com")
+        val conversation =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Accessible conversation",
+                    "sourceKind" to "conversation",
+                    "content" to "Generate from linked evidence.",
+                ),
+            )
+        val inaccessibleCodeBundleId = saveScopedBundle("Inaccessible generation code", "code", "fun privateLogic() = true")
+        val link =
+            sourceLinkRepository.save(
+                SourceLinkEntity(
+                    id = "link_foreign_${System.nanoTime()}",
+                    organizationId = "org-demo",
+                    conversationBundleId = json(conversation)["bundle"]["id"].asText(),
+                    codeBundleId = inaccessibleCodeBundleId,
+                    status = "confirmed",
+                    confidence = BigDecimal("0.90000"),
+                    createdByUserId = "u-admin",
+                    decidedByUserId = "u-admin",
+                    createdAt = Instant.now(),
+                    decidedAt = Instant.now(),
+                ),
+            )
+
+        val generated =
+            postJson(
+                "/api/generation/run",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(link.id),
+                    "visibility" to "organization",
+                ),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, generated.statusCode)
+    }
+
+    @Test
+    fun `generation rejects personal provider owned by another user`() {
+        val contributor = login("contributor@example.com")
+        val learner = login("learner@example.com")
+        val linkId = createConfirmedAccessibleSourceLink(contributor.token)
+        val provider =
+            postJson(
+                "/api/providers",
+                learner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "provider" to "openai",
+                    "model" to "private-model",
+                    "scope" to "personal",
+                    "credential" to "learner-owned-secret-1234",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, provider.statusCode)
+
+        val generated =
+            postJson(
+                "/api/generation/run",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to json(provider)["provider"]["id"].asText(),
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "private",
+                ),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, generated.statusCode)
+    }
+
+    @Test
+    fun `generation idempotency key cannot replay another users draft`() {
+        val contributor = login("contributor@example.com")
+        val learner = login("learner@example.com")
+        val linkId = createConfirmedAccessibleSourceLink(contributor.token)
+        val idempotencyKey = "idem-${System.nanoTime()}"
+        val generated =
+            postJson(
+                "/api/generation/run",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "organization",
+                    "idempotencyKey" to idempotencyKey,
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+
+        val replay =
+            postJson(
+                "/api/generation/run",
+                learner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "organization",
+                    "idempotencyKey" to idempotencyKey,
+                ),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, replay.statusCode)
+    }
+
+    @Test
+    fun `review queue hides tasks outside reviewer scope`() {
+        ensureOtherScope()
+        val reviewer = login("reviewer@example.com")
+        val taskId = saveScopedReviewTask("Foreign draft queue")
+
+        val queue = getJson("/api/review/tasks?organizationId=org-demo", reviewer.token)
+
+        assertEquals(HttpStatus.OK, queue.statusCode)
+        assertFalse(queue.body.orEmpty().contains(taskId))
+    }
+
+    @Test
+    fun `review decision rejects tasks outside reviewer scope`() {
+        ensureOtherScope()
+        val reviewer = login("reviewer@example.com")
+        val taskId = saveScopedReviewTask("Foreign draft decision")
+
+        val decision =
+            postJson(
+                "/api/review/tasks/$taskId/decision",
+                reviewer.token,
+                mapOf("decision" to "approve", "comment" to "Should not be allowed."),
+            )
+
+        assertEquals(HttpStatus.FORBIDDEN, decision.statusCode)
+    }
+
+    @Test
+    fun `library hides published cards outside learner scope`() {
+        ensureOtherScope()
+        val learner = login("learner@example.com")
+        val cardId = saveScopedCard("Foreign published card", publicationStatus = "published")
+
+        val library = getJson("/api/library?organizationId=org-demo", learner.token)
+
+        assertEquals(HttpStatus.OK, library.statusCode)
+        assertFalse(library.body.orEmpty().contains(cardId))
+    }
+
     private fun login(email: String): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
@@ -444,6 +671,138 @@ class SessionAuthenticationIntegrationTest {
         }
 
     private fun bearerHeaders(token: String): HttpHeaders = headersWithAuthorization("Bearer $token")
+
+    private fun ensureOtherScope() {
+        if (!teamRepository.existsById("team-security")) {
+            teamRepository.save(TeamEntity(id = "team-security", organizationId = "org-demo", name = "Security", createdAt = Instant.now()))
+        }
+        if (!projectRepository.existsById("project-security")) {
+            projectRepository.save(
+                ProjectEntity(
+                    id = "project-security",
+                    organizationId = "org-demo",
+                    teamId = "team-security",
+                    name = "Security Project",
+                    createdAt = Instant.now(),
+                ),
+            )
+        }
+    }
+
+    private fun saveScopedBundle(
+        title: String,
+        sourceKind: String,
+        content: String,
+    ): String {
+        val bundleId = "bundle_foreign_${System.nanoTime()}"
+        sourceBundleRepository.save(
+            SourceBundleEntity(
+                id = bundleId,
+                organizationId = "org-demo",
+                teamId = "team-security",
+                projectId = "project-security",
+                createdByUserId = "u-admin",
+                title = title,
+                sourceKind = sourceKind,
+                status = "ready",
+                contentHash = sha256Hex(content),
+                createdAt = Instant.now(),
+            ),
+        )
+        evidenceItemRepository.save(
+            EvidenceItemEntity(
+                id = "evidence_$bundleId",
+                bundleId = bundleId,
+                itemType = sourceKind,
+                contentText = content,
+                contentHash = sha256Hex(content),
+                createdAt = Instant.now(),
+            ),
+        )
+        return bundleId
+    }
+
+    private fun saveScopedReviewTask(title: String): String {
+        val cardId = saveScopedCard(title, publicationStatus = "draft")
+        val taskId = "review_foreign_${System.nanoTime()}"
+        reviewTaskRepository.save(
+            ReviewTaskEntity(
+                id = taskId,
+                patternCardId = cardId,
+                organizationId = "org-demo",
+                authorUserId = "u-admin",
+                status = "open",
+                createdAt = Instant.now(),
+            ),
+        )
+        return taskId
+    }
+
+    private fun saveScopedCard(
+        title: String,
+        publicationStatus: String,
+    ): String {
+        val cardId = "card_foreign_${System.nanoTime()}"
+        patternCardRepository.save(
+            PatternCardEntity(
+                id = cardId,
+                organizationId = "org-demo",
+                teamId = "team-security",
+                projectId = "project-security",
+                generationRunId = null,
+                createdByUserId = "u-admin",
+                title = title,
+                summary = "A scoped card that must not be visible to platform scoped users.",
+                visibility = "organization",
+                publicationStatus = publicationStatus,
+                createdAt = Instant.now(),
+                publishedAt = if (publicationStatus == "published") Instant.now() else null,
+            ),
+        )
+        return cardId
+    }
+
+    private fun createConfirmedAccessibleSourceLink(contributorToken: String): String {
+        val code =
+            postJson(
+                "/api/ingest/manual",
+                contributorToken,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Accessible provider code",
+                    "sourceKind" to "code",
+                    "content" to "class ProviderScopedPattern",
+                ),
+            )
+        val conversation =
+            postJson(
+                "/api/ingest/manual",
+                contributorToken,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Accessible provider conversation",
+                    "sourceKind" to "conversation",
+                    "content" to "Use a provider for this generated pattern.",
+                ),
+            )
+        val suggested =
+            postJson(
+                "/api/source-links/suggest",
+                contributorToken,
+                mapOf(
+                    "conversationBundleId" to json(conversation)["bundle"]["id"].asText(),
+                    "codeBundleId" to json(code)["bundle"]["id"].asText(),
+                ),
+            )
+        val linkId = json(suggested)["links"][0]["id"].asText()
+        val confirmed = postJson("/api/source-links/$linkId/confirm", contributorToken, emptyMap())
+        assertEquals("confirmed", json(confirmed)["status"].asText())
+        return linkId
+    }
 
     companion object {
         @Container

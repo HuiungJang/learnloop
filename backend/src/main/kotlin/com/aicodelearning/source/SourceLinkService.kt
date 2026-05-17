@@ -35,6 +35,7 @@ class SourceLinkService(
             throw BadRequestException("Source bundles must belong to the same organization")
         }
         authorizationService.requireRole(currentUser, conversation.organizationId, "contributor", conversation.teamId, conversation.projectId)
+        authorizationService.requireRole(currentUser, code.organizationId, "contributor", code.teamId, code.projectId)
 
         val confidence = similarity(bundleText(conversation), bundleText(code))
         val link =
@@ -61,7 +62,10 @@ class SourceLinkService(
         status: String,
     ): SourceLinkEntity {
         val link = sourceLinkRepository.findById(linkId).orElseThrow { NotFoundException("Source link not found") }
-        authorizationService.requireRole(currentUser, link.organizationId, "contributor")
+        val conversation = sourceBundleRepository.findById(link.conversationBundleId).orElseThrow { NotFoundException("Conversation bundle not found") }
+        val code = sourceBundleRepository.findById(link.codeBundleId).orElseThrow { NotFoundException("Code bundle not found") }
+        authorizationService.requireRole(currentUser, conversation.organizationId, "contributor", conversation.teamId, conversation.projectId)
+        authorizationService.requireRole(currentUser, code.organizationId, "contributor", code.teamId, code.projectId)
         link.status = status
         link.decidedByUserId = currentUser.id
         link.decidedAt = Instant.now()

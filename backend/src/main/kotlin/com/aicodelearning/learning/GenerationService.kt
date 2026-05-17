@@ -6,6 +6,7 @@ import com.aicodelearning.evidence.EvidenceItemRepository
 import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
+import com.aicodelearning.platform.ForbiddenException
 import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
 import com.aicodelearning.provider.ProviderRepository
@@ -46,22 +47,39 @@ class GenerationService(
             val existingCard = existing?.let { run -> patternCardRepository.findByGenerationRunId(run.id) }
             val existingTask = existingCard?.let { card -> reviewTaskRepository.findByPatternCardId(card.id) }
             if (existing != null && existingCard != null && existingTask != null) {
+                if (existing.createdByUserId != currentUser.id) {
+                    throw ForbiddenException("Idempotency key belongs to another generation request")
+                }
+                authorizationService.requireRole(currentUser, existingCard.organizationId, "contributor", existingCard.teamId, existingCard.projectId)
                 return GenerationResponse(existing.toResponse(), patternReadService.toResponse(currentUser, existingCard, true), existingTask.toResponse())
             }
         }
 
-        authorizationService.requireRole(currentUser, request.organizationId, "contributor")
         val provider = providerRepository.findById(request.providerConfigId).orElseThrow { NotFoundException("Provider not found") }
         if (provider.organizationId != request.organizationId || provider.status != "active") {
             throw BadRequestException("Provider is not active for this organization")
         }
+        if (provider.scope == "personal" && provider.ownerUserId != currentUser.id) {
+            throw ForbiddenException("Personal provider can only be used by its owner")
+        }
         if (request.visibility == "organization" && !provider.orgApproved) {
-            throw com.aicodelearning.platform.ForbiddenException("Organization publication requires an approved provider")
+            throw ForbiddenException("Organization publication requires an approved provider")
         }
 
         val links = sourceLinkRepository.findByIdIn(request.sourceLinkIds)
         if (links.size != request.sourceLinkIds.toSet().size || links.any { it.organizationId != request.organizationId || it.status != "confirmed" }) {
             throw BadRequestException("Generation requires confirmed source links")
+        }
+        val linkedBundleIds =
+            links
+                .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
+                .distinct()
+        val linkedBundles = sourceBundleRepository.findAllById(linkedBundleIds).associateBy { it.id }
+        if (linkedBundles.size != linkedBundleIds.size || linkedBundles.values.any { it.organizationId != request.organizationId }) {
+            throw BadRequestException("Generation requires source bundles in the requested organization")
+        }
+        linkedBundles.values.forEach { bundle ->
+            authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
         }
 
         val now = Instant.now()
@@ -80,11 +98,9 @@ class GenerationService(
                 ),
             )
 
-        val firstBundle = sourceBundleRepository.findById(links.first().codeBundleId).orElseThrow()
+        val firstBundle = linkedBundles[links.first().codeBundleId] ?: throw BadRequestException("Generation requires a code bundle")
         val evidenceText =
-            links
-                .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
-                .distinct()
+            linkedBundleIds
                 .flatMap { evidenceItemRepository.findByBundleId(it) }
                 .mapNotNull { it.contentText }
                 .joinToString("\n")

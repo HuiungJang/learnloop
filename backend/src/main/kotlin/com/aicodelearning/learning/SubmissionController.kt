@@ -35,7 +35,7 @@ class SubmissionController(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @RequestParam organizationId: String,
     ): ProgressResponse {
-        authorizationService.requireRole(currentUser, organizationId, "learner")
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "learner")
         return ProgressResponse(
             proficiency =
                 proficiencyScoreRepository

@@ -21,7 +21,7 @@ class ProviderService(
         currentUser: CurrentUser,
         organizationId: String,
     ): List<ProviderEntity> {
-        authorizationService.requireRole(currentUser, organizationId, "learner")
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "learner")
         val organizationProviders = providerRepository.findByOrganizationIdAndScopeIn(organizationId, listOf("organization"))
         val personalProviders = providerRepository.findByOrganizationIdAndOwnerUserId(organizationId, currentUser.id)
         return (organizationProviders + personalProviders).distinctBy { it.id }
@@ -43,7 +43,7 @@ class ProviderService(
         if (scope == "organization") {
             authorizationService.requireRole(currentUser, request.organizationId, "admin")
         } else {
-            authorizationService.requireRole(currentUser, request.organizationId, "learner")
+            authorizationService.requireOrganizationMember(currentUser, request.organizationId, "learner")
         }
 
         val digest = sha256Hex(request.credential)

@@ -20,9 +20,10 @@ class PatternReadService(
         currentUser: CurrentUser,
         organizationId: String,
     ): List<PatternCardResponse> {
-        authorizationService.requireRole(currentUser, organizationId, "learner")
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "learner")
         return patternCardRepository
             .findByOrganizationIdAndPublicationStatusAndVisibility(organizationId, "published", "organization")
+            .filter { authorizationService.hasRole(currentUser.id, it.organizationId, "learner", it.teamId, it.projectId) }
             .map { toResponse(currentUser, it, includeAnswers = false) }
     }
 

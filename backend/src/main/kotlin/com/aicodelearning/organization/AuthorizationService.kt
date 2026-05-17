@@ -22,6 +22,31 @@ class AuthorizationService(
         }
     }
 
+    fun requireOrganizationMember(
+        currentUser: CurrentUser,
+        organizationId: String,
+        role: String,
+    ) {
+        if (!hasOrganizationMemberRole(currentUser.id, organizationId, role)) {
+            throw ForbiddenException("Not allowed for this organization scope")
+        }
+    }
+
+    fun hasOrganizationMemberRole(
+        userId: String,
+        organizationId: String,
+        role: String,
+    ): Boolean {
+        val required = roleOrder.indexOf(role)
+        if (required < 0) {
+            return false
+        }
+
+        return membershipRepository
+            .findByUserIdAndOrganizationId(userId, organizationId)
+            .any { membership -> roleOrder.indexOf(membership.role) >= required }
+    }
+
     fun hasRole(
         userId: String,
         organizationId: String,
@@ -43,6 +68,9 @@ class AuthorizationService(
                 }
                 if (membership.role == "admin") {
                     return@any true
+                }
+                if (teamId == null && projectId == null) {
+                    return@any membership.teamId == null && membership.projectId == null
                 }
                 if (teamId != null && membership.teamId != null && membership.teamId != teamId) {
                     return@any false

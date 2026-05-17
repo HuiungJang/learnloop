@@ -24,8 +24,13 @@ class ReviewService(
         currentUser: CurrentUser,
         organizationId: String,
     ): List<ReviewTaskResponse> {
-        authorizationService.requireRole(currentUser, organizationId, "reviewer")
-        return reviewTaskRepository.findByOrganizationIdAndStatus(organizationId, "open").map { it.toResponse() }
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "reviewer")
+        return reviewTaskRepository
+            .findByOrganizationIdAndStatus(organizationId, "open")
+            .filter { task ->
+                val card = patternCardRepository.findById(task.patternCardId).orElse(null)
+                card != null && authorizationService.hasRole(currentUser.id, card.organizationId, "reviewer", card.teamId, card.projectId)
+            }.map { it.toResponse() }
     }
 
     @Transactional
@@ -35,7 +40,8 @@ class ReviewService(
         request: ReviewDecisionRequest,
     ): ReviewDecisionResponse {
         val task = reviewTaskRepository.findById(taskId).orElseThrow { NotFoundException("Review task not found") }
-        authorizationService.requireRole(currentUser, task.organizationId, "reviewer")
+        val card = patternCardRepository.findById(task.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
+        authorizationService.requireRole(currentUser, card.organizationId, "reviewer", card.teamId, card.projectId)
         if (task.authorUserId == currentUser.id) {
             throw ForbiddenException("Authors cannot review their own generated cards")
         }
@@ -65,7 +71,6 @@ class ReviewService(
             )
 
         if (request.decision == "approve") {
-            val card = patternCardRepository.findById(task.patternCardId).orElseThrow()
             card.publicationStatus = "published"
             card.publishedAt = now
         }
