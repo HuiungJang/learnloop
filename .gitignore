@@ -1,0 +1,6 @@
+.local-data/
+.local-data-smoke/
+.test-data/
+.worktrees/
+node_modules/
+.DS_Store

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Code Learning</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>AI Code Learning</h1>
+        <p id="status">Loading</p>
+      </div>
+      <label class="role-picker">
+        User
+        <select id="userSelect"></select>
+      </label>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Source</h2>
+        <div class="grid two">
+          <label>
+            Code / diff
+            <textarea id="codeInput" spellcheck="false">async function fetchOrder(client, id) {
+  return client.get(`/orders/${id}`, { timeout: 3000 });
+}</textarea>
+          </label>
+          <label>
+            Conversation
+            <textarea id="conversationInput" spellcheck="false">User asked Codex to add timeout handling for an API client. Codex suggested preserving the existing API boundary and adding explicit timeout behavior with a small implementation exercise.</textarea>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="ingestBtn" type="button">Upload</button>
+          <button id="linkBtn" type="button">Link</button>
+          <button id="generateBtn" type="button">Generate Draft</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Review</h2>
+        <div class="actions">
+          <button id="loadReviewBtn" type="button">Load Queue</button>
+          <button id="approveBtn" type="button">Approve Selected</button>
+        </div>
+        <div id="reviewList" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Library</h2>
+        <div class="actions">
+          <button id="loadLibraryBtn" type="button">Refresh Library</button>
+          <button id="recommendBtn" type="button">Recommendations</button>
+        </div>
+        <div id="libraryList" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Practice</h2>
+        <div id="problemPane" class="practice"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Activity</h2>
+        <pre id="log" class="log"></pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
