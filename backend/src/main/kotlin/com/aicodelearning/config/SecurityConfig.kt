@@ -49,7 +49,7 @@ class SecurityConfig(
             }
             .authorizeHttpRequests {
                 it.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
-                it.requestMatchers(HttpMethod.GET, "/api/health", "/actuator/health").permitAll()
+                it.requestMatchers(HttpMethod.GET, "/api/health", "/api/runner/health", "/actuator/health").permitAll()
                 it.requestMatchers(HttpMethod.POST, "/api/session").permitAll()
                 it.requestMatchers(HttpMethod.POST, "/api/register").permitAll()
                 it.requestMatchers("/v3/api-docs/**").permitAll()

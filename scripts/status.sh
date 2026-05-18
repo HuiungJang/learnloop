@@ -32,12 +32,22 @@ check_health() {
   curl -fsS "$URL/api/health" >/dev/null 2>&1
 }
 
+print_runner_status() {
+  runner_status=$(curl -fsS "$URL/api/runner/health" 2>/dev/null || true)
+  if [ -n "$runner_status" ]; then
+    echo "Runner: $runner_status"
+  else
+    echo "Runner: not available yet"
+  fi
+}
+
 if [ "$WAIT" = "--wait" ]; then
   i=0
   while [ "$i" -lt 90 ]; do
     if check_health; then
       echo
       echo "Ready: $URL"
+      print_runner_status
       exit 0
     fi
     i=$((i + 1))
@@ -53,8 +63,9 @@ fi
 if check_health; then
   echo
   echo "Ready: $URL"
+  print_runner_status
 else
   echo
   echo "Not healthy yet: $URL"
+  print_runner_status
 fi
-

@@ -48,6 +48,11 @@ write_env_file() {
   db_name=${APP_DATABASE_NAME:-learnloop}
   db_user=${APP_DATABASE_USERNAME:-learnloop}
   openapi_enabled=${APP_OPENAPI_ENABLED:-true}
+  runner_enabled=${APP_RUNNER_ENABLED:-true}
+  runner_base_url=${APP_RUNNER_BASE_URL:-}
+  runner_token=${APP_RUNNER_TOKEN:-}
+  runner_image=${APP_RUNNER_IMAGE:-learnloop-runner:latest}
+  runner_require_limits=${APP_RUNNER_REQUIRE_LIMITS:-true}
 
   old_umask=$(umask)
   umask 077
@@ -59,6 +64,11 @@ APP_DATABASE_USERNAME=$db_user
 APP_DATABASE_PASSWORD=$db_password
 APP_DEMO_PASSWORD=$demo_password
 APP_OPENAPI_ENABLED=$openapi_enabled
+APP_RUNNER_ENABLED=$runner_enabled
+APP_RUNNER_BASE_URL=$runner_base_url
+APP_RUNNER_TOKEN=$runner_token
+APP_RUNNER_IMAGE=$runner_image
+APP_RUNNER_REQUIRE_LIMITS=$runner_require_limits
 EOF
   umask "$old_umask"
 }

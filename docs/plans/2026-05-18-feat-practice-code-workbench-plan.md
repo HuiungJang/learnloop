@@ -894,15 +894,24 @@ Phase 32 notes:
 
 ### Phase 33: Runner Service Health Skeleton
 
-- [ ] Add runner module/service with a narrow internal API.
-- [ ] Add backend-to-runner token configuration.
-- [ ] Add Docker availability detection.
-- [ ] Add runner health states: missing, unreachable, image missing, limit unsupported, ready.
+- [x] Add runner module/service with a narrow internal API.
+- [x] Add backend-to-runner token configuration.
+- [x] Add Docker availability detection.
+- [x] Add runner health states: missing, unreachable, image missing, limit unsupported, ready.
 
 Verification:
 
-- [ ] Status script reports runner readiness separately.
-- [ ] Docker-unavailable state is surfaced without breaking the app.
+- [x] Status script reports runner readiness separately.
+- [x] Docker-unavailable state is surfaced without breaking the app.
+
+Phase 33 notes:
+
+- Added `app.runner` configuration for enablement, base URL, token, image, Docker command, timeout, and limit requirement.
+- Added `/api/runner/health` with runner states `missing`, `unreachable`, `image_missing`, `limit_unsupported`, and `ready`.
+- Added a Docker probe abstraction with process-based Docker CLI/image detection and fakeable unit tests.
+- Updated install/status scripts and release bundle config so runner readiness is reported separately from app health.
+- `./scripts/backend-test.sh`: passed.
+- `sh -n` checks for install/status scripts: passed.
 
 ### Phase 34: Runner Request Validation and Registry
 

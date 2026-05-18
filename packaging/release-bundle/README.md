@@ -47,9 +47,12 @@ Edit `.env` before running `./start.sh` to change the browser port or project na
 ```env
 AI_CODE_PROJECT_NAME=learnloop
 AI_CODE_WEB_PORT=8080
+APP_RUNNER_ENABLED=true
+APP_RUNNER_IMAGE=learnloop-runner:latest
 ```
 
 Use a different `AI_CODE_PROJECT_NAME` when running multiple isolated installations on the same machine.
+Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings until the sandbox runner image is installed.
 
 ## License
 
