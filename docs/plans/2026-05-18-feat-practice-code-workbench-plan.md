@@ -318,14 +318,21 @@ Phase 3 notes:
 
 ### Phase 4: Exercise File Path Validation
 
-- [ ] Implement normalized relative path validation for exercise files.
-- [ ] Reject `..`, absolute paths, null bytes, home expansion, and escaping separators.
-- [ ] Require unique file paths per problem.
+- [x] Implement normalized relative path validation for exercise files.
+- [x] Reject `..`, absolute paths, null bytes, home expansion, and escaping separators.
+- [x] Require unique file paths per problem.
 
 Verification:
 
-- [ ] Unit tests cover safe paths and path traversal attempts.
-- [ ] No runner or persistence code accepts unvalidated file paths.
+- [x] Unit tests cover safe paths and path traversal attempts.
+- [x] No runner or persistence code accepts unvalidated file paths.
+
+Phase 4 notes:
+
+- Added `PracticeContract.normalizeFilePath`.
+- Attempt sync validation now normalizes paths and rejects duplicates after normalization.
+- `PracticeContractTest` covers safe paths, traversal-like paths, Windows/absolute/home/null-byte paths, and duplicate normalized paths.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 5: Practice Read Authorization Contract
 

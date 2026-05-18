@@ -2,6 +2,7 @@ package com.aicodelearning.learning
 
 import com.aicodelearning.platform.BadRequestException
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -61,6 +62,45 @@ class PracticeContractTest {
             PracticeContract.validateAttemptSyncRequest(
                 attemptSyncRequest(
                     files = listOf(PracticeAttemptFileRequest(path = "src/large.ts", content = "a".repeat(PracticeContract.MAX_FILE_BYTES + 1))),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `normalizes safe exercise file paths`() {
+        assertEquals("src/main.ts", PracticeContract.normalizeFilePath(" src/main.ts "))
+        assertEquals("src/main/App.kt", PracticeContract.normalizeFilePath("src/main/App.kt"))
+        assertEquals("Main.java", PracticeContract.normalizeFilePath("Main.java"))
+    }
+
+    @Test
+    fun `rejects paths that escape the exercise root`() {
+        listOf(
+            "",
+            "/src/main.ts",
+            "~/src/main.ts",
+            "C:/src/main.ts",
+            "src/../secret.ts",
+            "src/./main.ts",
+            "src//main.ts",
+            "src\\main.ts",
+            "src/main.ts\u0000",
+        ).forEach { path ->
+            assertThrows(BadRequestException::class.java) { PracticeContract.normalizeFilePath(path) }
+        }
+    }
+
+    @Test
+    fun `rejects duplicate attempt file paths after normalization`() {
+        assertThrows(BadRequestException::class.java) {
+            PracticeContract.validateAttemptSyncRequest(
+                attemptSyncRequest(
+                    files =
+                        listOf(
+                            PracticeAttemptFileRequest(path = "src/main.ts", content = "one"),
+                            PracticeAttemptFileRequest(path = " src/main.ts ", content = "two"),
+                        ),
                 ),
             )
         }

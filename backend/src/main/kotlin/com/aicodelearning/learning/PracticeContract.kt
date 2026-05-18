@@ -38,6 +38,7 @@ object PracticeContract {
     const val MAX_TOTAL_FILE_BYTES = 256 * 1024
     const val MAX_STDIO_EXCERPT_BYTES = 16 * 1024
     const val MAX_PROVENANCE_EXCERPT_CHARS = 2_000
+    const val MAX_FILE_PATH_CHARS = 240
 
     val supportedLanguages = setOf(LANGUAGE_TYPESCRIPT, LANGUAGE_KOTLIN, LANGUAGE_JAVA)
     val fileRoles = setOf(FILE_ROLE_STARTER, FILE_ROLE_TEST, FILE_ROLE_SUPPORT, FILE_ROLE_SOLUTION, FILE_ROLE_HIDDEN_TEST)
@@ -81,7 +82,13 @@ object PracticeContract {
         }
 
         var totalBytes = 0
+        val normalizedPaths = mutableSetOf<String>()
         request.files.forEach { file ->
+            val normalizedPath = normalizeFilePath(file.path)
+            if (!normalizedPaths.add(normalizedPath)) {
+                throw BadRequestException("attempt file paths must be unique")
+            }
+
             val fileBytes = file.content.toByteArray(Charsets.UTF_8).size
             if (fileBytes > MAX_FILE_BYTES) {
                 throw BadRequestException("attempt file exceeds maximum size")
@@ -94,6 +101,32 @@ object PracticeContract {
         }
     }
 
+    fun normalizeFilePath(path: String): String {
+        val trimmed = path.trim()
+        if (trimmed.isBlank()) {
+            throw BadRequestException("file path is required")
+        }
+        if (trimmed.length > MAX_FILE_PATH_CHARS) {
+            throw BadRequestException("file path exceeds maximum length")
+        }
+        if (trimmed.contains('\u0000')) {
+            throw BadRequestException("file path contains invalid characters")
+        }
+        if (trimmed.startsWith("/") || trimmed.startsWith("~") || windowsDrivePattern.matches(trimmed)) {
+            throw BadRequestException("file path must be relative")
+        }
+        if (trimmed.contains('\\')) {
+            throw BadRequestException("file path must use forward slashes")
+        }
+
+        val parts = trimmed.split("/")
+        if (parts.any { it.isBlank() || it == "." || it == ".." }) {
+            throw BadRequestException("file path must stay inside the exercise root")
+        }
+
+        return parts.joinToString("/")
+    }
+
     private fun requireAllowed(
         field: String,
         value: String,
@@ -103,4 +136,6 @@ object PracticeContract {
             throw BadRequestException("$field must be one of: ${allowed.sorted().joinToString(", ")}")
         }
     }
+
+    private val windowsDrivePattern = Regex("^[A-Za-z]:.*")
 }
