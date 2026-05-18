@@ -690,8 +690,7 @@ h1 {
   font-size: 13px;
 }
 
-.editor-shell-placeholder pre,
-.monaco-lazy-shell pre {
+.editor-shell-placeholder pre {
   margin: 0;
   padding: 16px;
   color: #fcfbf8;
@@ -702,8 +701,9 @@ h1 {
   white-space: pre-wrap;
 }
 
-.monaco-lazy-shell {
-  min-height: 100%;
+.code-editor-root {
+  height: 320px;
+  min-height: 260px;
 }
 
 .guidance-row,

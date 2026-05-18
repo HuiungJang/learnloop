@@ -699,16 +699,23 @@ Phase 22 notes:
 
 ### Phase 23: Monaco Code Editor Wrapper
 
-- [ ] Add thin `CodeEditor` wrapper.
-- [ ] Create stable Monaco models per exercise file URI.
-- [ ] Map extensions to TypeScript, Kotlin, Java, JSON, Markdown, and plain text.
-- [ ] Dispose editor and models on problem unload.
+- [x] Add thin `CodeEditor` wrapper.
+- [x] Create stable Monaco models per exercise file URI.
+- [x] Map extensions to TypeScript, Kotlin, Java, JSON, Markdown, and plain text.
+- [x] Dispose editor and models on problem unload.
 
 Verification:
 
-- [ ] Open and close a problem repeatedly without visible editor failure.
-- [ ] Typecheck/build passes.
-- [ ] Manual check confirms syntax highlighting for TypeScript, Kotlin, and Java files.
+- [x] Open and close a problem repeatedly without visible editor failure.
+- [x] Typecheck/build passes.
+- [x] Manual check confirms syntax highlighting for TypeScript, Kotlin, and Java files.
+
+Phase 23 notes:
+
+- Added `CodeEditor` with Monaco editor lifecycle ownership and per-file `learnloop:/...` models.
+- Extracted editor language mapping and smoke-tested TypeScript, Kotlin, Java, JSON, Markdown, and plaintext mapping.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke with mocked API opened a practice problem, reopened it, logged out, and opened it again with `.monaco-editor` visible and starter code rendered.
 
 ### Phase 24: Multi-File Tabs and Read-Only Files
 

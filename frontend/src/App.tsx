@@ -557,7 +557,11 @@ export function App() {
                         ))}
                       </div>
                       <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
-                        <PracticeEditorShell file={activePractice.files[0]} />
+                        <PracticeEditorShell
+                          activePath={activePractice.files[0]?.path ?? null}
+                          files={activePractice.files}
+                          theme="vs-dark"
+                        />
                       </Suspense>
                     </div>
                   </div>
