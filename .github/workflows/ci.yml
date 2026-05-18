@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate changed files and shell scripts
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git diff --check "origin/${GITHUB_BASE_REF}"...HEAD
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          fi
+          sh -n scripts/install.sh
+          sh -n scripts/package-release.sh
+          sh -n packaging/release-bundle/install.sh
+          sh -n packaging/release-bundle/start.sh
+          sh -n packaging/release-bundle/status.sh
+          sh -n packaging/release-bundle/stop.sh
+          sh -n "packaging/macos-app/LearnLoop.app/Contents/MacOS/LearnLoop"
+
+      - name: Install frontend dependencies
+        run: ./scripts/npm.sh --prefix frontend ci
+
+      - name: Run Node parity tests
+        run: ./scripts/test.sh
+
+      - name: Run backend tests
+        run: ./scripts/backend-test.sh
+
+      - name: Typecheck frontend
+        run: ./scripts/frontend-typecheck.sh
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: ./scripts/npm.sh --prefix frontend ci
+
+      - name: Build backend bootJar
+        run: ./gradlew :backend:bootJar --no-daemon
+
+      - name: Build frontend
+        run: ./scripts/frontend-build.sh
+
+      - name: Build Docker images
+        run: |
+          cat > .ci.env <<'EOF'
+          AI_CODE_WEB_PORT=8080
+          APP_DATABASE_NAME=learnloop
+          APP_DATABASE_USERNAME=learnloop
+          APP_DATABASE_PASSWORD=ci-build-only
+          APP_DEMO_PASSWORD=ci-build-only
+          APP_OPENAPI_ENABLED=true
+          EOF
+          docker compose --env-file .ci.env -f docker-compose.install.yml build backend web
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: ./scripts/npm.sh --prefix frontend ci
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+      - name: Audit frontend dependencies
+        run: ./scripts/npm.sh --prefix frontend audit --audit-level=high
+
+      - name: Scan repository filesystem
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Build images for container scanning
+        run: |
+          cat > .ci.env <<'EOF'
+          AI_CODE_WEB_PORT=8080
+          APP_DATABASE_NAME=learnloop
+          APP_DATABASE_USERNAME=learnloop
+          APP_DATABASE_PASSWORD=ci-scan-only
+          APP_DEMO_PASSWORD=ci-scan-only
+          APP_OPENAPI_ENABLED=true
+          EOF
+          docker compose --env-file .ci.env -f docker-compose.install.yml build backend web
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: learnloop-backend:latest
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: learnloop-web:latest
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

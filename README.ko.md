@@ -107,6 +107,14 @@ cd learnloop-0.1.0-*
 
 릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 Docker image를 로드하고 stack을 시작한 뒤 demo password를 출력합니다.
 
+## CI/CD
+
+LearnLoop는 GitHub Actions로 주요 품질 게이트와 릴리즈 흐름을 실행합니다.
+
+- `CI`는 pull request와 `main` push에서 변경 파일 검증, 테스트, 빌드, dependency check, secret scan, filesystem scan, container image scan을 실행합니다.
+- `CodeQL`은 pull request, `main` push, 주간 schedule에서 Kotlin과 TypeScript 정적 분석을 실행합니다.
+- `Release`는 `v0.1.0` 같은 version tag 또는 manual dispatch에서 테스트, 빌드, 보안 검사, 릴리즈 번들 패키징, GitHub Release publishing을 실행합니다.
+
 ## 개발 실행
 
 이 저장소의 스크립트는 Codex 번들 Node runtime을 자동으로 사용합니다.

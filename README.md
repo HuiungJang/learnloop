@@ -107,6 +107,14 @@ cd learnloop-0.1.0-*
 
 Release-bundle installation does not build from source. It loads the packaged Docker images, starts the stack, and prints the generated demo password.
 
+## CI/CD
+
+LearnLoop uses GitHub Actions for the main quality and release gates.
+
+- `CI` runs on pull requests and pushes to `main`: changed-file validation, tests, builds, dependency checks, secret scanning, filesystem scanning, and container image scanning.
+- `CodeQL` runs on pull requests, pushes to `main`, and a weekly schedule for Kotlin and TypeScript static analysis.
+- `Release` runs on version tags such as `v0.1.0` or manual dispatch: tests, build, security scan, release bundle packaging, and GitHub Release publishing.
+
 ## Development
 
 The scripts in this repository use the bundled Codex Node runtime automatically.

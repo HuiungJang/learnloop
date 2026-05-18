@@ -4,15 +4,15 @@ set -eu
 
 DEFAULT_NPM_CLI="/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js"
 
-if [ -n "${NPM_CLI:-}" ]; then
-  :
-elif [ -f "$DEFAULT_NPM_CLI" ]; then
-  NPM_CLI="$DEFAULT_NPM_CLI"
-else
-  echo "npm CLI was not found. Set NPM_CLI to the npm-cli.js path." >&2
-  exit 1
-fi
-
 export PATH="$(dirname "$NODE_BIN"):$PATH"
 
-exec "$NODE_BIN" "$NPM_CLI" "$@"
+if [ -n "${NPM_CLI:-}" ]; then
+  exec "$NODE_BIN" "$NPM_CLI" "$@"
+elif [ -f "$DEFAULT_NPM_CLI" ]; then
+  exec "$NODE_BIN" "$DEFAULT_NPM_CLI" "$@"
+elif command -v npm >/dev/null 2>&1; then
+  exec npm "$@"
+else
+  echo "npm was not found. Set NPM_CLI to the npm-cli.js path or install npm." >&2
+  exit 1
+fi
