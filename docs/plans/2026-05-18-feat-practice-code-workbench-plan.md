@@ -512,16 +512,24 @@ Phase 13 notes:
 
 ### Phase 14: Local Sync API
 
-- [ ] Implement idempotent `POST /api/problems/{id}/attempts/local-sync`.
-- [ ] Accept `clientAttemptId`, `assetRevision`, file snapshots, local updated timestamp, and sync intent.
-- [ ] Return conflict when `assetRevision` is stale.
-- [ ] Avoid proficiency updates for draft sync.
+- [x] Implement idempotent `POST /api/problems/{id}/attempts/local-sync`.
+- [x] Accept `clientAttemptId`, `assetRevision`, file snapshots, local updated timestamp, and sync intent.
+- [x] Return conflict when `assetRevision` is stale.
+- [x] Avoid proficiency updates for draft sync.
 
 Verification:
 
-- [ ] Repeated sync with the same `clientAttemptId` updates the same draft.
-- [ ] Stale asset revision returns a safe conflict response.
-- [ ] Canonical problem/card rows remain unchanged.
+- [x] Repeated sync with the same `clientAttemptId` updates the same draft.
+- [x] Stale asset revision returns a safe conflict response.
+- [x] Canonical problem/card rows remain unchanged.
+
+Phase 14 notes:
+
+- Added `POST /api/problems/{id}/attempts/local-sync` for draft snapshots.
+- Sync is idempotent on `(user, problem, clientAttemptId)` and replaces saved attempt files without mutating canonical `problem_files`.
+- Stale `assetRevision` returns HTTP 409.
+- Draft sync does not call proficiency updates.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 15: Submission API Upgrade
 

@@ -4,6 +4,8 @@ import com.aicodelearning.auth.CurrentUser
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -21,6 +23,13 @@ class PracticeController(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @PathVariable id: String,
     ): PracticeAttemptListResponse = PracticeAttemptListResponse(attempts = practiceService.currentUserAttempts(currentUser, id))
+
+    @PostMapping("/api/problems/{id}/attempts/local-sync")
+    fun syncLocalAttempt(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable id: String,
+        @RequestBody request: PracticeAttemptSyncRequest,
+    ): PracticeAttemptSyncResponse = PracticeAttemptSyncResponse(attempt = practiceService.syncLocalAttempt(currentUser, id, request))
 }
 
 data class PracticeProblemDetailResponse(
@@ -29,4 +38,8 @@ data class PracticeProblemDetailResponse(
 
 data class PracticeAttemptListResponse(
     val attempts: List<PracticeAttemptResponse>,
+)
+
+data class PracticeAttemptSyncResponse(
+    val attempt: PracticeAttemptResponse,
 )

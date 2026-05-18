@@ -2,6 +2,7 @@ package com.aicodelearning.learning
 
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 
@@ -124,6 +125,12 @@ interface SubmissionFileRepository : JpaRepository<SubmissionFileEntity, String>
     fun findBySubmissionIdOrderByPathAsc(submissionId: String): List<SubmissionFileEntity>
 
     fun findBySubmissionIdInOrderBySubmissionIdAscPathAsc(submissionIds: Collection<String>): List<SubmissionFileEntity>
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from SubmissionFileEntity file where file.submissionId = :submissionId")
+    fun deleteBySubmissionId(
+        @Param("submissionId") submissionId: String,
+    ): Int
 }
 
 interface SandboxRunResultRepository : JpaRepository<SandboxRunResultEntity, String> {

@@ -8,6 +8,8 @@ import com.aicodelearning.learning.PatternCardEntity
 import com.aicodelearning.learning.PatternCardRepository
 import com.aicodelearning.learning.PatternRecognitionPromptBuilder
 import com.aicodelearning.learning.ProblemEntity
+import com.aicodelearning.learning.ProblemFileEntity
+import com.aicodelearning.learning.ProblemFileRepository
 import com.aicodelearning.learning.ProblemRepository
 import com.aicodelearning.learning.ReviewTaskEntity
 import com.aicodelearning.learning.ReviewTaskRepository
@@ -88,6 +90,9 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var problemRepository: ProblemRepository
+
+    @Autowired
+    private lateinit var problemFileRepository: ProblemFileRepository
 
     @Autowired
     private lateinit var reviewTaskRepository: ReviewTaskRepository
@@ -599,6 +604,78 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `local sync updates the same draft and leaves canonical problem unchanged`() {
+        val problemId = saveAccessiblePracticeProblem("Local sync practice")
+        val learner = login("learner@example.com")
+        val detail = getJson("/api/problems/$problemId/practice", learner.token)
+        val assetRevision = json(detail)["problem"]["assetRevision"].asText()
+        val canonicalContent = json(detail)["problem"]["files"][0]["content"].asText()
+
+        val first =
+            postJson(
+                "/api/problems/$problemId/attempts/local-sync",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-local-sync",
+                    "assetRevision" to assetRevision,
+                    "language" to "typescript",
+                    "intent" to "draft",
+                    "files" to listOf(mapOf("path" to "src/main.ts", "content" to "export const value = 1")),
+                    "localUpdatedAt" to "2026-05-18T00:00:00Z",
+                ),
+            )
+        assertEquals(HttpStatus.OK, first.statusCode)
+        val firstAttemptId = json(first)["attempt"]["id"].asText()
+
+        val second =
+            postJson(
+                "/api/problems/$problemId/attempts/local-sync",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-local-sync",
+                    "assetRevision" to assetRevision,
+                    "language" to "typescript",
+                    "intent" to "draft",
+                    "files" to listOf(mapOf("path" to "src/main.ts", "content" to "export const value = 2")),
+                    "localUpdatedAt" to "2026-05-18T00:01:00Z",
+                ),
+            )
+        val secondAttempt = json(second)["attempt"]
+        assertEquals(HttpStatus.OK, second.statusCode)
+        assertEquals(firstAttemptId, secondAttempt["id"].asText())
+        assertEquals("export const value = 2", secondAttempt["files"][0]["content"].asText())
+
+        val attempts = getJson("/api/problems/$problemId/attempts/me", learner.token)
+        assertEquals(1, json(attempts)["attempts"].size())
+        assertEquals("export const value = 2", json(attempts)["attempts"][0]["files"][0]["content"].asText())
+
+        val refreshedDetail = getJson("/api/problems/$problemId/practice", learner.token)
+        assertEquals(canonicalContent, json(refreshedDetail)["problem"]["files"][0]["content"].asText())
+    }
+
+    @Test
+    fun `local sync rejects stale asset revision`() {
+        val problemId = saveAccessiblePracticeProblem("Stale local sync practice")
+        val learner = login("learner@example.com")
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/attempts/local-sync",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-stale-sync",
+                    "assetRevision" to "rev-stale",
+                    "language" to "typescript",
+                    "intent" to "draft",
+                    "files" to listOf(mapOf("path" to "src/main.ts", "content" to "export const value = 1")),
+                    "localUpdatedAt" to "2026-05-18T00:00:00Z",
+                ),
+            )
+
+        assertEquals(HttpStatus.CONFLICT, response.statusCode)
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -940,6 +1017,19 @@ class SessionAuthenticationIntegrationTest {
                 prompt = "A practice problem visible to platform learners.",
                 referenceAnswer = "Accessible answer",
                 difficulty = "easy",
+                createdAt = Instant.now(),
+            ),
+        )
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_accessible_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/main.ts",
+                language = "typescript",
+                fileRole = "starter",
+                content = "export const value = 0",
+                readOnly = false,
+                sortOrder = 1,
                 createdAt = Instant.now(),
             ),
         )

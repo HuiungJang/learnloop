@@ -3,9 +3,13 @@ package com.aicodelearning.learning
 import com.aicodelearning.auth.CurrentUser
 import com.aicodelearning.auth.sha256Hex
 import com.aicodelearning.organization.AuthorizationService
+import com.aicodelearning.platform.BadRequestException
+import com.aicodelearning.platform.ConflictException
 import com.aicodelearning.platform.NotFoundException
+import com.aicodelearning.platform.prefixedId
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 @Service
 class PracticeService(
@@ -86,12 +90,7 @@ class PracticeService(
         authorizePracticeRead(currentUser, card)
 
         val canonicalFiles = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
-        val currentAssetRevision = assetRevision(
-            problem = problem,
-            files = canonicalFiles,
-            hints = problemHintRepository.findByProblemIdOrderByRevealOrderAsc(problem.id),
-            provenance = problemProvenanceLinkRepository.findByProblemIdOrderBySortOrderAsc(problem.id),
-        )
+        val currentAssetRevision = currentAssetRevision(problem, canonicalFiles)
         val attempts = submissionRepository.findByUserIdAndProblemIdInOrderByUpdatedAtDesc(currentUser.id, listOf(problem.id))
         val filesBySubmission =
             if (attempts.isEmpty()) {
@@ -104,23 +103,77 @@ class PracticeService(
         val defaultLanguage = canonicalFiles.firstOrNull { it.fileRole == PracticeContract.FILE_ROLE_STARTER }?.language ?: PracticeContract.LANGUAGE_TYPESCRIPT
 
         return attempts.map {
-            PracticeAttemptResponse(
-                id = it.id,
-                problemId = it.problemId,
-                clientAttemptId = it.clientAttemptId ?: it.id,
-                assetRevision = it.assetRevision ?: currentAssetRevision,
-                language = it.language ?: defaultLanguage,
-                status = it.attemptStatus,
-                files =
-                    filesBySubmission
-                        .getValueOrEmpty(it.id)
-                        .map { file -> PracticeAttemptFileResponse(path = file.path, content = file.content) },
-                score = it.score,
-                resultStatus = it.resultStatus,
-                updatedAt = it.updatedAt,
-                submittedAt = it.submittedAt,
-            )
+            it.toPracticeAttemptResponse(filesBySubmission.getValueOrEmpty(it.id), currentAssetRevision, defaultLanguage)
         }
+    }
+
+    @Transactional
+    fun syncLocalAttempt(
+        currentUser: CurrentUser,
+        problemId: String,
+        request: PracticeAttemptSyncRequest,
+    ): PracticeAttemptResponse {
+        PracticeContract.validateAttemptSyncRequest(request)
+        if (request.intent != PracticeContract.ATTEMPT_STATUS_DRAFT) {
+            throw BadRequestException("local sync only accepts draft attempts")
+        }
+
+        val problem = problemRepository.findById(problemId).orElseThrow { NotFoundException("Problem not found") }
+        val card = patternCardRepository.findById(problem.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
+        authorizePracticeRead(currentUser, card)
+
+        val canonicalFiles = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
+        val currentAssetRevision = currentAssetRevision(problem, canonicalFiles)
+        if (request.assetRevision != currentAssetRevision) {
+            throw ConflictException("Practice problem has changed. Refresh before syncing this attempt.")
+        }
+
+        val now = Instant.now()
+        val existing =
+            submissionRepository.findByUserIdAndProblemIdAndClientAttemptId(
+                currentUser.id,
+                problem.id,
+                request.clientAttemptId,
+            )
+        if (existing?.attemptStatus == PracticeContract.ATTEMPT_STATUS_SUBMITTED) {
+            throw ConflictException("Submitted attempts cannot be updated through local sync")
+        }
+
+        val attempt =
+            existing
+                ?: SubmissionEntity(
+                    id = prefixedId("submission"),
+                    problemId = problem.id,
+                    userId = currentUser.id,
+                    textAnswer = "",
+                    resultStatus = PracticeContract.RESULT_STATUS_SUBMITTED,
+                    createdAt = now,
+                    clientAttemptId = request.clientAttemptId,
+                )
+
+        attempt.assetRevision = request.assetRevision
+        attempt.language = request.language
+        attempt.attemptStatus = request.intent
+        attempt.metadataJson = """{"localUpdatedAt":"${request.localUpdatedAt}"}"""
+        attempt.updatedAt = now
+        val savedAttempt = submissionRepository.save(attempt)
+
+        submissionFileRepository.deleteBySubmissionId(savedAttempt.id)
+        val savedFiles =
+            submissionFileRepository.saveAll(
+                request.files.map { file ->
+                    SubmissionFileEntity(
+                        id = prefixedId("submission_file"),
+                        submissionId = savedAttempt.id,
+                        path = PracticeContract.normalizeFilePath(file.path),
+                        content = file.content,
+                        createdAt = now,
+                    )
+                },
+            )
+
+        val defaultLanguage = canonicalFiles.firstOrNull { it.fileRole == PracticeContract.FILE_ROLE_STARTER }?.language ?: request.language
+        return savedAttempt.toPracticeAttemptResponse(savedFiles.sortedBy { it.path }, currentAssetRevision, defaultLanguage)
     }
 
     private fun authorizePracticeRead(
@@ -156,6 +209,36 @@ class PracticeService(
                     provenance.forEach { append(it.id).append('|').append(it.redactedExcerpt).append('\n') }
                 },
             ).take(16)
+
+    private fun currentAssetRevision(
+        problem: ProblemEntity,
+        files: List<ProblemFileEntity> = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id),
+    ): String =
+        assetRevision(
+            problem = problem,
+            files = files,
+            hints = problemHintRepository.findByProblemIdOrderByRevealOrderAsc(problem.id),
+            provenance = problemProvenanceLinkRepository.findByProblemIdOrderBySortOrderAsc(problem.id),
+        )
+
+    private fun SubmissionEntity.toPracticeAttemptResponse(
+        files: List<SubmissionFileEntity>,
+        defaultAssetRevision: String,
+        defaultLanguage: String,
+    ): PracticeAttemptResponse =
+        PracticeAttemptResponse(
+            id = id,
+            problemId = problemId,
+            clientAttemptId = clientAttemptId ?: id,
+            assetRevision = assetRevision ?: defaultAssetRevision,
+            language = language ?: defaultLanguage,
+            status = attemptStatus,
+            files = files.map { PracticeAttemptFileResponse(path = it.path, content = it.content) },
+            score = score,
+            resultStatus = resultStatus,
+            updatedAt = updatedAt,
+            submittedAt = submittedAt,
+        )
 
     private companion object {
         val visibleFileRoles = setOf(PracticeContract.FILE_ROLE_STARTER, PracticeContract.FILE_ROLE_SUPPORT)
