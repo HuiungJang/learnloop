@@ -237,16 +237,24 @@ Each phase should be small enough to implement and verify independently. Do not 
 
 ### Phase 0: Worktree and Baseline Snapshot
 
-- [ ] Confirm the target working tree for implementation is the Spring/React app.
-- [ ] Capture `git status --short` and document unrelated `.idea/` or `.gitignore` changes.
-- [ ] Decide whether this plan file must be copied into the Spring/React worktree before implementation starts.
-- [ ] Record current backend schema version and latest Flyway migration number.
-- [ ] Record Docker availability and version.
+- [x] Confirm the target working tree for implementation is the Spring/React app.
+- [x] Capture `git status --short` and document unrelated `.idea/` or `.gitignore` changes.
+- [x] Decide whether this plan file must be copied into the Spring/React worktree before implementation starts.
+- [x] Record current backend schema version and latest Flyway migration number.
+- [x] Record Docker availability and version.
 
 Verification:
 
-- [ ] Target worktree is unambiguous.
-- [ ] Unrelated worktree changes are documented and untouched.
+- [x] Target worktree is unambiguous.
+- [x] Unrelated worktree changes are documented and untouched.
+
+Phase 0 notes:
+
+- Target worktree: `.worktrees/spring-react-platform-split`
+- Implementation branch: `feat/practice-code-workbench`
+- Existing unrelated untracked files left untouched: `.idea/`, `backend/.idea/`
+- Latest Flyway migration before implementation: `V4__learning_flow_schema.sql`
+- Docker baseline: Docker 29.4.0, cgroup driver `cgroupfs`
 
 ### Phase 1: Current Test and Build Baseline
 
