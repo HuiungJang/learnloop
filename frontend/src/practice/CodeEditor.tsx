@@ -1,25 +1,36 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as monaco from "monaco-editor";
-import type { PracticeFileResponse } from "../api/client";
+import type { PracticeAttemptFileRequest, PracticeFileResponse } from "../api/client";
 import { languageForFile } from "./editorLanguages";
 import "./monacoEnvironment";
 
 type CodeEditorProps = {
   files: PracticeFileResponse[];
   activePath: string | null;
+  onSave?: (files: PracticeAttemptFileRequest[]) => void;
   theme: "vs" | "vs-dark";
 };
 
-export function CodeEditor({ files, activePath, theme }: CodeEditorProps) {
+export function CodeEditor({ files, activePath, onSave, theme }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const filesRef = useRef<PracticeFileResponse[]>(files);
   const modelsRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
+  const onSaveRef = useRef(onSave);
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   useEffect(() => {
     if (containerRef.current === null || editorRef.current !== null) return;
 
-    editorRef.current = monaco.editor.create(containerRef.current, {
+    const editor = monaco.editor.create(containerRef.current, {
       automaticLayout: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize: 13,
@@ -30,6 +41,10 @@ export function CodeEditor({ files, activePath, theme }: CodeEditorProps) {
       theme,
       wordWrap: "on"
     });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      onSaveRef.current?.(snapshotFiles(filesRef.current, modelsRef.current));
+    });
+    editorRef.current = editor;
 
     return () => {
       editorRef.current?.dispose();
@@ -79,4 +94,11 @@ export function CodeEditor({ files, activePath, theme }: CodeEditorProps) {
   }, [theme]);
 
   return <div className="code-editor-root" ref={containerRef} />;
+}
+
+function snapshotFiles(files: PracticeFileResponse[], models: Map<string, monaco.editor.ITextModel>): PracticeAttemptFileRequest[] {
+  return files.map((file) => ({
+    path: file.path,
+    content: models.get(file.path)?.getValue() ?? file.content
+  }));
 }

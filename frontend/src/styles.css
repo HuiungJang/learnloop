@@ -728,6 +728,28 @@ h1 {
   flex-shrink: 0;
 }
 
+.save-status {
+  display: inline-flex;
+  flex: 0 0 112px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 10px;
+  color: rgba(252, 251, 248, 0.76);
+  background: rgba(252, 251, 248, 0.08);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.save-status.synced {
+  color: #d7f7dd;
+}
+
+.save-status.conflict,
+.save-status.failed {
+  color: #ffd5ca;
+}
+
 .editor-tool-button {
   display: inline-flex;
   flex: 0 0 44px;

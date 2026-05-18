@@ -27,15 +27,27 @@ import {
   getLibrary,
   getPracticeProblem,
   type HealthResponse,
+  isConflictError,
   listProviders,
+  type PracticeAttemptFileRequest,
   registerUser,
   runLearningDemo,
+  syncLocalPracticeAttempt,
   type Membership,
   type PatternCardResponse,
   type PracticeProblemResponse,
   type ProviderResponse,
   type SessionResponse
 } from "./api/client";
+import { ensurePracticeDraft } from "./practice/practiceStorage";
+import {
+  enqueuePracticeSync,
+  markPracticeConflict,
+  markPracticeFailed,
+  markPracticeSynced,
+  markPracticeSyncing,
+  type PracticeSyncStatus
+} from "./practice/practiceSyncQueue";
 
 type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
@@ -50,6 +62,11 @@ type LibraryFilters = {
   tag: string;
   difficulty: string;
   publicationStatus: "published";
+};
+type PracticeSaveState = PracticeSyncStatus | "idle";
+type PracticeSaveStatus = {
+  state: PracticeSaveState;
+  message: string;
 };
 
 type LocalAiSettings = {
@@ -148,6 +165,7 @@ export function App() {
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
+  const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
@@ -578,6 +596,9 @@ export function App() {
                             </button>
                           ))}
                         </div>
+                        <span className={`save-status ${practiceSaveStatus.state}`} aria-live="polite">
+                          {practiceSaveStatus.message}
+                        </span>
                         <button
                           aria-label={editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme"}
                           className="editor-tool-button"
@@ -592,6 +613,9 @@ export function App() {
                         <PracticeEditorShell
                           activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
                           files={activePractice.files}
+                          onSave={(files) => {
+                            void savePracticeDraft(files);
+                          }}
                           theme={editorTheme}
                         />
                       </Suspense>
@@ -741,6 +765,38 @@ export function App() {
     });
   }
 
+  async function savePracticeDraft(files: PracticeAttemptFileRequest[]) {
+    if (session === null || activePractice === null) return;
+
+    const draft = ensurePracticeDraft({
+      userId: session.user.id,
+      problemId: activePractice.id,
+      assetRevision: activePractice.assetRevision,
+      files
+    });
+    const queued = enqueuePracticeSync(draft);
+    setPracticeSaveStatus({ state: "local_only", message: "Saved locally" });
+
+    if (!window.navigator.onLine) return;
+
+    const syncing = markPracticeSyncing(queued);
+    setPracticeSaveStatus({ state: "syncing", message: "Syncing" });
+    try {
+      await syncLocalPracticeAttempt(session.token, activePractice.id, syncing.request);
+      markPracticeSynced(syncing);
+      setPracticeSaveStatus({ state: "synced", message: "Synced" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sync failed";
+      if (isConflictError(error)) {
+        markPracticeConflict(syncing, message);
+        setPracticeSaveStatus({ state: "conflict", message: "Sync conflict" });
+        return;
+      }
+      markPracticeFailed(syncing, message);
+      setPracticeSaveStatus({ state: "failed", message: "Sync failed" });
+    }
+  }
+
   async function openPractice(problemId: string) {
     if (session === null) return;
     setPracticeLoading(true);
@@ -749,9 +805,11 @@ export function App() {
       const problem = await getPracticeProblem(session.token, problemId);
       setActivePractice(problem);
       setActivePracticePath(problem.files[0]?.path ?? null);
+      setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     } catch (error) {
       setActivePractice(null);
       setActivePracticePath(null);
+      setPracticeSaveStatus({ state: "idle", message: "Not saved" });
       setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
     } finally {
       setPracticeLoading(false);
@@ -766,6 +824,7 @@ export function App() {
     setLibraryError("");
     setActivePractice(null);
     setActivePracticePath(null);
+    setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);

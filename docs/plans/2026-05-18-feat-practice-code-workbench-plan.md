@@ -756,15 +756,23 @@ Phase 25 notes:
 
 ### Phase 26: Save Shortcut and Local Draft Flow
 
-- [ ] Implement `Cmd/Ctrl + S`.
-- [ ] Save current file set locally.
-- [ ] Trigger background sync when online.
-- [ ] Show save/sync status.
+- [x] Implement `Cmd/Ctrl + S`.
+- [x] Save current file set locally.
+- [x] Trigger background sync when online.
+- [x] Show save/sync status.
 
 Verification:
 
-- [ ] E2E or manual check confirms shortcut saves draft.
-- [ ] Shortcut does not affect auth/onboarding forms.
+- [x] E2E or manual check confirms shortcut saves draft.
+- [x] Shortcut does not affect auth/onboarding forms.
+
+Phase 26 notes:
+
+- Registered Monaco `CtrlCmd+S` to snapshot current editor models and save the file set.
+- Connected local draft storage to the existing practice sync queue and immediate online sync API call.
+- Added visible save/sync status states in the editor topbar.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed auth/onboarding shortcuts do not create drafts, editor `Cmd+S` stores the draft locally, syncs it, and marks the queue item as `synced`.
 
 ### Phase 27: Find, Quick Open, and Command Palette
 
