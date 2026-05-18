@@ -42,20 +42,25 @@ class PatternReadService(
         forceAnswers: Boolean = false,
     ): PatternCardResponse {
         val card = patternCardRepository.findById(cardId).orElseThrow { NotFoundException("Pattern card not found") }
-        if (card.publicationStatus == "published" && card.visibility == "organization") {
+        if (PracticeAccessPolicy.isPublishedOrganizationPractice(card.publicationStatus, card.visibility)) {
             if (!currentUser.hasRole("learner", card.organizationId, card.teamId, card.projectId)) {
                 authorizationService.requireRole(currentUser, card.organizationId, "learner", card.teamId, card.projectId)
             }
-        } else if (card.createdByUserId != currentUser.id) {
-            if (!currentUser.hasRole("reviewer", card.organizationId, card.teamId, card.projectId)) {
-                authorizationService.requireRole(currentUser, card.organizationId, "reviewer", card.teamId, card.projectId)
-            }
+        } else if (
+            !PracticeAccessPolicy.canReadDraftPractice(
+                card.createdByUserId,
+                currentUser.id,
+                currentUser.hasRole("reviewer", card.organizationId, card.teamId, card.projectId),
+            )
+        ) {
+            authorizationService.requireRole(currentUser, card.organizationId, "reviewer", card.teamId, card.projectId)
         }
 
         val practice = loadPracticeContent(card)
         val problemIds = practice.problems.map { it.id }
         val hasSubmitted = problemIds.isNotEmpty() && submissionRepository.existsByUserIdAndProblemIdIn(currentUser.id, problemIds)
-        return toResponse(card, practice.tags, maskAnswers(practice.problems, forceAnswers || hasSubmitted || card.createdByUserId == currentUser.id))
+        val includeAnswers = PracticeAccessPolicy.canViewAnswers(card.createdByUserId, currentUser.id, hasSubmitted, forceAnswers)
+        return toResponse(card, practice.tags, maskAnswers(practice.problems, includeAnswers))
     }
 
     fun toResponse(

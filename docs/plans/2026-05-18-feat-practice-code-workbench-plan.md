@@ -336,16 +336,23 @@ Phase 4 notes:
 
 ### Phase 5: Practice Read Authorization Contract
 
-- [ ] Define published learner access rules.
-- [ ] Define draft author/reviewer access rules.
-- [ ] Define answer visibility rules before and after submission.
-- [ ] Define redacted provenance visibility rules.
+- [x] Define published learner access rules.
+- [x] Define draft author/reviewer access rules.
+- [x] Define answer visibility rules before and after submission.
+- [x] Define redacted provenance visibility rules.
 
 Verification:
 
-- [ ] Backend tests prove published learner access.
-- [ ] Backend tests prove draft access is limited to author/reviewer.
-- [ ] Backend tests prove answer data is hidden before eligibility.
+- [x] Backend tests prove published learner access.
+- [x] Backend tests prove draft access is limited to author/reviewer.
+- [x] Backend tests prove answer data is hidden before eligibility.
+
+Phase 5 notes:
+
+- Added `PracticeAccessPolicy` for published practice, draft access, answer visibility, and redacted provenance policy.
+- Reused the answer visibility policy in `PatternReadService`.
+- Added `PracticeAccessPolicyTest`.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 6: Migration for Canonical Problem Files
 
