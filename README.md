@@ -4,7 +4,7 @@
 
 # LearnLoop
 
-[Korean](README.ko.md)
+[한국어](README.ko.md)
 
 LearnLoop turns code snippets, conversation logs, pull requests, commits, and diffs created through AI coding tools such as Codex, Gemini, and Claude into reusable developer learning assets.
 
