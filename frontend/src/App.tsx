@@ -18,9 +18,10 @@ import {
   Sun,
   UploadCloud,
   UserPlus,
+  X,
   type LucideIcon
 } from "lucide-react";
-import { Suspense, lazy, type FormEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSession,
   fetchHealth,
@@ -68,6 +69,7 @@ type PracticeSaveStatus = {
   state: PracticeSaveState;
   message: string;
 };
+type WorkbenchOverlay = "quick-open" | "command-palette" | null;
 
 type LocalAiSettings = {
   provider: LocalAiProvider;
@@ -154,6 +156,7 @@ function primaryMembership(session: SessionResponse | null): Membership | null {
 }
 
 export function App() {
+  const editorSnapshotRef = useRef<(() => PracticeAttemptFileRequest[]) | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -166,6 +169,8 @@ export function App() {
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
+  const [workbenchOverlay, setWorkbenchOverlay] = useState<WorkbenchOverlay>(null);
+  const [workbenchQuery, setWorkbenchQuery] = useState("");
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
@@ -613,12 +618,18 @@ export function App() {
                         <PracticeEditorShell
                           activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
                           files={activePractice.files}
+                          onCommandPalette={openCommandPalette}
+                          onOpenQuickFile={openQuickOpen}
                           onSave={(files) => {
                             void savePracticeDraft(files);
+                          }}
+                          onSnapshotReady={(snapshotter) => {
+                            editorSnapshotRef.current = snapshotter;
                           }}
                           theme={editorTheme}
                         />
                       </Suspense>
+                      {workbenchOverlay !== null ? renderWorkbenchOverlay(activePractice) : null}
                     </div>
                   </div>
                 ) : null}
@@ -765,6 +776,141 @@ export function App() {
     });
   }
 
+  function openQuickOpen() {
+    setWorkbenchQuery("");
+    setWorkbenchOverlay("quick-open");
+  }
+
+  function openCommandPalette() {
+    setWorkbenchQuery("");
+    setWorkbenchOverlay("command-palette");
+  }
+
+  function closeWorkbenchOverlay() {
+    setWorkbenchOverlay(null);
+    setWorkbenchQuery("");
+  }
+
+  function renderWorkbenchOverlay(problem: PracticeProblemResponse) {
+    const query = workbenchQuery.trim().toLowerCase();
+    const matchingFiles = matchingFilesFor(query);
+    const commands = matchingCommandsFor(query);
+    const isQuickOpen = workbenchOverlay === "quick-open";
+    const title = isQuickOpen ? "Quick Open" : "Command Palette";
+
+    function matchingFilesFor(nextQuery: string) {
+      return problem.files.filter((file) => file.path.toLowerCase().includes(nextQuery));
+    }
+
+    function matchingCommandsFor(nextQuery: string) {
+      return allCommands().filter((command) => command.label.toLowerCase().includes(nextQuery) || command.detail.toLowerCase().includes(nextQuery));
+    }
+
+    function allCommands() {
+      return [
+        {
+          id: "save",
+          label: "Save current draft",
+          detail: "Persist files locally and sync when online",
+          disabled: editorSnapshotRef.current === null,
+          disabledReason: "Editor is still loading",
+          run: () => {
+            const snapshot = editorSnapshotRef.current;
+            if (snapshot === null) return;
+            closeWorkbenchOverlay();
+            void savePracticeDraft(snapshot());
+          }
+        },
+        {
+          id: "quick-open",
+          label: "Quick open file",
+          detail: "Jump to a file in this practice",
+          disabled: problem.files.length === 0,
+          disabledReason: "No files are available",
+          run: openQuickOpen
+        },
+        {
+          id: "toggle-theme",
+          label: editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme",
+          detail: "Change the Monaco editor theme only",
+          disabled: false,
+          disabledReason: "",
+          run: () => {
+            toggleEditorTheme();
+            closeWorkbenchOverlay();
+          }
+        },
+        {
+          id: "submit",
+          label: "Submit solution",
+          detail: "Submission is not available yet",
+          disabled: true,
+          disabledReason: "Submission is not available yet",
+          run: () => {}
+        }
+      ];
+    }
+
+    return (
+      <div className="workbench-overlay-backdrop">
+        <div className="workbench-overlay" role="dialog" aria-modal="true" aria-label={title}>
+          <div className="overlay-header">
+            <strong>{title}</strong>
+            <button aria-label="Close overlay" onClick={closeWorkbenchOverlay} type="button">
+              <X aria-hidden="true" size={16} />
+            </button>
+          </div>
+          <input
+            autoFocus
+            onChange={(event) => setWorkbenchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeWorkbenchOverlay();
+              if (event.key !== "Enter") return;
+              const currentQuery = event.currentTarget.value.trim().toLowerCase();
+              if (isQuickOpen) {
+                const file = matchingFilesFor(currentQuery)[0];
+                if (file !== undefined) {
+                  setActivePracticePath(file.path);
+                  closeWorkbenchOverlay();
+                }
+                return;
+              }
+              const command = matchingCommandsFor(currentQuery).find((candidate) => !candidate.disabled);
+              command?.run();
+            }}
+            placeholder={isQuickOpen ? "Search files" : "Search commands"}
+            type="search"
+            value={workbenchQuery}
+          />
+          <div className="overlay-list">
+            {isQuickOpen
+              ? matchingFiles.map((file) => (
+                  <button
+                    className="overlay-row"
+                    key={file.path}
+                    onClick={() => {
+                      setActivePracticePath(file.path);
+                      closeWorkbenchOverlay();
+                    }}
+                    type="button"
+                  >
+                    <span>{file.path}</span>
+                    <small>{file.readOnly ? "Read-only" : file.language}</small>
+                  </button>
+                ))
+              : commands.map((command) => (
+                  <button className="overlay-row" disabled={command.disabled} key={command.id} onClick={command.run} type="button">
+                    <span>{command.label}</span>
+                    <small>{command.disabled ? command.disabledReason : command.detail}</small>
+                  </button>
+                ))}
+            {(isQuickOpen ? matchingFiles.length : commands.length) === 0 ? <p className="overlay-empty">No matches</p> : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   async function savePracticeDraft(files: PracticeAttemptFileRequest[]) {
     if (session === null || activePractice === null) return;
 
@@ -805,10 +951,14 @@ export function App() {
       const problem = await getPracticeProblem(session.token, problemId);
       setActivePractice(problem);
       setActivePracticePath(problem.files[0]?.path ?? null);
+      editorSnapshotRef.current = null;
+      closeWorkbenchOverlay();
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     } catch (error) {
       setActivePractice(null);
       setActivePracticePath(null);
+      editorSnapshotRef.current = null;
+      closeWorkbenchOverlay();
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
       setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
     } finally {
@@ -824,6 +974,8 @@ export function App() {
     setLibraryError("");
     setActivePractice(null);
     setActivePracticePath(null);
+    editorSnapshotRef.current = null;
+    closeWorkbenchOverlay();
     setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     setPracticeError("");
     setActivity([]);

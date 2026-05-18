@@ -7,16 +7,30 @@ import "./monacoEnvironment";
 type CodeEditorProps = {
   files: PracticeFileResponse[];
   activePath: string | null;
+  onCommandPalette?: () => void;
+  onOpenQuickFile?: () => void;
   onSave?: (files: PracticeAttemptFileRequest[]) => void;
+  onSnapshotReady?: (snapshotter: (() => PracticeAttemptFileRequest[]) | null) => void;
   theme: "vs" | "vs-dark";
 };
 
-export function CodeEditor({ files, activePath, onSave, theme }: CodeEditorProps) {
+export function CodeEditor({
+  files,
+  activePath,
+  onCommandPalette,
+  onOpenQuickFile,
+  onSave,
+  onSnapshotReady,
+  theme
+}: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const filesRef = useRef<PracticeFileResponse[]>(files);
   const modelsRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
+  const onCommandPaletteRef = useRef(onCommandPalette);
+  const onOpenQuickFileRef = useRef(onOpenQuickFile);
   const onSaveRef = useRef(onSave);
+  const onSnapshotReadyRef = useRef(onSnapshotReady);
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
 
   useEffect(() => {
@@ -24,8 +38,20 @@ export function CodeEditor({ files, activePath, onSave, theme }: CodeEditorProps
   }, [files]);
 
   useEffect(() => {
+    onCommandPaletteRef.current = onCommandPalette;
+  }, [onCommandPalette]);
+
+  useEffect(() => {
+    onOpenQuickFileRef.current = onOpenQuickFile;
+  }, [onOpenQuickFile]);
+
+  useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onSnapshotReadyRef.current = onSnapshotReady;
+  }, [onSnapshotReady]);
 
   useEffect(() => {
     if (containerRef.current === null || editorRef.current !== null) return;
@@ -42,11 +68,22 @@ export function CodeEditor({ files, activePath, onSave, theme }: CodeEditorProps
       wordWrap: "on"
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      onSaveRef.current?.(snapshotFiles(filesRef.current, modelsRef.current));
+      onSaveRef.current?.(snapshotCurrentFiles());
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+      void editor.getAction("actions.find")?.run();
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
+      onOpenQuickFileRef.current?.();
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, () => {
+      onCommandPaletteRef.current?.();
     });
     editorRef.current = editor;
+    onSnapshotReadyRef.current?.(snapshotCurrentFiles);
 
     return () => {
+      onSnapshotReadyRef.current?.(null);
       editorRef.current?.dispose();
       editorRef.current = null;
       modelsRef.current.forEach((model) => model.dispose());
@@ -94,6 +131,10 @@ export function CodeEditor({ files, activePath, onSave, theme }: CodeEditorProps
   }, [theme]);
 
   return <div className="code-editor-root" ref={containerRef} />;
+
+  function snapshotCurrentFiles() {
+    return snapshotFiles(filesRef.current, modelsRef.current);
+  }
 }
 
 function snapshotFiles(files: PracticeFileResponse[], models: Map<string, monaco.editor.ITextModel>): PracticeAttemptFileRequest[] {

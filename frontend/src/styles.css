@@ -666,6 +666,7 @@ h1 {
 
 .editor-shell-placeholder {
   display: grid;
+  position: relative;
   grid-template-rows: auto minmax(220px, 1fr);
   min-height: 280px;
   border: 1px solid var(--border);
@@ -785,6 +786,109 @@ h1 {
 .code-editor-root {
   height: 320px;
   min-height: 260px;
+}
+
+.workbench-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px 16px;
+  background: rgba(28, 28, 28, 0.44);
+}
+
+.workbench-overlay {
+  display: grid;
+  gap: 10px;
+  width: min(560px, 100%);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--cream);
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.overlay-header strong {
+  color: var(--charcoal);
+}
+
+.overlay-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: transparent;
+  cursor: pointer;
+}
+
+.workbench-overlay input {
+  width: 100%;
+  min-width: 0;
+}
+
+.overlay-list {
+  display: grid;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.overlay-row {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--charcoal);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overlay-row:last-child {
+  border-bottom: 0;
+}
+
+.overlay-row:hover:not(:disabled),
+.overlay-row:focus-visible {
+  background: rgba(28, 28, 28, 0.04);
+}
+
+.overlay-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.overlay-row span,
+.overlay-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-row small,
+.overlay-empty {
+  color: var(--muted);
+}
+
+.overlay-empty {
+  margin: 0;
+  padding: 12px;
 }
 
 .guidance-row,

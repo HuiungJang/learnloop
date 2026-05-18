@@ -776,15 +776,23 @@ Phase 26 notes:
 
 ### Phase 27: Find, Quick Open, and Command Palette
 
-- [ ] Support `Cmd/Ctrl + F` through Monaco find.
-- [ ] Implement `Cmd/Ctrl + P` quick file open.
-- [ ] Implement `Cmd/Ctrl + Shift + P` command palette.
-- [ ] Dispose command registrations on unmount.
+- [x] Support `Cmd/Ctrl + F` through Monaco find.
+- [x] Implement `Cmd/Ctrl + P` quick file open.
+- [x] Implement `Cmd/Ctrl + Shift + P` command palette.
+- [x] Dispose command registrations on unmount.
 
 Verification:
 
-- [ ] Shortcuts work inside workbench.
-- [ ] Command palette commands are searchable and disabled with reasons when unavailable.
+- [x] Shortcuts work inside workbench.
+- [x] Command palette commands are searchable and disabled with reasons when unavailable.
+
+Phase 27 notes:
+
+- Added Monaco command bindings for find, quick open, and command palette.
+- Added a workbench overlay for quick file search and command search.
+- Added command palette actions for save, quick open, theme toggle, and a disabled submit command with an unavailable reason.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed `Cmd+F`, `Cmd+P`, and `Cmd+Shift+P`; quick open switches files, command filtering works, disabled reasons render, and the theme command executes.
 
 ### Phase 28: Format, Submit, Diff, and Theme Shortcuts
 
