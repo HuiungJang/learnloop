@@ -575,16 +575,24 @@ Phase 16 notes:
 
 ### Phase 17: Local Draft Storage
 
-- [ ] Add `practiceStorage.ts`.
-- [ ] Store drafts by user ID, problem ID, asset revision, and file path.
-- [ ] Generate and persist `clientAttemptId`.
-- [ ] Defensively parse corrupted local data.
-- [ ] Bound retained drafts.
+- [x] Add `practiceStorage.ts`.
+- [x] Store drafts by user ID, problem ID, asset revision, and file path.
+- [x] Generate and persist `clientAttemptId`.
+- [x] Defensively parse corrupted local data.
+- [x] Bound retained drafts.
 
 Verification:
 
-- [ ] Unit or E2E-level checks prove draft restore after refresh.
-- [ ] Corrupted local data does not crash the app.
+- [x] Unit or E2E-level checks prove draft restore after refresh.
+- [x] Corrupted local data does not crash the app.
+
+Phase 17 notes:
+
+- Added `frontend/src/practice/practiceStorage.ts` with injectable `Storage` support.
+- Drafts are scoped by user ID, problem ID, asset revision, and file path, with generated `clientAttemptId`.
+- Store reads defensively handle malformed JSON and cap retained drafts at 50.
+- `./scripts/frontend-typecheck.sh`: passed.
+- Temporary compiled-module smoke test verified draft restore and corrupted local data cleanup.
 
 ### Phase 18: Sync State UI and Offline Queue
 
