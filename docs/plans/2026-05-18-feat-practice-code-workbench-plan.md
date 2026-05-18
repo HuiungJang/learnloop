@@ -1120,16 +1120,27 @@ Phase 43 notes:
 
 ### Phase 44: Conversion Workbench Read-Only Trace
 
-- [ ] Add source evidence column.
-- [ ] Add recognized pattern summary column.
-- [ ] Add generated exercise/review-state column.
-- [ ] Reuse existing source-link and review APIs.
-- [ ] Keep this surface contributor/reviewer focused.
+- [x] Add source evidence column.
+- [x] Add recognized pattern summary column.
+- [x] Add generated exercise/review-state column.
+- [x] Reuse existing source-link and review APIs.
+- [x] Keep this surface contributor/reviewer focused.
 
 Verification:
 
-- [ ] Learner path does not expose conversion workbench raw evidence.
-- [ ] Draft, review open, changes requested, rejected, and published states render clearly.
+- [x] Learner path does not expose conversion workbench raw evidence.
+- [x] Draft, review open, changes requested, rejected, and published states render clearly.
+
+Phase 44 notes:
+
+- Added `source_link_ids_json` to generation runs so completed generation traces can be read without mutating source bundles, pattern cards, or review tasks.
+- Added `GET /api/conversion-traces` for contributor-scoped source link metadata, source titles, recognized pattern summaries/tags, exercise count, publication status, and review state.
+- Added a read-only frontend conversion trace panel with source, pattern, and exercise/review-state columns.
+- Added clear state labels for draft, review open, approved, changes requested, rejected, and published conversion states.
+- Added integration coverage for source link confirmation through generation, review approval, trace lookup, and learner denial.
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-typecheck.sh`: passed.
+- `./scripts/frontend-build.sh`: passed with existing Monaco chunk-size warnings.
 
 ### Phase 45: Installed-App E2E for Learner Flow
 

@@ -192,6 +192,34 @@ export type ProficiencyResponse = {
   score: number;
 };
 
+export type ConversionTraceResponse = {
+  generationRunId: string;
+  status: string;
+  createdAt: string;
+  source: {
+    sourceLinkId: string;
+    sourceLinkStatus: string;
+    confidence: number;
+    conversationTitle: string | null;
+    codeTitle: string | null;
+    codeSourceKind: string | null;
+  } | null;
+  pattern: {
+    patternCardId: string;
+    title: string;
+    summary: string;
+    tags: Array<{ tagType: string; name: string }>;
+  } | null;
+  exercise: {
+    patternCardId: string;
+    problemCount: number;
+    difficulties: string[];
+    publicationStatus: string;
+    reviewTaskId: string | null;
+    reviewStatus: string | null;
+  } | null;
+};
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiRequestError extends Error {
@@ -359,6 +387,11 @@ export async function getProgress(token: string, organizationId: string): Promis
 export async function getRecommendations(token: string, organizationId: string): Promise<PatternCardResponse[]> {
   const response = await request<{ cards: PatternCardResponse[] }>(`/api/recommendations?organizationId=${encodeURIComponent(organizationId)}`, { token });
   return response.cards;
+}
+
+export async function getConversionTraces(token: string, organizationId: string): Promise<ConversionTraceResponse[]> {
+  const response = await request<{ traces: ConversionTraceResponse[] }>(`/api/conversion-traces?organizationId=${encodeURIComponent(organizationId)}`, { token });
+  return response.traces;
 }
 
 export async function getPracticeProblem(token: string, problemId: string): Promise<PracticeProblemResponse> {

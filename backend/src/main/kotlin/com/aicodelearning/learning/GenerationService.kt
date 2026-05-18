@@ -11,6 +11,9 @@ import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
 import com.aicodelearning.provider.ProviderRepository
 import com.aicodelearning.source.SourceLinkRepository
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -31,6 +34,7 @@ class GenerationService(
     private val auditService: AuditService,
     private val patternReadService: PatternReadService,
     private val patternRecognitionPromptBuilder: PatternRecognitionPromptBuilder,
+    private val objectMapper: ObjectMapper,
 ) {
     @Transactional
     fun run(
@@ -94,6 +98,7 @@ class GenerationService(
                     status = "completed",
                     visibility = request.visibility,
                     idempotencyKey = request.idempotencyKey,
+                    sourceLinkIdsJson = objectMapper.writeValueAsString(request.sourceLinkIds.distinct()),
                     createdAt = now,
                     completedAt = now,
                 ),
@@ -159,6 +164,102 @@ class GenerationService(
         return GenerationResponse(run.toResponse(), patternReadService.toResponse(currentUser, card, true), task.toResponse())
     }
 
+    @Transactional(readOnly = true)
+    fun traces(
+        currentUser: CurrentUser,
+        organizationId: String,
+        limit: Int = DEFAULT_TRACE_LIMIT,
+    ): ConversionTraceListResponse {
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "contributor")
+
+        val normalizedLimit = limit.coerceIn(1, MAX_TRACE_LIMIT)
+        val runs =
+            generationRunRepository.findByOrganizationIdOrderByCreatedAtDesc(
+                organizationId,
+                PageRequest.of(0, normalizedLimit),
+            )
+        if (runs.isEmpty()) {
+            return ConversionTraceListResponse(emptyList())
+        }
+
+        val sourceLinkIdsByRun = runs.associate { it.id to parseSourceLinkIds(it.sourceLinkIdsJson) }
+        val sourceLinks =
+            sourceLinkRepository
+                .findByIdIn(sourceLinkIdsByRun.values.flatten().distinct())
+                .associateBy { it.id }
+        val bundleIds =
+            sourceLinks.values
+                .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
+                .distinct()
+        val bundlesById = sourceBundleRepository.findAllById(bundleIds).associateBy { it.id }
+        val cardsByRunId =
+            patternCardRepository
+                .findByGenerationRunIdIn(runs.map { it.id })
+                .associateBy { it.generationRunId }
+        val cardIds = cardsByRunId.values.map { it.id }
+        val reviewTasksByCardId = reviewTaskRepository.findByPatternCardIdIn(cardIds).associateBy { it.patternCardId }
+        val problemsByCardId = problemRepository.findByPatternCardIdIn(cardIds).groupBy { it.patternCardId }
+
+        val traces =
+            runs.mapNotNull { run ->
+                val card = cardsByRunId[run.id]
+                if (card != null && !canReadTraceCard(currentUser, card)) {
+                    return@mapNotNull null
+                }
+
+                val links = sourceLinkIdsByRun.getValueOrEmpty(run.id).mapNotNull { sourceLinks[it] }
+                val link = links.firstOrNull()
+                val conversation = link?.conversationBundleId?.let { bundlesById[it] }
+                val code = link?.codeBundleId?.let { bundlesById[it] }
+                if (card == null && code != null && !authorizationService.hasRole(currentUser.id, code.organizationId, "contributor", code.teamId, code.projectId)) {
+                    return@mapNotNull null
+                }
+
+                val pattern = card?.let { patternReadService.toResponse(currentUser, it, includeAnswers = false) }
+                val reviewTask = card?.let { reviewTasksByCardId[it.id] }
+                val problems = card?.let { problemsByCardId.getValueOrEmpty(it.id) }.orEmpty()
+
+                ConversionTraceResponse(
+                    generationRunId = run.id,
+                    status = run.status,
+                    createdAt = run.createdAt,
+                    source =
+                        link?.let {
+                            ConversionTraceSourceResponse(
+                                sourceLinkId = it.id,
+                                sourceLinkStatus = it.status,
+                                confidence = it.confidence,
+                                conversationTitle = conversation?.title,
+                                codeTitle = code?.title,
+                                codeSourceKind = code?.sourceKind,
+                            )
+                        },
+                    pattern =
+                        pattern?.let {
+                            ConversionTracePatternResponse(
+                                patternCardId = it.id,
+                                title = it.title,
+                                summary = it.summary,
+                                tags = it.tags,
+                            )
+                        },
+                    exercise =
+                        card?.let {
+                            ConversionTraceExerciseResponse(
+                                patternCardId = it.id,
+                                problemCount = problems.size,
+                                difficulties = problems.map { problem -> problem.difficulty }.distinct(),
+                                publicationStatus = it.publicationStatus,
+                                reviewTaskId = reviewTask?.id,
+                                reviewStatus = reviewTask?.status,
+                            )
+                        },
+                )
+            }
+
+        return ConversionTraceListResponse(traces)
+    }
+
     private fun inferPattern(text: String): InferredPattern {
         val normalized = text.lowercase()
         val tags =
@@ -180,7 +281,37 @@ class GenerationService(
                     InferredProblem("short_implementation", "Implement a similar pattern in a neutral order-processing domain.", "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic.", "intermediate"),
                     InferredProblem("debugging", "What failure mode should be tested before reusing this pattern?", "Test the edge case that would break the boundary, such as timeout, invalid token, or missing dependency behavior.", "intermediate"),
                 ),
-        )
+            )
+    }
+
+    private fun parseSourceLinkIds(sourceLinkIdsJson: String): List<String> =
+        try {
+            objectMapper.readValue(sourceLinkIdsJson, sourceLinkIdsType)
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+    private fun canReadTraceCard(
+        currentUser: CurrentUser,
+        card: PatternCardEntity,
+    ): Boolean {
+        if (!authorizationService.hasRole(currentUser.id, card.organizationId, "contributor", card.teamId, card.projectId)) {
+            return false
+        }
+        if (PracticeAccessPolicy.isPublishedOrganizationPractice(card.publicationStatus, card.visibility)) {
+            return true
+        }
+
+        val hasReviewerRole = authorizationService.hasRole(currentUser.id, card.organizationId, "reviewer", card.teamId, card.projectId)
+        return PracticeAccessPolicy.canReadDraftPractice(card.createdByUserId, currentUser.id, hasReviewerRole)
+    }
+
+    private fun <T> Map<String, List<T>>.getValueOrEmpty(key: String): List<T> = this[key] ?: emptyList()
+
+    private companion object {
+        const val DEFAULT_TRACE_LIMIT = 25
+        const val MAX_TRACE_LIMIT = 50
+        val sourceLinkIdsType = object : TypeReference<List<String>>() {}
     }
 }
 
@@ -196,6 +327,44 @@ data class GenerationResponse(
     val generationRun: GenerationRunResponse,
     val patternCard: PatternCardResponse,
     val reviewTask: ReviewTaskResponse,
+)
+
+data class ConversionTraceListResponse(
+    val traces: List<ConversionTraceResponse>,
+)
+
+data class ConversionTraceResponse(
+    val generationRunId: String,
+    val status: String,
+    val createdAt: Instant,
+    val source: ConversionTraceSourceResponse?,
+    val pattern: ConversionTracePatternResponse?,
+    val exercise: ConversionTraceExerciseResponse?,
+)
+
+data class ConversionTraceSourceResponse(
+    val sourceLinkId: String,
+    val sourceLinkStatus: String,
+    val confidence: java.math.BigDecimal,
+    val conversationTitle: String?,
+    val codeTitle: String?,
+    val codeSourceKind: String?,
+)
+
+data class ConversionTracePatternResponse(
+    val patternCardId: String,
+    val title: String,
+    val summary: String,
+    val tags: List<PatternTagResponse>,
+)
+
+data class ConversionTraceExerciseResponse(
+    val patternCardId: String,
+    val problemCount: Int,
+    val difficulties: List<String>,
+    val publicationStatus: String,
+    val reviewTaskId: String?,
+    val reviewStatus: String?,
 )
 
 private data class InferredPattern(

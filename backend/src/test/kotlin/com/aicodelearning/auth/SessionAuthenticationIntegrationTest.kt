@@ -495,8 +495,9 @@ class SessionAuthenticationIntegrationTest {
                     "sourceLinkIds" to listOf(linkId),
                     "visibility" to "organization",
                 ),
-            )
+        )
         assertEquals(HttpStatus.CREATED, generated.statusCode)
+        val generationRunId = json(generated)["generationRun"]["id"].asText()
         val reviewTaskId = json(generated)["reviewTask"]["id"].asText()
         val cardId = json(generated)["patternCard"]["id"].asText()
 
@@ -508,10 +509,22 @@ class SessionAuthenticationIntegrationTest {
                 "/api/review/tasks/$reviewTaskId/decision",
                 reviewer.token,
                 mapOf("decision" to "approve", "comment" to "Looks safe."),
-            )
+        )
         assertEquals("approved", json(decision)["reviewTask"]["status"].asText())
 
+        val trace = getJson("/api/conversion-traces?organizationId=org-demo", contributor.token)
+        assertEquals(HttpStatus.OK, trace.statusCode)
+        val traceItem = json(trace)["traces"].first { it["generationRunId"].asText() == generationRunId }
+        assertEquals(linkId, traceItem["source"]["sourceLinkId"].asText())
+        assertEquals(cardId, traceItem["pattern"]["patternCardId"].asText())
+        assertEquals(reviewTaskId, traceItem["exercise"]["reviewTaskId"].asText())
+        assertEquals("approved", traceItem["exercise"]["reviewStatus"].asText())
+        assertTrue(traceItem["exercise"]["problemCount"].asInt() > 0)
+
         val learner = login("learner@example.com")
+        val learnerTrace = getJson("/api/conversion-traces?organizationId=org-demo", learner.token)
+        assertEquals(HttpStatus.FORBIDDEN, learnerTrace.statusCode)
+
         val library = getJson("/api/library?organizationId=org-demo", learner.token)
         assertTrue(json(library)["cards"].any { it["id"].asText() == cardId })
 

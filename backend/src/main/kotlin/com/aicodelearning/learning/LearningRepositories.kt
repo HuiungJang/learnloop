@@ -11,10 +11,17 @@ interface GenerationRunRepository : JpaRepository<GenerationRunEntity, String> {
         organizationId: String,
         idempotencyKey: String,
     ): GenerationRunEntity?
+
+    fun findByOrganizationIdOrderByCreatedAtDesc(
+        organizationId: String,
+        pageable: Pageable,
+    ): List<GenerationRunEntity>
 }
 
 interface PatternCardRepository : JpaRepository<PatternCardEntity, String> {
     fun findByGenerationRunId(generationRunId: String): PatternCardEntity?
+
+    fun findByGenerationRunIdIn(generationRunIds: Collection<String>): List<PatternCardEntity>
 
     fun findByOrganizationIdAndPublicationStatusAndVisibility(
         organizationId: String,
@@ -89,6 +96,8 @@ interface ReviewTaskRepository : JpaRepository<ReviewTaskEntity, String> {
     ): List<ReviewTaskEntity>
 
     fun findByPatternCardId(patternCardId: String): ReviewTaskEntity?
+
+    fun findByPatternCardIdIn(patternCardIds: Collection<String>): List<ReviewTaskEntity>
 }
 
 interface ReviewDecisionRepository : JpaRepository<ReviewDecisionEntity, String>

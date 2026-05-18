@@ -32,6 +32,9 @@ class GenerationRunEntity(
     @Column(name = "idempotency_key")
     var idempotencyKey: String? = null,
 
+    @Column(name = "source_link_ids_json", nullable = false)
+    var sourceLinkIdsJson: String = "[]",
+
     @Column(name = "failure_code")
     var failureCode: String? = null,
 

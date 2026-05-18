@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Suspense, lazy, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getConversionTraces,
   createSession,
   fetchHealth,
   getLibrary,
@@ -40,6 +41,7 @@ import {
   runLearningDemo,
   submitPracticeAttempt,
   syncLocalPracticeAttempt,
+  type ConversionTraceResponse,
   type Membership,
   type PatternCardResponse,
   type PracticeHintResponse,
@@ -187,6 +189,8 @@ export function App() {
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
   const [progressScores, setProgressScores] = useState<ProficiencyResponse[]>([]);
   const [recommendationCards, setRecommendationCards] = useState<PatternCardResponse[]>([]);
+  const [conversionTraces, setConversionTraces] = useState<ConversionTraceResponse[]>([]);
+  const [conversionTraceError, setConversionTraceError] = useState("");
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
@@ -258,6 +262,7 @@ export function App() {
   useEffect(() => {
     if (session === null || membership === null || showOnboarding) return;
     void refreshLearningSignals(session);
+    void refreshConversionTraces(session);
   }, [membership, session, showOnboarding]);
 
   if (session === null) {
@@ -503,6 +508,40 @@ export function App() {
                     <span key={item}>{item}</span>
                   ))}
                   {activity.length === 0 ? <span>Ready</span> : null}
+                </div>
+              </div>
+
+              <div className="panel panel-wide">
+                <div className="panel-title">
+                  <GitPullRequest aria-hidden="true" size={20} />
+                  <h2>Conversion Trace</h2>
+                </div>
+                {conversionTraceError.length > 0 ? <p className="form-error">{conversionTraceError}</p> : null}
+                <div className="trace-list">
+                  {conversionTraces.length === 0 && conversionTraceError.length === 0 ? <p className="muted-copy">No conversion traces yet.</p> : null}
+                  {conversionTraces.map((trace) => (
+                    <div className="trace-row" key={trace.generationRunId}>
+                      <div className="trace-cell">
+                        <strong>Source</strong>
+                        <span>{trace.source?.codeTitle ?? "Unlinked source"}</span>
+                        <small>{trace.source?.conversationTitle ?? trace.source?.sourceLinkStatus ?? trace.status}</small>
+                      </div>
+                      <div className="trace-cell">
+                        <strong>Pattern</strong>
+                        <span>{trace.pattern?.title ?? "Pattern pending"}</span>
+                        <small>{trace.pattern?.tags.map((tag) => tag.name).slice(0, 3).join(", ") || trace.pattern?.summary || "No pattern summary"}</small>
+                      </div>
+                      <div className="trace-cell">
+                        <strong>Exercise</strong>
+                        <span>{exerciseStateLabel(trace)}</span>
+                        <small>
+                          {trace.exercise === null
+                            ? "No exercise state"
+                            : `${trace.exercise.problemCount} exercises · ${trace.exercise.difficulties.join(", ") || "difficulty pending"}`}
+                        </small>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -876,6 +915,23 @@ export function App() {
     }
   }
 
+  async function refreshConversionTraces(currentSession: SessionResponse) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setConversionTraces([]);
+      setConversionTraceError("");
+      return;
+    }
+
+    try {
+      setConversionTraceError("");
+      setConversionTraces(await getConversionTraces(currentSession.token, currentMembership.organizationId));
+    } catch (error) {
+      setConversionTraces([]);
+      setConversionTraceError(error instanceof Error ? error.message : "Conversion traces failed to load");
+    }
+  }
+
   function updateLibraryFilter<Key extends keyof LibraryFilters>(key: Key, value: LibraryFilters[Key]) {
     setLibraryFilters((current) => ({ ...current, [key]: value }));
   }
@@ -1194,6 +1250,20 @@ export function App() {
     );
   }
 
+  function exerciseStateLabel(trace: ConversionTraceResponse): string {
+    if (trace.exercise === null) return "Not generated";
+    if (trace.exercise.publicationStatus === "published") return "Published";
+    return reviewStatusLabel(trace.exercise.reviewStatus);
+  }
+
+  function reviewStatusLabel(status: string | null): string {
+    if (status === "open") return "Review open";
+    if (status === "approved") return "Approved";
+    if (status === "changes_requested") return "Changes requested";
+    if (status === "rejected") return "Rejected";
+    return "Draft";
+  }
+
   async function runPracticeSolution(files: PracticeAttemptFileRequest[]) {
     if (session === null || activePractice === null) return;
 
@@ -1309,6 +1379,8 @@ export function App() {
     setLibraryCards([]);
     setProgressScores([]);
     setRecommendationCards([]);
+    setConversionTraces([]);
+    setConversionTraceError("");
     setLibraryError("");
     setActivePractice(null);
     setActivePracticePath(null);
@@ -1373,6 +1445,7 @@ export function App() {
         `Review ${result.reviewTask.status}`,
         `Card ${result.patternCard.publicationStatus}`
       ]);
+      void refreshConversionTraces(session);
     } catch (error) {
       setActivity([error instanceof Error ? error.message : "Flow failed"]);
     } finally {
