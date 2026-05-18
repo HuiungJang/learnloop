@@ -356,16 +356,21 @@ Phase 5 notes:
 
 ### Phase 6: Migration for Canonical Problem Files
 
-- [ ] Add `problem_files`.
-- [ ] Add columns for problem ID, path, language, file role, content, read-only flag, and sort order.
-- [ ] Add foreign key to `problems`.
-- [ ] Add unique index on `(problem_id, path)`.
-- [ ] Add index on `(problem_id, sort_order)`.
+- [x] Add `problem_files`.
+- [x] Add columns for problem ID, path, language, file role, content, read-only flag, and sort order.
+- [x] Add foreign key to `problems`.
+- [x] Add unique index on `(problem_id, path)`.
+- [x] Add index on `(problem_id, sort_order)`.
 
 Verification:
 
-- [ ] Flyway migration applies from a clean database.
-- [ ] Existing tests still start the Spring context.
+- [x] Flyway migration applies from a clean database.
+- [x] Existing tests still start the Spring context.
+
+Phase 6 notes:
+
+- Added `V5__practice_problem_files.sql`.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 7: Migration for Hints and Provenance
 
