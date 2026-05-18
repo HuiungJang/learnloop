@@ -364,6 +364,22 @@ async function generatePattern(provider, evidenceText) {
   return generatePatternWithProvider(provider, evidenceText);
 }
 
+async function failGenerationRun(store, actorUserId, organizationId, generationRun, provider, error) {
+  const failureReason = error.providerFailureCode ?? "provider_generation_failed";
+  await store.update("generationRuns", generationRun.id, {
+    status: "failed",
+    failureReason,
+    completedAt: now()
+  });
+  await audit(store, actorUserId, organizationId, "generation.failed", "GENERATION_RUN", generationRun.id, {
+    provider: provider.provider,
+    model: provider.model,
+    failureReason
+  });
+  metric(store, "generation.failed", { provider: provider.provider, failureReason });
+  throw Object.assign(new Error("Provider generation failed"), { status: error.status === 400 ? 400 : 502 });
+}
+
 async function ensureTag(store, organizationId, tag) {
   const existing = store.db.patternTags.find((item) => {
     return item.organizationId === organizationId && item.tagType === tag.tagType && item.normalizedName === tag.normalizedName;
@@ -771,7 +787,12 @@ export async function generatePatternDraft(store, actorUserId, input) {
     updatedAt: now()
   });
 
-  const generated = await generatePattern(provider, evidenceText);
+  let generated;
+  try {
+    generated = await generatePattern(provider, evidenceText);
+  } catch (error) {
+    await failGenerationRun(store, actorUserId, organizationId, generationRun, provider, error);
+  }
   const card = await store.insert("patternCards", {
     id: id("card"),
     organizationId,

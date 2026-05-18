@@ -284,6 +284,58 @@ test("generation calls an OpenAI-compatible provider and stores returned pattern
   }
 });
 
+test("invalid provider output fails the generation run without partial assets", async () => {
+  const previous = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+  process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
+  try {
+    await withFakeProvider({ output_text: "not-json" }, async ({ providerBaseUrl }) => {
+      await withServer(async ({ baseUrl, store }) => {
+        const provider = await request(baseUrl, "/api/providers", {
+          userId: "u-admin",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            provider: "openai",
+            model: "fake-responses-model",
+            scope: "organization",
+            credential: "organization-provider-secret",
+            orgApproved: true,
+            baseUrl: providerBaseUrl
+          }
+        });
+        const { linkId } = await createConfirmedSourceLink(baseUrl);
+        const generated = await request(baseUrl, "/api/generation/run", {
+          userId: "u-contributor",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            providerConfigId: provider.json.provider.id,
+            sourceLinkIds: [linkId],
+            visibility: "organization"
+          }
+        });
+
+        assert.equal(generated.response.status, 502);
+        assert.equal(generated.json.error.message, "Provider generation failed");
+        assert.equal(store.db.generationRuns.length, 1);
+        assert.equal(store.db.generationRuns[0].status, "failed");
+        assert.equal(store.db.generationRuns[0].failureReason, "provider_output_invalid_json");
+        assert.equal(store.db.patternCards.length, 0);
+        assert.equal(store.db.problems.length, 0);
+        assert.equal(store.db.reviewTasks.length, 0);
+        assert.ok(store.db.auditLogs.some((entry) => entry.eventType === "generation.failed"));
+        assert.ok(store.db.metrics.some((entry) => entry.name === "generation.failed"));
+      });
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+    } else {
+      process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previous;
+    }
+  }
+});
+
 test("personal providers cannot publish organization assets by default", async () => {
   await withServer(async ({ baseUrl }) => {
     const provider = await request(baseUrl, "/api/providers", {

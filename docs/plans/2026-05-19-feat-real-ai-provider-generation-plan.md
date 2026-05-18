@@ -84,14 +84,14 @@ Verification:
 
 ### Phase 4: Generation Failure Handling
 
-- [ ] Mark `generationRuns.status` as `failed` when provider calls fail or output is invalid.
-- [ ] Store only a redacted failure category/message.
-- [ ] Ensure no partial pattern cards, tags, problems, or review tasks are created on provider failure.
-- [ ] Add audit/metric entries for failed generation.
+- [x] Mark `generationRuns.status` as `failed` when provider calls fail or output is invalid.
+- [x] Store only a redacted failure category/message.
+- [x] Ensure no partial pattern cards, tags, problems, or review tasks are created on provider failure.
+- [x] Add audit/metric entries for failed generation.
 
 Verification:
 
-- [ ] Invalid provider output test proves no draft asset is created.
+- [x] Invalid provider output test proves no draft asset is created.
 
 ### Phase 5: E2E And Documentation
 
