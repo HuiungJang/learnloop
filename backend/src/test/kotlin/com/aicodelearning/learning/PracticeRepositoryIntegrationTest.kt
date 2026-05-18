@@ -42,6 +42,27 @@ class PracticeRepositoryIntegrationTest {
     private lateinit var sandboxRunResultRepository: SandboxRunResultRepository
 
     @Test
+    fun `local demo data seeds a usable practice problem with redacted provenance`() {
+        val problem = problemRepository.findById("problem-demo-practice-workbench").orElseThrow()
+        assertEquals("card-demo-practice-workbench", problem.patternCardId)
+
+        val files = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
+        assertEquals(
+            listOf("starter", "test", "solution", "hidden_test"),
+            files.map { it.fileRole },
+        )
+        assertEquals(listOf("src/formatTag.ts"), files.filter { it.fileRole == "starter" }.map { it.path })
+        assertEquals(false, files.first { it.fileRole == "starter" }.content.contains("toLowerCase"))
+
+        val hints = problemHintRepository.findByProblemIdOrderByRevealOrderAsc(problem.id)
+        assertEquals(listOf("Start with boundaries", "Treat separators consistently"), hints.map { it.label })
+
+        val provenance = problemProvenanceLinkRepository.findByProblemIdOrderBySortOrderAsc(problem.id)
+        assertEquals(listOf("Redacted AI-assisted diff"), provenance.map { it.sourceLabel })
+        assertEquals(false, provenance.single().redactedExcerpt.contains("export function"))
+    }
+
+    @Test
     fun `practice repositories load files hints provenance and latest attempt`() {
         val suffix = System.nanoTime().toString()
         val now = Instant.now()

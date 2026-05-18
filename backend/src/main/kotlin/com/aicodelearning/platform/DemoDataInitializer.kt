@@ -1,5 +1,20 @@
 package com.aicodelearning.platform
 
+import com.aicodelearning.learning.PatternCardEntity
+import com.aicodelearning.learning.PatternCardRepository
+import com.aicodelearning.learning.PatternTagEntity
+import com.aicodelearning.learning.PatternTagLinkEntity
+import com.aicodelearning.learning.PatternTagLinkId
+import com.aicodelearning.learning.PatternTagLinkRepository
+import com.aicodelearning.learning.PatternTagRepository
+import com.aicodelearning.learning.ProblemEntity
+import com.aicodelearning.learning.ProblemFileEntity
+import com.aicodelearning.learning.ProblemFileRepository
+import com.aicodelearning.learning.ProblemHintEntity
+import com.aicodelearning.learning.ProblemHintRepository
+import com.aicodelearning.learning.ProblemProvenanceLinkEntity
+import com.aicodelearning.learning.ProblemProvenanceLinkRepository
+import com.aicodelearning.learning.ProblemRepository
 import com.aicodelearning.organization.MembershipEntity
 import com.aicodelearning.organization.MembershipRepository
 import com.aicodelearning.organization.OrganizationEntity
@@ -30,6 +45,13 @@ class DemoDataInitializer(
     private val userRepository: UserRepository,
     private val membershipRepository: MembershipRepository,
     private val providerRepository: ProviderRepository,
+    private val patternCardRepository: PatternCardRepository,
+    private val patternTagRepository: PatternTagRepository,
+    private val patternTagLinkRepository: PatternTagLinkRepository,
+    private val problemRepository: ProblemRepository,
+    private val problemFileRepository: ProblemFileRepository,
+    private val problemHintRepository: ProblemHintRepository,
+    private val problemProvenanceLinkRepository: ProblemProvenanceLinkRepository,
     private val passwordEncoder: PasswordEncoder,
     @param:Value("\${app.demo-password:demo-password}")
     private val demoPassword: String,
@@ -60,6 +82,7 @@ class DemoDataInitializer(
         seedUser("u-reviewer", "reviewer@example.com", "Reviewer", "reviewer", now)
         seedUser("u-learner", "learner@example.com", "Learner", "learner", now)
         seedLocalMockProvider(now)
+        seedDemoPractice(now)
     }
 
     private fun seedUser(
@@ -119,5 +142,200 @@ class DemoDataInitializer(
                 ),
             )
         }
+    }
+
+    private fun seedDemoPractice(now: Instant) {
+        if (!patternCardRepository.existsById(DEMO_CARD_ID)) {
+            patternCardRepository.save(
+                PatternCardEntity(
+                    id = DEMO_CARD_ID,
+                    organizationId = "org-demo",
+                    teamId = "team-platform",
+                    projectId = "project-learning",
+                    createdByUserId = "u-contributor",
+                    title = "Normalize AI-generated tag labels",
+                    summary = "Practice turning inconsistent AI-generated labels into stable display text.",
+                    visibility = "organization",
+                    publicationStatus = "published",
+                    createdAt = now,
+                    publishedAt = now,
+                ),
+            )
+        }
+
+        val languageTag =
+            patternTagRepository.findByNormalizedName("language:typescript")
+                ?: patternTagRepository.save(
+                    PatternTagEntity(
+                        id = "tag-demo-typescript",
+                        tagType = "language",
+                        name = "TypeScript",
+                        normalizedName = "language:typescript",
+                    ),
+                )
+        val patternTag =
+            patternTagRepository.findByNormalizedName("pattern:pure-function")
+                ?: patternTagRepository.save(
+                    PatternTagEntity(
+                        id = "tag-demo-pure-function",
+                        tagType = "pattern",
+                        name = "Pure Function",
+                        normalizedName = "pattern:pure-function",
+                    ),
+                )
+        listOf(languageTag, patternTag).forEach { tag ->
+            val linkId = PatternTagLinkId(patternCardId = DEMO_CARD_ID, tagId = tag.id)
+            if (!patternTagLinkRepository.existsById(linkId)) {
+                patternTagLinkRepository.save(PatternTagLinkEntity(patternCardId = DEMO_CARD_ID, tagId = tag.id))
+            }
+        }
+
+        if (!problemRepository.existsById(DEMO_PROBLEM_ID)) {
+            problemRepository.save(
+                ProblemEntity(
+                    id = DEMO_PROBLEM_ID,
+                    patternCardId = DEMO_CARD_ID,
+                    problemType = "implementation",
+                    prompt = "Implement formatTag so generated labels become stable, readable tags.",
+                    referenceAnswer = "Trim input, split separators, lowercase each word, then join words with a single hyphen.",
+                    difficulty = "easy",
+                    createdAt = now,
+                ),
+            )
+        }
+
+        seedProblemFile(
+            ProblemFileEntity(
+                id = "problem-file-demo-format-tag",
+                problemId = DEMO_PROBLEM_ID,
+                path = "src/formatTag.ts",
+                language = "typescript",
+                fileRole = "starter",
+                content =
+                    """
+                    export function formatTag(input: string): string {
+                      // TODO: normalize generated labels into predictable tag ids.
+                      return input
+                    }
+                    """.trimIndent(),
+                readOnly = false,
+                sortOrder = 1,
+                createdAt = now,
+            ),
+        )
+        seedProblemFile(
+            ProblemFileEntity(
+                id = "problem-file-demo-format-tag-test",
+                problemId = DEMO_PROBLEM_ID,
+                path = "src/formatTag.test.ts",
+                language = "typescript",
+                fileRole = "test",
+                content =
+                    """
+                    import { describe, expect, it } from "vitest"
+                    import { formatTag } from "./formatTag"
+
+                    describe("formatTag", () => {
+                      it("normalizes generated labels", () => {
+                        expect(formatTag("  React Query  ")).toBe("react-query")
+                        expect(formatTag("SPRING__BOOT")).toBe("spring-boot")
+                      })
+                    })
+                    """.trimIndent(),
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = now,
+            ),
+        )
+        seedProblemFile(
+            ProblemFileEntity(
+                id = "problem-file-demo-format-tag-solution",
+                problemId = DEMO_PROBLEM_ID,
+                path = "solution/formatTag.ts",
+                language = "typescript",
+                fileRole = "solution",
+                content =
+                    """
+                    export function formatTag(input: string): string {
+                      return input
+                        .trim()
+                        .split(/[\s_-]+/)
+                        .filter(Boolean)
+                        .map((part) => part.toLowerCase())
+                        .join("-")
+                    }
+                    """.trimIndent(),
+                readOnly = true,
+                sortOrder = 90,
+                createdAt = now,
+            ),
+        )
+        seedProblemFile(
+            ProblemFileEntity(
+                id = "problem-file-demo-format-tag-hidden-test",
+                problemId = DEMO_PROBLEM_ID,
+                path = "hidden/formatTag.hidden.test.ts",
+                language = "typescript",
+                fileRole = "hidden_test",
+                content = """expect(formatTag("Gemini---OAuth")).toBe("gemini-oauth")""",
+                readOnly = true,
+                sortOrder = 100,
+                createdAt = now,
+            ),
+        )
+
+        seedProblemHint(
+            ProblemHintEntity(
+                id = "problem-hint-demo-format-tag-1",
+                problemId = DEMO_PROBLEM_ID,
+                revealOrder = 1,
+                label = "Start with boundaries",
+                content = "Normalize whitespace at the beginning and end before handling inner separators.",
+                revealPolicy = "manual",
+                createdAt = now,
+            ),
+        )
+        seedProblemHint(
+            ProblemHintEntity(
+                id = "problem-hint-demo-format-tag-2",
+                problemId = DEMO_PROBLEM_ID,
+                revealOrder = 2,
+                label = "Treat separators consistently",
+                content = "Spaces, underscores, and repeated hyphens should collapse into one separator.",
+                revealPolicy = "after_run",
+                createdAt = now,
+            ),
+        )
+
+        if (!problemProvenanceLinkRepository.existsById("problem-provenance-demo-format-tag")) {
+            problemProvenanceLinkRepository.save(
+                ProblemProvenanceLinkEntity(
+                    id = "problem-provenance-demo-format-tag",
+                    problemId = DEMO_PROBLEM_ID,
+                    sourceType = "diff",
+                    sourceLabel = "Redacted AI-assisted diff",
+                    redactedExcerpt = "A generated tagging helper used inconsistent casing and separators. File paths and raw code are omitted.",
+                    sortOrder = 1,
+                    createdAt = now,
+                ),
+            )
+        }
+    }
+
+    private fun seedProblemFile(file: ProblemFileEntity) {
+        if (!problemFileRepository.existsById(file.id)) {
+            problemFileRepository.save(file)
+        }
+    }
+
+    private fun seedProblemHint(hint: ProblemHintEntity) {
+        if (!problemHintRepository.existsById(hint.id)) {
+            problemHintRepository.save(hint)
+        }
+    }
+
+    private companion object {
+        const val DEMO_CARD_ID = "card-demo-practice-workbench"
+        const val DEMO_PROBLEM_ID = "problem-demo-practice-workbench"
     }
 }

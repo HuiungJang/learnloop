@@ -452,15 +452,22 @@ Phase 10 notes:
 
 ### Phase 11: Demo Exercise Seed Data
 
-- [ ] Add controlled starter files for the existing demo/generated problem.
-- [ ] Add a small hint set.
-- [ ] Add redacted provenance samples.
-- [ ] Avoid blanket migration over arbitrary production rows.
+- [x] Add controlled starter files for the existing demo/generated problem.
+- [x] Add a small hint set.
+- [x] Add redacted provenance samples.
+- [x] Avoid blanket migration over arbitrary production rows.
 
 Verification:
 
-- [ ] Fresh demo data contains at least one usable practice problem.
-- [ ] Demo problem does not expose raw evidence or hidden answers to learners.
+- [x] Fresh demo data contains at least one usable practice problem.
+- [x] Demo problem does not expose raw evidence or hidden answers to learners.
+
+Phase 11 notes:
+
+- Added fixed local/install seed data for `problem-demo-practice-workbench`.
+- Seed includes starter/test files plus internal `solution` and `hidden_test` roles for later API filtering verification.
+- Seeded two hints and a redacted provenance excerpt without raw code.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 12: Practice Detail API
 
