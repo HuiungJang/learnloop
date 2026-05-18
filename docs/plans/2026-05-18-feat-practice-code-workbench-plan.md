@@ -555,16 +555,23 @@ Phase 15 notes:
 
 ### Phase 16: Frontend API Client Types
 
-- [ ] Extend `frontend/src/api/client.ts` with practice detail calls.
-- [ ] Add current-attempt calls.
-- [ ] Add local-sync calls.
-- [ ] Add submission calls.
-- [ ] Add run-result placeholder types for later runner phases.
+- [x] Extend `frontend/src/api/client.ts` with practice detail calls.
+- [x] Add current-attempt calls.
+- [x] Add local-sync calls.
+- [x] Add submission calls.
+- [x] Add run-result placeholder types for later runner phases.
 
 Verification:
 
-- [ ] Frontend typecheck passes.
-- [ ] API client keeps local AI credential types separate from practice sync payloads.
+- [x] Frontend typecheck passes.
+- [x] API client keeps local AI credential types separate from practice sync payloads.
+
+Phase 16 notes:
+
+- Added practice detail, current-attempt, local-sync, submission, and run-result placeholder TypeScript types.
+- Added API client functions for practice detail, current attempts, local sync, and practice submission.
+- Sync/submission payloads carry code file snapshots and revision metadata only; local AI credential types are not included.
+- `./scripts/frontend-typecheck.sh`: passed.
 
 ### Phase 17: Local Draft Storage
 

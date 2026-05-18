@@ -65,6 +65,119 @@ export type PatternCardResponse = {
   }>;
 };
 
+export type PracticeFileResponse = {
+  path: string;
+  language: string;
+  role: string;
+  content: string;
+  readOnly: boolean;
+  sortOrder: number;
+};
+
+export type PracticeHintResponse = {
+  id: string;
+  revealOrder: number;
+  label: string;
+  content: string | null;
+  revealed: boolean;
+};
+
+export type PracticeProvenanceResponse = {
+  sourceType: string;
+  sourceLabel: string;
+  redactedExcerpt: string;
+  evidenceItemId: string | null;
+};
+
+export type PracticeAttemptFileRequest = {
+  path: string;
+  content: string;
+};
+
+export type PracticeAttemptFileResponse = {
+  path: string;
+  content: string;
+};
+
+export type PracticeRunTestResponse = {
+  name: string;
+  status: string;
+  message: string | null;
+  durationMs: number | null;
+};
+
+export type PracticeRunResultResponse = {
+  id: string;
+  status: string;
+  runnerKind: string;
+  durationMs: number | null;
+  tests: PracticeRunTestResponse[];
+  stdoutExcerpt: string | null;
+  stderrExcerpt: string | null;
+  failedDiff: string | null;
+  failureReason: string | null;
+  createdAt: string;
+};
+
+export type PracticeAttemptResponse = {
+  id: string;
+  problemId: string;
+  clientAttemptId: string;
+  assetRevision: string;
+  language: string;
+  status: string;
+  files: PracticeAttemptFileResponse[];
+  score: number | null;
+  resultStatus: string | null;
+  updatedAt: string;
+  submittedAt: string | null;
+};
+
+export type PracticeProblemResponse = {
+  id: string;
+  patternCardId: string;
+  title: string;
+  prompt: string;
+  difficulty: string;
+  assetRevision: string;
+  files: PracticeFileResponse[];
+  hints: PracticeHintResponse[];
+  provenance: PracticeProvenanceResponse[];
+  attempt: PracticeAttemptResponse | null;
+  latestRun: PracticeRunResultResponse | null;
+};
+
+export type PracticeAttemptSyncRequest = {
+  clientAttemptId: string;
+  assetRevision: string;
+  language: string;
+  intent: "draft";
+  files: PracticeAttemptFileRequest[];
+  localUpdatedAt: string;
+};
+
+export type PracticeSubmissionRequest = {
+  textAnswer?: string;
+  resultStatus?: string;
+  clientAttemptId?: string;
+  assetRevision?: string;
+  language?: string;
+  files?: PracticeAttemptFileRequest[];
+};
+
+export type SubmissionResponse = {
+  id: string;
+  problemId: string;
+  userId: string;
+  resultStatus: string;
+  createdAt: string;
+};
+
+export type PracticeSubmissionResponse = {
+  submission: SubmissionResponse;
+  patternCard: PatternCardResponse;
+};
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export async function fetchHealth(): Promise<HealthResponse> {
@@ -192,6 +305,41 @@ export async function runLearningDemo(token: string, membership: Membership): Pr
     reviewTask: generated.reviewTask,
     patternCard: detail.patternCard
   };
+}
+
+export async function getPracticeProblem(token: string, problemId: string): Promise<PracticeProblemResponse> {
+  const response = await request<{ problem: PracticeProblemResponse }>(`/api/problems/${encodeURIComponent(problemId)}/practice`, { token });
+  return response.problem;
+}
+
+export async function getCurrentPracticeAttempts(token: string, problemId: string): Promise<PracticeAttemptResponse[]> {
+  const response = await request<{ attempts: PracticeAttemptResponse[] }>(`/api/problems/${encodeURIComponent(problemId)}/attempts/me`, { token });
+  return response.attempts;
+}
+
+export async function syncLocalPracticeAttempt(
+  token: string,
+  problemId: string,
+  body: PracticeAttemptSyncRequest
+): Promise<PracticeAttemptResponse> {
+  const response = await request<{ attempt: PracticeAttemptResponse }>(`/api/problems/${encodeURIComponent(problemId)}/attempts/local-sync`, {
+    token,
+    method: "POST",
+    body
+  });
+  return response.attempt;
+}
+
+export async function submitPracticeAttempt(
+  token: string,
+  problemId: string,
+  body: PracticeSubmissionRequest
+): Promise<PracticeSubmissionResponse> {
+  return request<PracticeSubmissionResponse>(`/api/problems/${encodeURIComponent(problemId)}/submissions`, {
+    token,
+    method: "POST",
+    body
+  });
 }
 
 async function request<T>(
