@@ -13,9 +13,12 @@ assertLocalAppUrl(appUrl, "ALLOW_REMOTE_E2E_TARGET");
 const email = `e2e-${Date.now()}@example.com`;
 const password = "LocalSecret1234!";
 const displayName = "E2E Local User";
+const secondEmail = `e2e-second-${Date.now()}@example.com`;
+const secondDisplayName = "E2E Second User";
 const localAiKey = `local-only-key-${Date.now()}`;
 const oauthLabel = `Gemini OAuth ${Date.now()}`;
 const postedRequests = [];
+const demoProblemId = "problem-demo-practice-workbench";
 
 const browser = await chromium.launch({ headless: true, ...launchOptions });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -134,6 +137,44 @@ export function formatTag(input: string): string {
   await progressPanel.getByText(/Pure Function/i).waitFor({ timeout: 20_000 });
   await progressPanel.getByText(/TypeScript/i).waitFor({ timeout: 20_000 });
 
+  const firstSession = await apiRequest("/api/session", {
+    method: "POST",
+    body: { email, password }
+  });
+  const secondSession = await apiRequest("/api/register", {
+    method: "POST",
+    body: { email: secondEmail, displayName: secondDisplayName, password }
+  });
+  const firstPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: firstSession.token });
+  const secondPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: secondSession.token });
+  const canonicalContent = firstPractice.problem.files[0].content;
+  assert.equal(secondPractice.problem.files[0].content, canonicalContent);
+
+  const firstAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: firstSession.token });
+  const secondAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: secondSession.token });
+  assert.ok(firstAttemptsBefore.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("toLowerCase()"))));
+  assert.equal(secondAttemptsBefore.attempts.length, 0);
+
+  const secondSubmissionContent = "export function formatTag(input: string): string { return `second-${input}` }";
+  await apiRequest(`/api/problems/${demoProblemId}/submissions`, {
+    method: "POST",
+    token: secondSession.token,
+    body: {
+      clientAttemptId: `second-attempt-${Date.now()}`,
+      assetRevision: secondPractice.problem.assetRevision,
+      language: "typescript",
+      files: [{ path: "src/formatTag.ts", content: secondSubmissionContent }],
+      resultStatus: "submitted"
+    }
+  });
+
+  const firstAttemptsAfter = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: firstSession.token });
+  const secondAttemptsAfter = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: secondSession.token });
+  const firstPracticeAfter = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: firstSession.token });
+  assert.equal(firstPracticeAfter.problem.files[0].content, canonicalContent);
+  assert.equal(firstAttemptsAfter.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("second-"))), false);
+  assert.ok(secondAttemptsAfter.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("second-"))));
+
   const apiKeyLeakedToServer = postedRequests.some((request) => request.postData.includes(localAiKey));
   const oauthLabelLeakedToServer = postedRequests.some((request) => request.postData.includes(oauthLabel));
   assert.equal(apiKeyLeakedToServer, false);
@@ -145,6 +186,7 @@ export function formatTag(input: string): string {
     postRequestCount: postedRequests.length,
     localStorageProvider: storedOauthSettings.provider,
     localStorageAuthMethod: storedOauthSettings.authMethod,
+    multiUserIsolation: true,
     apiKeyLeakedToServer,
     oauthLabelLeakedToServer
   }, null, 2));
@@ -158,4 +200,21 @@ function assertLocalAppUrl(value, overrideEnv) {
   if (!localHosts.has(url.hostname) && process.env[overrideEnv] !== "1") {
     throw new Error(`${overrideEnv}=1 is required before sending E2E credentials to non-local APP_URL: ${value}`);
   }
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${appUrl}${path}`, {
+    method: options.method ?? "GET",
+    headers: {
+      Accept: "application/json",
+      ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(options.token === undefined ? {} : { Authorization: `Bearer ${options.token}` })
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(`API ${options.method ?? "GET"} ${path} failed with ${response.status}: ${JSON.stringify(payload)}`);
+  }
+  return payload;
 }

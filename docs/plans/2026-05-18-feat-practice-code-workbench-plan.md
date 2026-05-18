@@ -1187,15 +1187,24 @@ Phase 46 notes:
 
 ### Phase 47: Multi-User Isolation E2E
 
-- [ ] Create or use two learner users.
-- [ ] Submit to the same canonical problem as both users.
-- [ ] Confirm each sees only their own attempt.
-- [ ] Confirm canonical problem content is unchanged.
+- [x] Create or use two learner users.
+- [x] Submit to the same canonical problem as both users.
+- [x] Confirm each sees only their own attempt.
+- [x] Confirm canonical problem content is unchanged.
 
 Verification:
 
-- [ ] Multi-user attempt isolation E2E passes.
-- [ ] Backend authorization tests pass.
+- [x] Multi-user attempt isolation E2E passes.
+- [x] Backend authorization tests pass.
+
+Phase 47 notes:
+
+- Extended installed-app E2E to create a second user against the same running app and submit a distinct answer to `problem-demo-practice-workbench`.
+- Verified the first user's attempts do not contain the second user's submitted file content, and the second user's attempts do contain it.
+- Verified canonical starter content remains unchanged after both users submit to the same problem.
+- `. ./scripts/env.sh && "$NODE_BIN" --check scripts/e2e-installed.mjs`: passed.
+- `APP_URL=http://localhost:18080 ./scripts/e2e-installed.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 48: Responsive and Visual Verification
 
