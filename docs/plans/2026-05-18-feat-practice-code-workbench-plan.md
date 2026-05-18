@@ -1303,18 +1303,31 @@ Phase 51 notes:
 
 ### Phase 52: Final Full Verification
 
-- [ ] Run backend tests.
-- [ ] Run frontend typecheck.
-- [ ] Run frontend production build.
-- [ ] Run split check.
-- [ ] Run installed-app E2E.
-- [ ] Run TypeScript, Java, and Kotlin sandbox smoke tests.
-- [ ] Confirm app status reports backend, frontend, database, and runner health.
+- [x] Run backend tests.
+- [x] Run frontend typecheck.
+- [x] Run frontend production build.
+- [x] Run split check.
+- [x] Run installed-app E2E.
+- [x] Run TypeScript, Java, and Kotlin sandbox smoke tests.
+- [x] Confirm app status reports backend, frontend, database, and runner health.
 
 Verification:
 
-- [ ] All required local verification commands pass.
-- [ ] Any skipped test has an explicit environment reason.
+- [x] All required local verification commands pass.
+- [x] Any skipped test has an explicit environment reason.
+
+Phase 52 notes:
+
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-typecheck.sh`: passed.
+- `./scripts/frontend-build.sh`: passed with existing Monaco chunk-size warnings.
+- `./scripts/check-asset-exposure.sh`: passed.
+- `./scripts/check-split.sh`: passed.
+- `APP_URL=http://localhost:18080 ./scripts/e2e-installed.sh`: passed.
+- `./scripts/runner-typescript-smoke.sh && ./scripts/runner-java-smoke.sh && ./scripts/runner-kotlin-smoke.sh`: passed.
+- Fixed `scripts/status.sh` and `packaging/release-bundle/status.sh` so an `AI_CODE_WEB_PORT` environment override is preserved after loading `.env`.
+- `AI_CODE_WEB_PORT=18080 ./scripts/status.sh`: passed and reported PostgreSQL/backend/web container health plus runner health.
+- Installed backend runner health reports `missing` because the backend container does not include Docker CLI or a Docker socket. This is the expected documented environment reason; host runner smoke tests verify TypeScript, Java, and Kotlin images independently.
 
 ### Phase 53: Documentation and Packaging
 

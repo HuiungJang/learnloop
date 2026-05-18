@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 ENV_FILE=".env"
 COMPOSE_FILE="docker-compose.yml"
 WAIT="${1:-}"
+AI_CODE_WEB_PORT_OVERRIDE="${AI_CODE_WEB_PORT:-}"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Missing .env. Run ./install.sh first." >&2
@@ -24,6 +25,10 @@ export AI_CODE_RELEASE_VERSION
 set -a
 . "./$ENV_FILE"
 set +a
+
+if [ -n "$AI_CODE_WEB_PORT_OVERRIDE" ]; then
+  AI_CODE_WEB_PORT="$AI_CODE_WEB_PORT_OVERRIDE"
+fi
 
 PORT="${AI_CODE_WEB_PORT:-8080}"
 URL="http://localhost:$PORT"
