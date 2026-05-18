@@ -1056,14 +1056,25 @@ Phase 40 notes:
 
 ### Phase 41: Kotlin Runner Image
 
-- [ ] Add Kotlin runner image with JDK and Kotlin compiler/runtime.
-- [ ] Add Kotlin compile/run harness.
-- [ ] Bound Kotlin compile and startup time.
+- [x] Add Kotlin runner image with JDK and Kotlin compiler/runtime.
+- [x] Add Kotlin compile/run harness.
+- [x] Bound Kotlin compile and startup time.
 
 Verification:
 
-- [ ] Kotlin runner image builds.
-- [ ] Tiny Kotlin passing and failing exercises return normalized results.
+- [x] Kotlin runner image builds.
+- [x] Tiny Kotlin passing and failing exercises return normalized results.
+
+Phase 41 notes:
+
+- Added `runner/kotlin` image with Eclipse Temurin JDK 21, Kotlin compiler 2.2.21, Kotlin runtime jars, and JUnit Platform Console Standalone baked into the image.
+- Added a no-network runtime harness that compiles workspace `*.kt` files with `kotlinc` and runs JUnit tests from the compiled classpath.
+- Kept fetch-only build tools out of the final image and retained only the runtime `bash` dependency required by Kotlin compiler scripts.
+- Added Jansi settings for Kotlin/JUnit execution so noexec `/tmp` remains compatible with the console runner.
+- Updated the Kotlin runner registry command to use the baked harness instead of Gradle.
+- Added `./scripts/runner-kotlin-smoke.sh` and `npm run runner:kotlin:smoke` for image build plus passing/failing Kotlin exercises.
+- `./scripts/runner-kotlin-smoke.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 42: Kotlin Run API Integration
 

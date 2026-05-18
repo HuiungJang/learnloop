@@ -33,7 +33,7 @@ class RunnerRegistry {
                 id = "kotlin-junit",
                 language = PracticeContract.LANGUAGE_KOTLIN,
                 image = "learnloop-runner-kotlin:latest",
-                command = listOf("./gradlew", "test"),
+                command = listOf("/opt/learnloop-runner/run-tests.sh"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
                 files = harnessFiles("kotlin-junit"),
             ),
