@@ -37,8 +37,8 @@ write_env_file() {
   umask 077
   cat > "$ENV_FILE" <<EOF
 AI_CODE_WEB_PORT=8080
-APP_DATABASE_NAME=aicodelearning
-APP_DATABASE_USERNAME=aicodelearning
+APP_DATABASE_NAME=learnloop
+APP_DATABASE_USERNAME=learnloop
 APP_DATABASE_PASSWORD=$db_password
 APP_DEMO_PASSWORD=$demo_password
 APP_OPENAPI_ENABLED=true
@@ -66,7 +66,7 @@ set -a
 set +a
 
 echo
-echo "AI Code Learning Platform is installed."
+echo "LearnLoop is installed."
 echo "Open: http://localhost:${AI_CODE_WEB_PORT:-8080}"
 echo
 echo "Demo users:"

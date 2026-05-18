@@ -1,6 +1,6 @@
-# AI Code Learning Platform Release Bundle
+# LearnLoop Release Bundle
 
-This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run AI Code Learning Platform without building from source.
+This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run LearnLoop without building from source.
 
 ## Requirements
 
@@ -11,7 +11,7 @@ This bundle contains the runtime Compose file, install scripts, and Docker image
 On macOS, double-click:
 
 ```text
-AI Code Learning Platform.app
+LearnLoop.app
 ```
 
 The app opens Terminal, installs the bundled Docker images, starts the services, and opens the browser.
@@ -45,7 +45,7 @@ The installer creates `.env` with generated local credentials and prints the gen
 Edit `.env` before running `./start.sh` to change the browser port or project name:
 
 ```env
-AI_CODE_PROJECT_NAME=ai-code-learning-platform
+AI_CODE_PROJECT_NAME=learnloop
 AI_CODE_WEB_PORT=8080
 ```
 
@@ -53,4 +53,4 @@ Use a different `AI_CODE_PROJECT_NAME` when running multiple isolated installati
 
 ## License
 
-AI Code Learning Platform is licensed under the GNU Affero General Public License, Version 3. See `LICENSE` and `NOTICE`.
+LearnLoop is licensed under the GNU Affero General Public License, Version 3. See `LICENSE` and `NOTICE`.

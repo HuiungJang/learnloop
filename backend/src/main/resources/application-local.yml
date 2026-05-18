@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${APP_DATABASE_URL:jdbc:postgresql://localhost:5432/aicodelearning}
-    username: ${APP_DATABASE_USERNAME:aicodelearning}
-    password: ${APP_DATABASE_PASSWORD:aicodelearning}
+    url: ${APP_DATABASE_URL:jdbc:postgresql://localhost:5432/learnloop}
+    username: ${APP_DATABASE_USERNAME:learnloop}
+    password: ${APP_DATABASE_PASSWORD:learnloop}
   flyway:
     clean-disabled: false
 

@@ -18,7 +18,7 @@ quote_shell() {
   printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
 }
 
-RUNNER="${TMPDIR:-/tmp}/ai-code-learning-platform-installer-$$.sh"
+RUNNER="${TMPDIR:-/tmp}/learnloop-installer-$$.sh"
 ROOT_QUOTED=$(quote_shell "$ROOT_DIR")
 
 cat > "$RUNNER" <<EOF
@@ -28,7 +28,7 @@ set -u
 ROOT_DIR=$ROOT_QUOTED
 cd "\$ROOT_DIR" || exit 1
 
-echo "AI Code Learning Platform installer"
+echo "LearnLoop installer"
 echo "Bundle: \$ROOT_DIR"
 echo
 

@@ -46,7 +46,7 @@ try {
   await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
 
   const storedApiKeySettings = await page.evaluate((needle) => {
-    const entry = Object.entries(window.localStorage).find(([key, value]) => key.startsWith("ai-code-learning:local-ai:") && value.includes(needle));
+    const entry = Object.entries(window.localStorage).find(([key, value]) => key.startsWith("learnloop:local-ai:") && value.includes(needle));
     return entry ? JSON.parse(entry[1]) : null;
   }, localAiKey);
   assert.equal(storedApiKeySettings.provider, "claude");
@@ -75,7 +75,7 @@ try {
   await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
 
   const storedOauthSettings = await page.evaluate(() => {
-    const entry = Object.entries(window.localStorage).find(([key]) => key.startsWith("ai-code-learning:local-ai:"));
+    const entry = Object.entries(window.localStorage).find(([key]) => key.startsWith("learnloop:local-ai:"));
     return entry ? JSON.parse(entry[1]) : null;
   });
   assert.equal(storedOauthSettings.provider, "gemini");

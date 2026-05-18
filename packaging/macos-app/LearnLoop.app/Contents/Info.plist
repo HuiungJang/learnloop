@@ -5,15 +5,15 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>AI Code Learning Platform</string>
+  <string>LearnLoop</string>
   <key>CFBundleExecutable</key>
-  <string>AI Code Learning Platform</string>
+  <string>LearnLoop</string>
   <key>CFBundleIdentifier</key>
-  <string>local.ai-code-learning-platform.launcher</string>
+  <string>local.learnloop.launcher</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>AI Code Learning Platform</string>
+  <string>LearnLoop</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

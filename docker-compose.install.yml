@@ -1,15 +1,15 @@
-name: ai-code-learning-platform
+name: learnloop
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${APP_DATABASE_NAME:-aicodelearning}
-      POSTGRES_USER: ${APP_DATABASE_USERNAME:-aicodelearning}
+      POSTGRES_DB: ${APP_DATABASE_NAME:-learnloop}
+      POSTGRES_USER: ${APP_DATABASE_USERNAME:-learnloop}
       POSTGRES_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${APP_DATABASE_USERNAME:-aicodelearning} -d ${APP_DATABASE_NAME:-aicodelearning}"]
+      test: ["CMD-SHELL", "pg_isready -U ${APP_DATABASE_USERNAME:-learnloop} -d ${APP_DATABASE_NAME:-learnloop}"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -23,8 +23,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: install
-      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/${APP_DATABASE_NAME:-aicodelearning}
-      APP_DATABASE_USERNAME: ${APP_DATABASE_USERNAME:-aicodelearning}
+      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/${APP_DATABASE_NAME:-learnloop}
+      APP_DATABASE_USERNAME: ${APP_DATABASE_USERNAME:-learnloop}
       APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD is required}
       APP_DEMO_PASSWORD: ${APP_DEMO_PASSWORD:?APP_DEMO_PASSWORD is required}
       APP_OPENAPI_ENABLED: ${APP_OPENAPI_ENABLED:-true}

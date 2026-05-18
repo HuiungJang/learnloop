@@ -12,6 +12,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ai-code-learning-platform"
+rootProject.name = "learnloop"
 
 include("backend")

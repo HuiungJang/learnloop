@@ -2,18 +2,18 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: aicodelearning
-      POSTGRES_USER: aicodelearning
-      POSTGRES_PASSWORD: aicodelearning
+      POSTGRES_DB: learnloop
+      POSTGRES_USER: learnloop
+      POSTGRES_PASSWORD: learnloop
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aicodelearning -d aicodelearning"]
+      test: ["CMD-SHELL", "pg_isready -U learnloop -d learnloop"]
       interval: 5s
       timeout: 5s
       retries: 12
     volumes:
-      - aicodelearning-postgres-data:/var/lib/postgresql/data
+      - learnloop-postgres-data:/var/lib/postgresql/data
 
 volumes:
-  aicodelearning-postgres-data:
+  learnloop-postgres-data:

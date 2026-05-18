@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: ai-code-learning-platform
+    name: learnloop
   datasource:
     url: ${APP_DATABASE_URL}
     username: ${APP_DATABASE_USERNAME}

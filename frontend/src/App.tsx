@@ -81,18 +81,33 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
   { id: "claude", label: "Claude", icon: Cloud, oauth: false }
 ];
 
+const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
+const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
+
 function localAiStorageKey(userId: string) {
-  return `ai-code-learning:local-ai:${userId}`;
+  return `${LOCAL_AI_STORAGE_PREFIX}${userId}`;
+}
+
+function legacyLocalAiStorageKey(userId: string) {
+  return `${LEGACY_LOCAL_AI_STORAGE_PREFIX}${userId}`;
 }
 
 function readLocalAiSettings(userId: string): LocalAiSettings | null {
-  const raw = window.localStorage.getItem(localAiStorageKey(userId));
+  const key = localAiStorageKey(userId);
+  const legacyKey = legacyLocalAiStorageKey(userId);
+  const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(legacyKey);
   if (raw === null) return null;
 
   try {
-    return JSON.parse(raw) as LocalAiSettings;
+    const settings = JSON.parse(raw) as LocalAiSettings;
+    if (window.localStorage.getItem(key) === null) {
+      window.localStorage.setItem(key, raw);
+      window.localStorage.removeItem(legacyKey);
+    }
+    return settings;
   } catch {
-    window.localStorage.removeItem(localAiStorageKey(userId));
+    window.localStorage.removeItem(key);
+    window.localStorage.removeItem(legacyKey);
     return null;
   }
 }
@@ -158,8 +173,8 @@ export function App() {
       <main className="auth-shell">
         <section className="auth-panel">
           <a className="brand" href="/">
-            <span className="brand-mark">AI</span>
-            <span>Code Learning</span>
+            <span className="brand-mark">LL</span>
+            <span>LearnLoop</span>
           </a>
 
           <div>
@@ -233,8 +248,8 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary">
         <a className="brand" href="/">
-          <span className="brand-mark">AI</span>
-          <span>Code Learning</span>
+          <span className="brand-mark">LL</span>
+          <span>LearnLoop</span>
         </a>
 
         <div className="account-card">

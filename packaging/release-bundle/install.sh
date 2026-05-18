@@ -43,10 +43,10 @@ generate_secret() {
 write_env_file() {
   db_password=$(generate_secret)
   demo_password=$(generate_secret)
-  project_name=${AI_CODE_PROJECT_NAME:-ai-code-learning-platform}
+  project_name=${AI_CODE_PROJECT_NAME:-learnloop}
   web_port=${AI_CODE_WEB_PORT:-8080}
-  db_name=${APP_DATABASE_NAME:-aicodelearning}
-  db_user=${APP_DATABASE_USERNAME:-aicodelearning}
+  db_name=${APP_DATABASE_NAME:-learnloop}
+  db_user=${APP_DATABASE_USERNAME:-learnloop}
   openapi_enabled=${APP_OPENAPI_ENABLED:-true}
 
   old_umask=$(umask)
@@ -119,7 +119,7 @@ set -a
 set +a
 
 echo
-echo "AI Code Learning Platform $AI_CODE_RELEASE_VERSION is installed."
+echo "LearnLoop $AI_CODE_RELEASE_VERSION is installed."
 echo "Open: http://localhost:${AI_CODE_WEB_PORT:-8080}"
 echo
 echo "Demo users:"

@@ -1,4 +1,4 @@
-# AI Code Learning Platform MVP
+# LearnLoop MVP
 
 Local MVP for turning AI-assisted coding evidence into reviewed learning assets.
 
@@ -38,7 +38,7 @@ To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then run:
 ./scripts/start.sh
 ```
 
-Data is stored in the `ai-code-learning-platform_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
+Data is stored in the `learnloop_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
 
 ## Release Bundle
 
@@ -58,8 +58,8 @@ The archive is written to `dist/release/` and contains:
 Install from the release bundle:
 
 ```sh
-tar -xzf dist/release/ai-code-learning-platform-0.1.0-*.tar.gz
-cd ai-code-learning-platform-0.1.0-*
+tar -xzf dist/release/learnloop-0.1.0-*.tar.gz
+cd learnloop-0.1.0-*
 ./install.sh
 ```
 
