@@ -6,6 +6,14 @@
 
 LearnLoop는 개발자가 Codex, Gemini, Claude 같은 AI 도구를 사용하며 생성한 코드 조각과 PR, commit, diff 근거를 모아 학습 가능한 개발 지식으로 바꾸는 플랫폼입니다.
 
+## 주요 화면 및 기능
+
+<p align="center">
+  <img src="assets/learnloop-demo.gif" alt="LearnLoop demo showing signup, local AI setup, workflow run, and generated learning card" width="900">
+</p>
+
+이 데모는 회원가입, 로컬 AI 설정, evidence-to-practice workflow 실행, 생성된 학습 카드 확인까지의 핵심 흐름을 보여줍니다.
+
 ## 목적
 
 AI로 생성한 코드는 당장의 생산성을 높이지만, 팀과 개인에게 어떤 패턴이 반복되고 무엇을 배워야 하는지 남기지 못하는 경우가 많습니다. LearnLoop는 이 흐름을 학습 루프로 바꿉니다.
