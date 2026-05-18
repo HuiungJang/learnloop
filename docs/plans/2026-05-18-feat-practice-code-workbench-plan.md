@@ -1267,18 +1267,39 @@ Phase 50 notes:
 
 ### Phase 51: Performance Verification
 
-- [ ] Run `scripts/perf-measure.sh` before and after major UI/runner changes.
-- [ ] Track Monaco chunk size.
-- [ ] Track first workbench open time.
-- [ ] Track library and practice-detail latency.
-- [ ] Track sandbox run duration by language.
-- [ ] Document any regression and fix or justify it.
+- [x] Run `scripts/perf-measure.sh` before and after major UI/runner changes.
+- [x] Track Monaco chunk size.
+- [x] Track first workbench open time.
+- [x] Track library and practice-detail latency.
+- [x] Track sandbox run duration by language.
+- [x] Document any regression and fix or justify it.
 
 Verification:
 
-- [ ] Auth/onboarding initial JS excludes Monaco chunks.
-- [ ] Practice detail avoids obvious N+1 paths for files, hints, provenance, and latest attempt.
-- [ ] Runner output truncation keeps frontend rendering bounded.
+- [x] Auth/onboarding initial JS excludes Monaco chunks.
+- [x] Practice detail avoids obvious N+1 paths for files, hints, provenance, and latest attempt.
+- [x] Runner output truncation keeps frontend rendering bounded.
+
+Phase 51 notes:
+
+- `APP_URL=http://localhost:18080 ./scripts/perf-measure.sh`: passed.
+  - `libraryMedianMs`: 8.13
+  - `detailMedianMs`: 6.7
+  - `frontendJsBytes`: 13,820,471
+  - `frontendCssBytes`: 164,071
+  - `frontendTotalBytes`: 14,106,514
+- Initial auth/onboarding page loaded one JS asset and no Monaco/workbench chunk before the user opened a practice.
+- First installed-app workbench open to `.monaco-editor`: 397.79ms.
+- Lazy workbench assets loaded on first open: `PracticeEditorShell`, `monacoEnvironment`, Monaco CSS, and `ts.worker`.
+- Tracked current Monaco asset sizes: `monacoEnvironment` 3.6M, `ts.worker` 6.7M, `editor.worker` 246K, `PracticeEditorShell` 3.2K, `PracticeAnswerDiff` 1.3K. These remain outside the initial auth/onboarding JS.
+- Host sandbox smoke durations including cached image build checks:
+  - TypeScript: 4.46s
+  - Java: 3.61s
+  - Kotlin: 9.41s
+- Installed backend still reports `runner_unavailable` because the backend container has no Docker CLI/socket; this is the documented installed-app behavior until a local runner environment is wired in.
+- Practice detail uses bounded repository reads for files, hints, provenance, and latest run by current user; no obvious per-file/hint/provenance N+1 path is present in the detail endpoint.
+- Runner output truncation remains bounded through `PracticeContract.MAX_STDIO_EXCERPT_BYTES` and `RunnerWorkspaceService.truncateOutput`.
+- A numeric pre-workbench baseline was not available in this final phase, so no regression percentage could be computed; this phase records the current post-change baseline for future comparisons.
 
 ### Phase 52: Final Full Verification
 
