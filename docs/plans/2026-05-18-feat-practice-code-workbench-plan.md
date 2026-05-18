@@ -678,16 +678,24 @@ Phase 21 notes:
 
 ### Phase 22: Monaco Dependency and Lazy Worker Setup
 
-- [ ] Add Monaco dependency.
-- [ ] Add Vite worker setup for Monaco.
-- [ ] Lazy-load the workbench/editor bundle.
-- [ ] Keep `monaco-editor` imports out of `App.tsx`.
+- [x] Add Monaco dependency.
+- [x] Add Vite worker setup for Monaco.
+- [x] Lazy-load the workbench/editor bundle.
+- [x] Keep `monaco-editor` imports out of `App.tsx`.
 
 Verification:
 
-- [ ] Frontend build passes.
-- [ ] Production asset output shows Monaco in a separate lazy chunk.
-- [ ] Auth/onboarding initial JS does not include Monaco chunk content.
+- [x] Frontend build passes.
+- [x] Production asset output shows Monaco in a separate lazy chunk.
+- [x] Auth/onboarding initial JS does not include Monaco chunk content.
+
+Phase 22 notes:
+
+- Added `monaco-editor`.
+- Added Vite worker setup in `monacoEnvironment.ts`.
+- Added lazy `PracticeEditorShell` so Monaco is imported outside `App.tsx`.
+- `./scripts/frontend-build.sh`: passed.
+- Build output includes separate Monaco worker assets and `PracticeEditorShell-*.js`; initial `index-*.js` remains separate.
 
 ### Phase 23: Monaco Code Editor Wrapper
 

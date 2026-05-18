@@ -18,7 +18,7 @@ import {
   UserPlus,
   type LucideIcon
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createSession,
   fetchHealth,
@@ -92,6 +92,9 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
 
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
+const PracticeEditorShell = lazy(() =>
+  import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
+);
 
 function localAiStorageKey(userId: string) {
   return `${LOCAL_AI_STORAGE_PREFIX}${userId}`;
@@ -553,7 +556,9 @@ export function App() {
                           <span key={file.path}>{file.path}</span>
                         ))}
                       </div>
-                      <pre>{activePractice.files[0]?.content ?? "// No starter file available yet."}</pre>
+                      <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
+                        <PracticeEditorShell file={activePractice.files[0]} />
+                      </Suspense>
                     </div>
                   </div>
                 ) : null}
