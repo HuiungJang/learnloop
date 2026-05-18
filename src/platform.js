@@ -5,6 +5,7 @@ import { createSessionToken, hashPassword, id, now, scanSecrets, sealCredential,
 
 const ALLOWED_PROVIDER_SCOPES = new Set(["organization", "personal"]);
 const ALLOWED_VISIBILITY = new Set(["private", "organization", "public"]);
+const DEFAULT_PROVIDER_BASE_URLS = new Map([["openai", "https://api.openai.com"]]);
 const ALLOWED_SUBMISSION_STATUS = new Set([
   "submitted",
   "self_marked_complete",
@@ -29,6 +30,27 @@ function forbidden(message) {
   const error = new Error(message);
   error.status = 403;
   return error;
+}
+
+function normalizeProviderBaseUrl(baseUrl, provider) {
+  const rawValue = baseUrl ?? DEFAULT_PROVIDER_BASE_URLS.get(provider) ?? null;
+  if (rawValue === null || rawValue === "") return null;
+  let parsed;
+  try {
+    parsed = new URL(String(rawValue));
+  } catch {
+    throw badRequest("baseUrl must be a valid URL");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw badRequest("baseUrl must not include credentials, query, or fragment");
+  }
+  const isHttps = parsed.protocol === "https:";
+  const isLoopbackHttp =
+    parsed.protocol === "http:" && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname);
+  if (!isHttps && !(process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL === "1" && isLoopbackHttp)) {
+    throw badRequest("baseUrl must use https");
+  }
+  return parsed.origin;
 }
 
 function metric(store, name, fields = {}) {
@@ -180,6 +202,7 @@ export async function bootstrapDemo(store) {
     provider: "local-mock",
     model: "deterministic-pattern-generator",
     scope: "organization",
+    baseUrl: null,
     credentialRef: null,
     credentialFingerprint: null,
     orgApproved: true,
@@ -241,11 +264,15 @@ export async function registerProvider(store, actorUserId, input) {
     retentionMode = "standard",
     orgApproved = false,
     authType = "byok",
-    taskTypes = PROVIDER_TASKS
+    taskTypes = PROVIDER_TASKS,
+    baseUrl
   } = input;
-  if (!organizationId || !provider || !model || !ALLOWED_PROVIDER_SCOPES.has(scope)) {
+  const normalizedProvider = String(provider ?? "").trim().toLowerCase();
+  const normalizedModel = String(model ?? "").trim();
+  if (!organizationId || !normalizedProvider || !normalizedModel || !ALLOWED_PROVIDER_SCOPES.has(scope)) {
     throw badRequest("organizationId, provider, model, and valid scope are required");
   }
+  const normalizedBaseUrl = normalizeProviderBaseUrl(baseUrl, normalizedProvider);
   if (!credential || String(credential).length < 8) {
     throw badRequest("credential must be at least 8 characters");
   }
@@ -260,10 +287,11 @@ export async function registerProvider(store, actorUserId, input) {
     id: id("provider"),
     organizationId,
     ownerUserId: scope === "personal" ? actorUserId : null,
-    provider,
-    model,
+    provider: normalizedProvider,
+    model: normalizedModel,
     scope,
     authType,
+    baseUrl: normalizedBaseUrl,
     credentialRef: sealed.credentialRef,
     credentialFingerprint: sealed.credentialFingerprint,
     secretPreview: sealed.secretPreview,
@@ -280,7 +308,7 @@ export async function registerProvider(store, actorUserId, input) {
     createdAt: now()
   });
   await audit(store, actorUserId, organizationId, "provider.registered", "AI_PROVIDER_CONFIG", row.id, {
-    provider,
+    provider: normalizedProvider,
     scope,
     authType,
     retentionMode

@@ -96,8 +96,8 @@ test("provider credentials are stored as references and redacted from API respon
       method: "POST",
       body: {
         organizationId: "org-demo",
-        provider: "openai",
-        model: "example-model",
+        provider: " OpenAI ",
+        model: " example-model ",
         scope: "personal",
         credential: secret,
         retentionMode: "standard"
@@ -107,12 +107,75 @@ test("provider credentials are stored as references and redacted from API respon
     assert.equal(JSON.stringify(result.json).includes(secret), false);
 
     const rawProvider = store.db.aiProviders.find((provider) => provider.provider === "openai");
+    assert.equal(rawProvider.model, "example-model");
+    assert.equal(rawProvider.baseUrl, "https://api.openai.com");
     assert.ok(rawProvider.credentialRef.startsWith("vault://"));
     assert.equal(rawProvider.credentialAlgorithm, "aes-256-gcm");
     assert.ok(rawProvider.credentialCiphertext);
     assert.equal(openCredential(rawProvider), secret);
     assert.equal(JSON.stringify(rawProvider).includes(secret), false);
     assert.equal(JSON.stringify(result.json).includes(rawProvider.credentialCiphertext), false);
+  });
+});
+
+test("provider registration validates custom base URLs", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const unsafe = await request(baseUrl, "/api/providers", {
+      userId: "u-admin",
+      method: "POST",
+      body: {
+        organizationId: "org-demo",
+        provider: "openai",
+        model: "example-model",
+        scope: "organization",
+        credential: "organization-provider-secret",
+        orgApproved: true,
+        baseUrl: "http://example.com"
+      }
+    });
+    assert.equal(unsafe.response.status, 400);
+    assert.match(unsafe.json.error.message, /https/);
+
+    const previous = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+    process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
+    try {
+      const loopback = await request(baseUrl, "/api/providers", {
+        userId: "u-admin",
+        method: "POST",
+        body: {
+          organizationId: "org-demo",
+          provider: "openai",
+          model: "example-model",
+          scope: "organization",
+          credential: "organization-provider-secret",
+          orgApproved: true,
+          baseUrl: "http://127.0.0.1:8080/v1?blocked=true"
+        }
+      });
+      assert.equal(loopback.response.status, 400);
+
+      const allowed = await request(baseUrl, "/api/providers", {
+        userId: "u-admin",
+        method: "POST",
+        body: {
+          organizationId: "org-demo",
+          provider: "openai",
+          model: "example-model",
+          scope: "organization",
+          credential: "organization-provider-secret",
+          orgApproved: true,
+          baseUrl: "http://127.0.0.1:8080"
+        }
+      });
+      assert.equal(allowed.response.status, 201);
+      assert.equal(allowed.json.provider.baseUrl, "http://127.0.0.1:8080");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+      } else {
+        process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previous;
+      }
+    }
   });
 });
 

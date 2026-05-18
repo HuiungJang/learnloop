@@ -60,15 +60,15 @@ Verification:
 
 ### Phase 2: Provider Configuration Validation
 
-- [ ] Accept optional `baseUrl` during provider registration.
-- [ ] Normalize provider names and base URLs.
-- [ ] Reject unsafe base URLs by default.
-- [ ] Allow loopback HTTP only when `APP_ALLOW_INSECURE_PROVIDER_BASE_URL=1`.
-- [ ] Preserve existing personal-provider publication policy.
+- [x] Accept optional `baseUrl` during provider registration.
+- [x] Normalize provider names and base URLs.
+- [x] Reject unsafe base URLs by default.
+- [x] Allow loopback HTTP only when `APP_ALLOW_INSECURE_PROVIDER_BASE_URL=1`.
+- [x] Preserve existing personal-provider publication policy.
 
 Verification:
 
-- [ ] Provider registration tests cover safe and unsafe base URLs.
+- [x] Provider registration tests cover safe and unsafe base URLs.
 
 ### Phase 3: OpenAI-Compatible Generation Adapter
 
