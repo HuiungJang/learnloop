@@ -624,6 +624,107 @@ h1 {
   font-size: 12px;
 }
 
+.practice-open-button {
+  width: fit-content;
+}
+
+.practice-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.practice-main-panel,
+.practice-side-panel {
+  min-height: 360px;
+}
+
+.practice-shell,
+.guidance-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.practice-statement {
+  display: grid;
+  gap: 12px;
+}
+
+.practice-statement h3 {
+  margin: 0;
+  color: var(--charcoal);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.practice-statement p {
+  margin: 0;
+  color: rgba(28, 28, 28, 0.82);
+}
+
+.editor-shell-placeholder {
+  display: grid;
+  grid-template-rows: auto minmax(220px, 1fr);
+  min-height: 280px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(28, 28, 28, 0.96);
+}
+
+.file-strip {
+  display: flex;
+  gap: 1px;
+  min-width: 0;
+  overflow-x: auto;
+  background: rgba(252, 251, 248, 0.08);
+}
+
+.file-strip span {
+  flex-shrink: 0;
+  padding: 9px 12px;
+  color: var(--off-white);
+  background: rgba(252, 251, 248, 0.08);
+  font-size: 13px;
+}
+
+.editor-shell-placeholder pre {
+  margin: 0;
+  padding: 16px;
+  color: #fcfbf8;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.guidance-row,
+.feedback-placeholder {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.guidance-row:first-child {
+  border-top: 0;
+}
+
+.guidance-row span,
+.feedback-placeholder strong,
+.guidance-stack strong {
+  color: var(--charcoal);
+}
+
+.guidance-row small,
+.feedback-placeholder small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .card-detail strong {
   color: var(--charcoal);
   font-size: 18px;
@@ -750,6 +851,7 @@ h1 {
 
   .summary-grid,
   .workbench,
+  .practice-workbench,
   .split-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -790,6 +892,7 @@ h1 {
 
   .summary-grid,
   .workbench,
+  .practice-workbench,
   .split-grid,
   .bundle-list,
   .library-filters {

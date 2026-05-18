@@ -658,15 +658,23 @@ Phase 20 notes:
 
 ### Phase 21: Practice Workbench Shell
 
-- [ ] Add a workbench panel/screen opened from the library.
-- [ ] Render problem statement, requirements, difficulty, and metadata.
-- [ ] Add stable regions for editor, side panels, and feedback.
-- [ ] Add fallback state when practice detail cannot load.
+- [x] Add a workbench panel/screen opened from the library.
+- [x] Render problem statement, requirements, difficulty, and metadata.
+- [x] Add stable regions for editor, side panels, and feedback.
+- [x] Add fallback state when practice detail cannot load.
 
 Verification:
 
-- [ ] User can open a practice problem without Monaco loaded yet.
-- [ ] Layout remains stable during loading/error states.
+- [x] User can open a practice problem without Monaco loaded yet.
+- [x] Layout remains stable during loading/error states.
+
+Phase 21 notes:
+
+- Added an `Open practice` action from library cards.
+- Added a workbench shell with statement, starter-file placeholder, guidance, provenance, and feedback regions.
+- Added loading, empty, and error fallback states for practice detail fetches.
+- `./scripts/frontend-build.sh`: passed.
+- Playwright smoke via system Chrome verified desktop/mobile open-practice layout without horizontal overflow.
 
 ### Phase 22: Monaco Dependency and Lazy Worker Setup
 

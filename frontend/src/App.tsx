@@ -23,12 +23,14 @@ import {
   createSession,
   fetchHealth,
   getLibrary,
+  getPracticeProblem,
   type HealthResponse,
   listProviders,
   registerUser,
   runLearningDemo,
   type Membership,
   type PatternCardResponse,
+  type PracticeProblemResponse,
   type ProviderResponse,
   type SessionResponse
 } from "./api/client";
@@ -133,6 +135,9 @@ export function App() {
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
+  const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
+  const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
     language: "",
     tag: "",
@@ -503,10 +508,94 @@ export function App() {
                               <span key={problem.id}>{problem.type}</span>
                             ))}
                           </div>
+                          <button
+                            className="secondary-button practice-open-button"
+                            disabled={card.problems[0] === undefined}
+                            onClick={() => {
+                              const problem = card.problems[0];
+                              if (problem !== undefined) void openPractice(problem.id);
+                            }}
+                            type="button"
+                          >
+                            <BookOpen aria-hidden="true" size={16} />
+                            Open practice
+                          </button>
                         </article>
                       ))
                     : null}
                 </div>
+              </div>
+            </section>
+
+            <section className="practice-workbench" id="practice">
+              <div className="panel practice-main-panel">
+                <div className="panel-title">
+                  <Library aria-hidden="true" size={20} />
+                  <h2>Practice Workbench</h2>
+                </div>
+                {practiceLoading ? <p className="muted-copy">Loading practice problem.</p> : null}
+                {practiceError.length > 0 ? <p className="form-error">{practiceError}</p> : null}
+                {!practiceLoading && practiceError.length === 0 && activePractice === null ? (
+                  <p className="muted-copy">Open a practice card to start.</p>
+                ) : null}
+                {!practiceLoading && practiceError.length === 0 && activePractice !== null ? (
+                  <div className="practice-shell">
+                    <div className="practice-statement">
+                      <div>
+                        <p className="eyebrow">{activePractice.difficulty} · {activePractice.assetRevision}</p>
+                        <h3>{activePractice.title}</h3>
+                      </div>
+                      <p>{activePractice.prompt}</p>
+                    </div>
+                    <div className="editor-shell-placeholder" aria-label="Practice files">
+                      <div className="file-strip">
+                        {activePractice.files.map((file) => (
+                          <span key={file.path}>{file.path}</span>
+                        ))}
+                      </div>
+                      <pre>{activePractice.files[0]?.content ?? "// No starter file available yet."}</pre>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="panel practice-side-panel">
+                <div className="panel-title">
+                  <ListChecks aria-hidden="true" size={20} />
+                  <h2>Guidance</h2>
+                </div>
+                {activePractice === null ? (
+                  <p className="muted-copy">Hints, provenance, and feedback appear after a problem opens.</p>
+                ) : (
+                  <div className="guidance-stack">
+                    <div>
+                      <strong>Hints</strong>
+                      <div className="review-table">
+                        {activePractice.hints.map((hint) => (
+                          <div className="guidance-row" key={hint.id}>
+                            <span>{hint.label}</span>
+                            <small>{hint.revealed ? hint.content : "Locked until progress"}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <strong>Provenance</strong>
+                      <div className="review-table">
+                        {activePractice.provenance.map((source) => (
+                          <div className="guidance-row" key={`${source.sourceType}:${source.sourceLabel}`}>
+                            <span>{source.sourceLabel}</span>
+                            <small>{source.redactedExcerpt}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="feedback-placeholder">
+                      <strong>Feedback</strong>
+                      <small>Run and submission feedback will appear here.</small>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -603,12 +692,28 @@ export function App() {
     setLibraryFilters((current) => ({ ...current, [key]: value }));
   }
 
+  async function openPractice(problemId: string) {
+    if (session === null) return;
+    setPracticeLoading(true);
+    setPracticeError("");
+    try {
+      setActivePractice(await getPracticeProblem(session.token, problemId));
+    } catch (error) {
+      setActivePractice(null);
+      setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
+    } finally {
+      setPracticeLoading(false);
+    }
+  }
+
   function logout() {
     setSession(null);
     setProviders([]);
     setLatestCard(null);
     setLibraryCards([]);
     setLibraryError("");
+    setActivePractice(null);
+    setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);
   }
