@@ -83,6 +83,45 @@ try {
   assert.equal(storedOauthSettings.credentialLabel, oauthLabel);
   assert.equal(Object.prototype.hasOwnProperty.call(storedOauthSettings, "apiKey"), false);
 
+  await page.locator("#review").getByRole("heading", { name: /Practice Library/i }).waitFor();
+  await page.getByText(/Normalize AI-generated tag labels/i).waitFor({ timeout: 20_000 });
+  const [practiceResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/problems/") && response.url().includes("/practice") && response.status() === 200),
+    page.getByRole("button", { name: /Open practice/i }).first().click()
+  ]);
+  const practicePayload = await practiceResponse.text();
+  assert.equal(practicePayload.includes("referenceAnswer"), false);
+  assert.equal(practicePayload.includes("Trim input, split separators"), false);
+
+  await page.getByRole("heading", { name: /Normalize AI-generated tag labels/i }).waitFor();
+  await page.locator(".code-editor-root").click();
+  const shortcut = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.press(`${shortcut}+A`);
+  await page.keyboard.insertText(`
+export function formatTag(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[_\\s-]+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+`.trimStart());
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/attempts/local-sync") && response.status() === 200),
+    page.keyboard.press(`${shortcut}+S`)
+  ]);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/submissions") && response.status() === 201),
+    page.keyboard.press(`${shortcut}+Enter`)
+  ]);
+  await page.waitForResponse((response) => response.url().includes("/api/progress") && response.status() === 200);
+  await page.getByText(/Submitted/i).waitFor();
+  await page.getByText(/Answer diff/i).waitFor({ timeout: 20_000 });
+  await page.waitForFunction(() => !document.body.innerText.includes("No submissions yet."));
+  const progressPanel = page.locator(".panel").filter({ has: page.getByRole("heading", { name: /^Progress$/i }) });
+  await progressPanel.getByText(/Pure Function/i).waitFor({ timeout: 20_000 });
+  await progressPanel.getByText(/TypeScript/i).waitFor({ timeout: 20_000 });
+
   const apiKeyLeakedToServer = postedRequests.some((request) => request.postData.includes(localAiKey));
   const oauthLabelLeakedToServer = postedRequests.some((request) => request.postData.includes(oauthLabel));
   assert.equal(apiKeyLeakedToServer, false);

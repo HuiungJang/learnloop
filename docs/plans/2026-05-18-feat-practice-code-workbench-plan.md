@@ -1144,17 +1144,24 @@ Phase 44 notes:
 
 ### Phase 45: Installed-App E2E for Learner Flow
 
-- [ ] Extend E2E from signup/login through library browse.
-- [ ] Open a practice problem.
-- [ ] Edit code in Monaco.
-- [ ] Save draft.
-- [ ] Submit attempt.
-- [ ] Confirm diff/feedback/progress.
+- [x] Extend E2E from signup/login through library browse.
+- [x] Open a practice problem.
+- [x] Edit code in Monaco.
+- [x] Save draft.
+- [x] Submit attempt.
+- [x] Confirm diff/feedback/progress.
 
 Verification:
 
-- [ ] Installed-app E2E passes locally.
-- [ ] E2E asserts hidden answer is unavailable before submission.
+- [x] Installed-app E2E passes locally.
+- [x] E2E asserts hidden answer is unavailable before submission.
+
+Phase 45 notes:
+
+- Extended `scripts/e2e-installed.mjs` beyond auth/onboarding into learner practice: browse library, open the demo problem, edit Monaco content, save draft through the keyboard shortcut, submit through the keyboard shortcut, and verify answer diff plus progress.
+- Added a pre-submission API payload assertion that the practice response does not expose `referenceAnswer` or the hidden reference answer text.
+- Rebuilt the installed app images and ran E2E on `http://localhost:18080` because an older installed app already occupied port 8080.
+- `APP_URL=http://localhost:18080 ./scripts/e2e-installed.sh`: passed.
 
 ### Phase 46: Installed-App E2E for Sandbox Flow
 
