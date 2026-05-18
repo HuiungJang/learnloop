@@ -127,10 +127,10 @@ data class PracticeRunResultResponse(
 )
 
 data class PracticeRunTestResponse(
-    val name: String,
-    val status: String,
-    val message: String?,
-    val durationMs: Long?,
+    val name: String = "",
+    val status: String = "",
+    val message: String? = null,
+    val durationMs: Long? = null,
 )
 
 data class ReviewTaskResponse(

@@ -25,6 +25,7 @@ class DockerRunCommandBuilderTest {
 
         val plan = builder.build(request, workspace)
 
+        assertTrue(plan.command.containsAll(listOf("--pull", "never")))
         assertTrue(plan.command.containsAll(listOf("--network", "none")))
         assertTrue(plan.command.containsAll(listOf("--cpus", "1.0")))
         assertTrue(plan.command.containsAll(listOf("--memory", "512m")))

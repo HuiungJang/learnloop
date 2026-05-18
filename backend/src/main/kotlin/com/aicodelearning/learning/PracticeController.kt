@@ -30,6 +30,13 @@ class PracticeController(
         @PathVariable id: String,
         @RequestBody request: PracticeAttemptSyncRequest,
     ): PracticeAttemptSyncResponse = PracticeAttemptSyncResponse(attempt = practiceService.syncLocalAttempt(currentUser, id, request))
+
+    @PostMapping("/api/problems/{id}/runs")
+    fun run(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable id: String,
+        @RequestBody request: PracticeRunRequest,
+    ): PracticeRunCreateResponse = PracticeRunCreateResponse(run = practiceService.run(currentUser, id, request))
 }
 
 data class PracticeProblemDetailResponse(
@@ -42,4 +49,16 @@ data class PracticeAttemptListResponse(
 
 data class PracticeAttemptSyncResponse(
     val attempt: PracticeAttemptResponse,
+)
+
+data class PracticeRunRequest(
+    val clientAttemptId: String? = null,
+    val assetRevision: String,
+    val language: String,
+    val files: List<PracticeAttemptFileRequest>,
+    val timeoutMs: Long? = null,
+)
+
+data class PracticeRunCreateResponse(
+    val run: PracticeRunResultResponse,
 )

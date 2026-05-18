@@ -6,6 +6,12 @@ import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ConflictException
 import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
+import com.aicodelearning.runner.RunnerExecutor
+import com.aicodelearning.runner.RunnerRequestValidator
+import com.aicodelearning.runner.RunnerRunFile
+import com.aicodelearning.runner.RunnerRunRequest
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -19,7 +25,11 @@ class PracticeService(
     private val problemProvenanceLinkRepository: ProblemProvenanceLinkRepository,
     private val submissionRepository: SubmissionRepository,
     private val submissionFileRepository: SubmissionFileRepository,
+    private val sandboxRunResultRepository: SandboxRunResultRepository,
     private val authorizationService: AuthorizationService,
+    private val runnerRequestValidator: RunnerRequestValidator,
+    private val runnerExecutor: RunnerExecutor,
+    private val objectMapper: ObjectMapper,
 ) {
     @Transactional(readOnly = true)
     fun detail(
@@ -75,8 +85,64 @@ class PracticeService(
                     )
                 },
             attempt = null,
-            latestRun = null,
+            latestRun = sandboxRunResultRepository.findFirstByUserIdAndProblemIdOrderByCreatedAtDesc(currentUser.id, problem.id)?.toPracticeRunResultResponse(),
         )
+    }
+
+    fun run(
+        currentUser: CurrentUser,
+        problemId: String,
+        request: PracticeRunRequest,
+    ): PracticeRunResultResponse {
+        val problem = problemRepository.findById(problemId).orElseThrow { NotFoundException("Problem not found") }
+        val card = patternCardRepository.findById(problem.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
+        authorizePracticeRead(currentUser, card)
+        PracticeContract.requireSupportedLanguage(request.language)
+        if (request.language != PracticeContract.LANGUAGE_TYPESCRIPT) {
+            throw BadRequestException("only TypeScript runs are available")
+        }
+
+        val canonicalFiles = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
+        val currentAssetRevision = currentAssetRevision(problem, canonicalFiles)
+        if (request.assetRevision != currentAssetRevision) {
+            throw ConflictException("Practice problem has changed. Refresh before running this attempt.")
+        }
+
+        val runnerRequest =
+            RunnerRunRequest(
+                language = request.language,
+                testHarnessId = TYPESCRIPT_HARNESS_ID,
+                timeoutMs = request.timeoutMs ?: DEFAULT_RUN_TIMEOUT_MS,
+                files = runnerFiles(request.files, canonicalFiles),
+            )
+        val validatedRequest = runnerRequestValidator.validate(runnerRequest)
+        val result = runnerExecutor.run(validatedRequest)
+        val tests = parseTapTests(result.stdoutExcerpt)
+        val submissionId =
+            request.clientAttemptId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { submissionRepository.findByUserIdAndProblemIdAndClientAttemptId(currentUser.id, problem.id, it) }
+                ?.id
+
+        val saved =
+            sandboxRunResultRepository.save(
+                SandboxRunResultEntity(
+                    id = validatedRequest.runId,
+                    problemId = problem.id,
+                    userId = currentUser.id,
+                    submissionId = submissionId,
+                    status = result.status,
+                    runnerKind = validatedRequest.harness.id,
+                    durationMs = result.durationMs,
+                    testsJson = objectMapper.writeValueAsString(tests),
+                    stdoutExcerpt = result.stdoutExcerpt.ifBlank { null },
+                    stderrExcerpt = result.stderrExcerpt.ifBlank { null },
+                    failureReason = failureReason(result.status),
+                    createdAt = Instant.now(),
+                ),
+            )
+
+        return saved.toPracticeRunResultResponse()
     }
 
     @Transactional(readOnly = true)
@@ -221,7 +287,73 @@ class PracticeService(
             submittedAt = submittedAt,
         )
 
+    private fun SandboxRunResultEntity.toPracticeRunResultResponse(): PracticeRunResultResponse =
+        PracticeRunResultResponse(
+            id = id,
+            status = status,
+            runnerKind = runnerKind,
+            durationMs = durationMs,
+            tests = parseTestsJson(testsJson),
+            stdoutExcerpt = stdoutExcerpt,
+            stderrExcerpt = stderrExcerpt,
+            failedDiff = failedDiff,
+            failureReason = failureReason,
+            createdAt = createdAt,
+        )
+
+    private fun runnerFiles(
+        requestFiles: List<PracticeAttemptFileRequest>,
+        canonicalFiles: List<ProblemFileEntity>,
+    ): List<RunnerRunFile> {
+        if (requestFiles.isEmpty()) {
+            throw BadRequestException("run files are required")
+        }
+        val testFiles = canonicalFiles.filter { it.fileRole == PracticeContract.FILE_ROLE_TEST }
+        if (testFiles.isEmpty()) {
+            throw BadRequestException("practice problem has no runnable tests")
+        }
+
+        return requestFiles.map { RunnerRunFile(path = it.path, content = it.content) } +
+            testFiles.map { RunnerRunFile(path = it.path, content = it.content) }
+    }
+
+    private fun parseTestsJson(testsJson: String): List<PracticeRunTestResponse> =
+        try {
+            objectMapper.readValue(testsJson, object : TypeReference<List<PracticeRunTestResponse>>() {})
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+    private fun parseTapTests(stdout: String): List<PracticeRunTestResponse> =
+        stdout
+            .lineSequence()
+            .mapNotNull { line ->
+                val match = tapResultRegex.find(line.trim()) ?: return@mapNotNull null
+                val status = if (match.groupValues[1] == "ok") PracticeContract.RUN_STATUS_PASSED else PracticeContract.RUN_STATUS_FAILED
+                PracticeRunTestResponse(
+                    name = match.groupValues[2],
+                    status = status,
+                    message = null,
+                    durationMs = null,
+                )
+            }
+            .toList()
+
+    private fun failureReason(status: String): String? =
+        when (status) {
+            PracticeContract.RUN_STATUS_PASSED -> "All tests passed."
+            PracticeContract.RUN_STATUS_FAILED -> "One or more tests failed."
+            PracticeContract.RUN_STATUS_COMPILE_ERROR -> "TypeScript compilation failed."
+            PracticeContract.RUN_STATUS_TIMEOUT -> "The run exceeded the time limit."
+            PracticeContract.RUN_STATUS_RESOURCE_LIMITED -> "The run exceeded sandbox resource limits."
+            PracticeContract.RUN_STATUS_RUNNER_UNAVAILABLE -> "The local runner is unavailable."
+            else -> null
+        }
+
     private companion object {
+        const val DEFAULT_RUN_TIMEOUT_MS = 5_000L
+        const val TYPESCRIPT_HARNESS_ID = "typescript-node-test"
+        val tapResultRegex = Regex("^(ok|not ok)\\s+\\d+\\s+-\\s+(.+)$")
         val visibleFileRoles = setOf(PracticeContract.FILE_ROLE_STARTER, PracticeContract.FILE_ROLE_SUPPORT)
     }
 }

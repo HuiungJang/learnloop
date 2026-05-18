@@ -750,6 +750,10 @@ h1 {
   color: #d7f7dd;
 }
 
+.save-status.running {
+  color: #fcfbf8;
+}
+
 .save-status.conflict,
 .save-status.failed {
   color: #ffd5ca;
@@ -774,6 +778,11 @@ h1 {
 
 .editor-tool-button:active {
   opacity: 0.8;
+}
+
+.editor-tool-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .editor-shell-placeholder pre {

@@ -34,6 +34,7 @@ import {
   listProviders,
   type PracticeAttemptFileRequest,
   registerUser,
+  runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
   syncLocalPracticeAttempt,
@@ -41,6 +42,7 @@ import {
   type PatternCardResponse,
   type PracticeHintResponse,
   type PracticeProblemResponse,
+  type PracticeRunResultResponse,
   type ProviderResponse,
   type SessionResponse
 } from "./api/client";
@@ -69,7 +71,7 @@ type LibraryFilters = {
   difficulty: string;
   publicationStatus: "published";
 };
-type PracticeSaveState = PracticeSyncStatus | "idle" | "submitted" | "submitting";
+type PracticeSaveState = PracticeSyncStatus | "idle" | "running" | "submitted" | "submitting";
 type PracticeSaveStatus = {
   state: PracticeSaveState;
   message: string;
@@ -623,6 +625,23 @@ export function App() {
                           {practiceSaveStatus.message}
                         </span>
                         <button
+                          aria-label="Run tests"
+                          className="editor-tool-button"
+                          disabled={practiceSaveStatus.state === "running"}
+                          onClick={() => {
+                            const snapshot = editorSnapshotRef.current;
+                            if (snapshot === null) {
+                              setPracticeSaveStatus({ state: "idle", message: "Editor is still loading" });
+                              return;
+                            }
+                            void runPracticeSolution(snapshot());
+                          }}
+                          title="Run tests"
+                          type="button"
+                        >
+                          <Play aria-hidden="true" size={16} />
+                        </button>
+                        <button
                           aria-label={editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme"}
                           className="editor-tool-button"
                           onClick={toggleEditorTheme}
@@ -638,6 +657,9 @@ export function App() {
                           files={activePractice.files}
                           onCommandPalette={openCommandPalette}
                           onOpenQuickFile={openQuickOpen}
+                          onRun={(files) => {
+                            void runPracticeSolution(files);
+                          }}
                           onSave={(files) => {
                             void savePracticeDraft(files);
                           }}
@@ -891,6 +913,19 @@ export function App() {
           }
         },
         {
+          id: "run",
+          label: "Run tests",
+          detail: "Execute visible TypeScript tests in the local sandbox",
+          disabled: editorSnapshotRef.current === null || practiceSaveStatus.state === "running",
+          disabledReason: practiceSaveStatus.state === "running" ? "Run in progress" : "Editor is still loading",
+          run: () => {
+            const snapshot = editorSnapshotRef.current;
+            if (snapshot === null) return;
+            closeWorkbenchOverlay();
+            void runPracticeSolution(snapshot());
+          }
+        },
+        {
           id: "submit",
           label: "Submit solution",
           detail: "Submit the current editor snapshot",
@@ -1046,14 +1081,29 @@ export function App() {
 
   function renderFeedbackPanel(problem: PracticeProblemResponse) {
     const run = problem.latestRun;
-    const status = practiceSaveStatus.state === "submitted" ? "submitted" : run?.status ?? "not run";
+    const status =
+      practiceSaveStatus.state === "submitted"
+        ? "submitted"
+        : practiceSaveStatus.state === "running"
+          ? "running"
+          : run?.status ?? "not run";
     let summary = "No run yet.";
     if (status === "submitted") {
       summary = "Submission received.";
     } else if (status === "running") {
       summary = "Run in progress.";
+    } else if (status === "passed") {
+      summary = "Latest run passed.";
     } else if (status === "failed") {
       summary = "Latest run failed.";
+    } else if (status === "compile_error") {
+      summary = "TypeScript compilation failed.";
+    } else if (status === "timeout") {
+      summary = "Latest run timed out.";
+    } else if (status === "resource_limited") {
+      summary = "Latest run exceeded sandbox limits.";
+    } else if (status === "runner_unavailable") {
+      summary = "Local runner is unavailable.";
     }
 
     return (
@@ -1068,7 +1118,7 @@ export function App() {
           {run?.tests.length ? (
             run.tests.map((test) => (
               <small key={test.name}>
-                {test.name}: {test.status}{test.message === null ? "" : ` - ${test.message}`}
+                {test.name}: {test.status}{test.durationMs === null ? "" : ` (${test.durationMs}ms)`}{test.message === null ? "" : ` - ${test.message}`}
               </small>
             ))
           ) : (
@@ -1091,10 +1141,36 @@ export function App() {
         </div>
         <div className="feedback-section">
           <span>Recommendations</span>
-          <small>{status === "failed" ? "Review the failed diff and try again." : "Run or submit to receive recommendations."}</small>
+          <small>{status === "failed" || status === "compile_error" ? "Review the runner output and try again." : "Run or submit to receive recommendations."}</small>
         </div>
       </div>
     );
+  }
+
+  async function runPracticeSolution(files: PracticeAttemptFileRequest[]) {
+    if (session === null || activePractice === null) return;
+
+    const draft = ensurePracticeDraft({
+      userId: session.user.id,
+      problemId: activePractice.id,
+      assetRevision: activePractice.assetRevision,
+      files
+    });
+    setAnswerDiff(null);
+    setPracticeSaveStatus({ state: "running", message: "Running tests" });
+    try {
+      const run = await runPracticeAttempt(session.token, activePractice.id, {
+        clientAttemptId: draft.clientAttemptId,
+        assetRevision: draft.assetRevision,
+        language: activePractice.files[0]?.language ?? "typescript",
+        timeoutMs: 5_000,
+        files: draft.files.map((file) => ({ path: file.path, content: file.content }))
+      });
+      setActivePractice((current) => (current?.id === activePractice.id ? { ...current, latestRun: run } : current));
+      setPracticeSaveStatus({ state: "idle", message: runStatusMessage(run) });
+    } catch {
+      setPracticeSaveStatus({ state: "failed", message: "Run failed" });
+    }
   }
 
   async function submitPracticeSolution(files: PracticeAttemptFileRequest[]) {
@@ -1135,6 +1211,15 @@ export function App() {
     } catch {
       setPracticeSaveStatus({ state: "failed", message: "Submit failed" });
     }
+  }
+
+  function runStatusMessage(run: PracticeRunResultResponse): string {
+    if (run.status === "passed") return "Run passed";
+    if (run.status === "compile_error") return "Compile failed";
+    if (run.status === "timeout") return "Run timed out";
+    if (run.status === "resource_limited") return "Sandbox limit hit";
+    if (run.status === "runner_unavailable") return "Runner unavailable";
+    return "Run failed";
   }
 
   async function openPractice(problemId: string) {

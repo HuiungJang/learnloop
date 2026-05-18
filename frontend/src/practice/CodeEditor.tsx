@@ -9,6 +9,7 @@ type CodeEditorProps = {
   activePath: string | null;
   onCommandPalette?: () => void;
   onOpenQuickFile?: () => void;
+  onRun?: (files: PracticeAttemptFileRequest[]) => void;
   onSave?: (files: PracticeAttemptFileRequest[]) => void;
   onSnapshotReady?: (snapshotter: (() => PracticeAttemptFileRequest[]) | null) => void;
   onStatus?: (message: string) => void;
@@ -23,6 +24,7 @@ export function CodeEditor({
   activePath,
   onCommandPalette,
   onOpenQuickFile,
+  onRun,
   onSave,
   onSnapshotReady,
   onStatus,
@@ -37,6 +39,7 @@ export function CodeEditor({
   const modelsRef = useRef<Map<string, monaco.editor.ITextModel>>(new Map());
   const onCommandPaletteRef = useRef(onCommandPalette);
   const onOpenQuickFileRef = useRef(onOpenQuickFile);
+  const onRunRef = useRef(onRun);
   const onSaveRef = useRef(onSave);
   const onSnapshotReadyRef = useRef(onSnapshotReady);
   const onStatusRef = useRef(onStatus);
@@ -56,6 +59,10 @@ export function CodeEditor({
   useEffect(() => {
     onOpenQuickFileRef.current = onOpenQuickFile;
   }, [onOpenQuickFile]);
+
+  useEffect(() => {
+    onRunRef.current = onRun;
+  }, [onRun]);
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -122,6 +129,9 @@ export function CodeEditor({
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       onSubmitRef.current?.(snapshotCurrentFiles());
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+      onRunRef.current?.(snapshotCurrentFiles());
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD, () => {
       onToggleDiffRef.current?.();

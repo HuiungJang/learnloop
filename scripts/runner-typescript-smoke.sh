@@ -40,6 +40,7 @@ run_exercise() {
 
   docker run \
     --rm \
+    --pull never \
     --network none \
     --cpus 1.0 \
     --memory 512m \

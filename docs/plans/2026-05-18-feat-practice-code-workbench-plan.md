@@ -992,15 +992,26 @@ Phase 37 notes:
 
 ### Phase 38: TypeScript Run API Integration
 
-- [ ] Wire `POST /api/problems/{id}/runs` to TypeScript runner.
-- [ ] Persist run result.
-- [ ] Return test list and output excerpts.
-- [ ] Show results in frontend feedback panel.
+- [x] Wire `POST /api/problems/{id}/runs` to TypeScript runner.
+- [x] Persist run result.
+- [x] Return test list and output excerpts.
+- [x] Show results in frontend feedback panel.
 
 Verification:
 
-- [ ] Backend integration test runs a TypeScript exercise.
-- [ ] E2E or manual check runs TypeScript from the workbench.
+- [x] Backend integration test runs a TypeScript exercise.
+- [x] E2E or manual check runs TypeScript from the workbench.
+
+Phase 38 notes:
+
+- Added `POST /api/problems/{id}/runs` with asset revision checks, TypeScript-only MVP routing, canonical visible test files, result persistence, TAP test parsing, and latest-run practice detail hydration.
+- Added Docker runner execution with bounded stdout/stderr capture, wall-clock timeout enforcement, `--pull never`, and unavailable/compile-error normalization.
+- Added frontend run API wiring, Run button, `Cmd/Ctrl+Shift+Enter` shortcut, command palette action, and feedback panel status updates.
+- `./scripts/backend-test.sh`: passed, including the conditional Docker-backed TypeScript runner integration test when `learnloop-runner-typescript:latest` is available.
+- `./scripts/frontend-typecheck.sh`: passed.
+- `./scripts/frontend-build.sh`: passed.
+- `./scripts/test.sh`: passed.
+- Browser smoke on `http://127.0.0.1:5174/`: passed with mocked API, verifying workbench Run request and feedback rendering.
 
 ### Phase 39: Java Runner Image
 

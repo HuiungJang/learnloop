@@ -28,6 +28,8 @@ class DockerRunResultNormalizerTest {
     fun `normalizes passed and failed results`() {
         assertEquals(PracticeContract.RUN_STATUS_PASSED, normalizer.normalize(rawResult(exitCode = 0)).status)
         assertEquals(PracticeContract.RUN_STATUS_FAILED, normalizer.normalize(rawResult(exitCode = 1)).status)
+        assertEquals(PracticeContract.RUN_STATUS_COMPILE_ERROR, normalizer.normalize(rawResult(exitCode = 2)).status)
+        assertEquals(PracticeContract.RUN_STATUS_RUNNER_UNAVAILABLE, normalizer.normalize(rawResult(exitCode = 125)).status)
     }
 
     @Test

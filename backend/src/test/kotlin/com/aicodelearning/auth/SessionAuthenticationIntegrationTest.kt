@@ -7,12 +7,14 @@ import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.learning.PatternCardEntity
 import com.aicodelearning.learning.PatternCardRepository
 import com.aicodelearning.learning.PatternRecognitionPromptBuilder
+import com.aicodelearning.learning.PracticeContract
 import com.aicodelearning.learning.ProblemEntity
 import com.aicodelearning.learning.ProblemFileEntity
 import com.aicodelearning.learning.ProblemFileRepository
 import com.aicodelearning.learning.ProblemRepository
 import com.aicodelearning.learning.ReviewTaskEntity
 import com.aicodelearning.learning.ReviewTaskRepository
+import com.aicodelearning.learning.SandboxRunResultRepository
 import com.aicodelearning.learning.SubmissionEntity
 import com.aicodelearning.learning.SubmissionFileEntity
 import com.aicodelearning.learning.SubmissionFileRepository
@@ -23,6 +25,9 @@ import com.aicodelearning.organization.ProjectRepository
 import com.aicodelearning.organization.TeamEntity
 import com.aicodelearning.organization.TeamRepository
 import com.aicodelearning.platform.ForbiddenException
+import com.aicodelearning.runner.NormalizedRunnerResult
+import com.aicodelearning.runner.RunnerExecutor
+import com.aicodelearning.runner.ValidatedRunnerRunRequest
 import com.aicodelearning.source.SourceLinkEntity
 import com.aicodelearning.source.SourceLinkRepository
 import com.fasterxml.jackson.databind.JsonNode
@@ -37,8 +42,12 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -51,9 +60,11 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import java.math.BigDecimal
 import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 
 @Testcontainers
 @ActiveProfiles("local")
+@Import(RunnerExecutorTestConfiguration::class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SessionAuthenticationIntegrationTest {
     @Autowired
@@ -103,6 +114,12 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var submissionFileRepository: SubmissionFileRepository
+
+    @Autowired
+    private lateinit var sandboxRunResultRepository: SandboxRunResultRepository
+
+    @Autowired
+    private lateinit var fakeRunnerExecutor: FakeRunnerExecutor
 
     @LocalServerPort
     private var port: Int = 0
@@ -747,6 +764,63 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `practice run stores TypeScript runner result`() {
+        val problemId = saveAccessiblePracticeProblem("Runnable TypeScript practice")
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_run_test_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/main.test.ts",
+                language = "typescript",
+                fileRole = "test",
+                content =
+                    """
+                    import { strict as assert } from "node:assert"
+                    import { test } from "node:test"
+                    import { value } from "./main"
+
+                    test("adds value", () => {
+                      assert.equal(value, 1)
+                    })
+                    """.trimIndent(),
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = Instant.now(),
+            ),
+        )
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+        fakeRunnerExecutor.reset()
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/runs",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-run",
+                    "assetRevision" to assetRevision,
+                    "language" to "typescript",
+                    "timeoutMs" to 5_000,
+                    "files" to listOf(mapOf("path" to "src/main.ts", "content" to "export const value = 1")),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val run = json(response)["run"]
+        assertEquals("passed", run["status"].asText())
+        assertEquals("typescript-node-test", run["runnerKind"].asText())
+        assertEquals("adds value", run["tests"][0]["name"].asText())
+        assertEquals("passed", run["tests"][0]["status"].asText())
+        assertTrue(run["stdoutExcerpt"].asText().contains("TAP version 13"))
+
+        val saved = sandboxRunResultRepository.findFirstByUserIdAndProblemIdOrderByCreatedAtDesc("u-learner", problemId)
+        assertEquals(run["id"].asText(), saved?.id)
+        val runnerRequest = fakeRunnerExecutor.requests.single()
+        assertEquals("typescript-node-test", runnerRequest.harness.id)
+        assertEquals(listOf("src/main.test.ts", "src/main.ts"), runnerRequest.files.map { it.path }.sorted())
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -1235,6 +1309,38 @@ class SessionAuthenticationIntegrationTest {
             registry.add("spring.datasource.password", postgres::getPassword)
         }
     }
+}
+
+class FakeRunnerExecutor : RunnerExecutor {
+    val requests = CopyOnWriteArrayList<ValidatedRunnerRunRequest>()
+
+    override fun run(request: ValidatedRunnerRunRequest): NormalizedRunnerResult {
+        requests += request
+        return NormalizedRunnerResult(
+            status = PracticeContract.RUN_STATUS_PASSED,
+            stdoutExcerpt =
+                """
+                TAP version 13
+                # Subtest: adds value
+                ok 1 - adds value
+                1..1
+                # pass 1
+                """.trimIndent(),
+            stderrExcerpt = "",
+            durationMs = 17,
+        )
+    }
+
+    fun reset() {
+        requests.clear()
+    }
+}
+
+@TestConfiguration
+class RunnerExecutorTestConfiguration {
+    @Bean
+    @Primary
+    fun fakeRunnerExecutor(): FakeRunnerExecutor = FakeRunnerExecutor()
 }
 
 class KPostgreSQLContainer(imageName: String) : PostgreSQLContainer<KPostgreSQLContainer>(imageName)

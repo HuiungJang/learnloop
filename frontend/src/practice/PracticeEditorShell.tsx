@@ -6,6 +6,7 @@ type PracticeEditorShellProps = {
   activePath: string | null;
   onCommandPalette?: () => void;
   onOpenQuickFile?: () => void;
+  onRun?: (files: PracticeAttemptFileRequest[]) => void;
   onSave?: (files: PracticeAttemptFileRequest[]) => void;
   onSnapshotReady?: (snapshotter: (() => PracticeAttemptFileRequest[]) | null) => void;
   onStatus?: (message: string) => void;
@@ -20,6 +21,7 @@ export function PracticeEditorShell({
   activePath,
   onCommandPalette,
   onOpenQuickFile,
+  onRun,
   onSave,
   onSnapshotReady,
   onStatus,
@@ -34,6 +36,7 @@ export function PracticeEditorShell({
       files={files}
       onCommandPalette={onCommandPalette}
       onOpenQuickFile={onOpenQuickFile}
+      onRun={onRun}
       onSave={onSave}
       onSnapshotReady={onSnapshotReady}
       onStatus={onStatus}

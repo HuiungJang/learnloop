@@ -49,6 +49,8 @@ class DockerRunCommandBuilder(
                 properties.dockerCommand,
                 "run",
                 "--rm",
+                "--pull",
+                "never",
                 "--network",
                 "none",
                 "--cpus",

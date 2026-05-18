@@ -157,6 +157,14 @@ export type PracticeAttemptSyncRequest = {
   localUpdatedAt: string;
 };
 
+export type PracticeRunRequest = {
+  clientAttemptId?: string;
+  assetRevision: string;
+  language: string;
+  files: PracticeAttemptFileRequest[];
+  timeoutMs?: number;
+};
+
 export type PracticeSubmissionRequest = {
   textAnswer?: string;
   resultStatus?: string;
@@ -371,6 +379,19 @@ export async function submitPracticeAttempt(
     method: "POST",
     body
   });
+}
+
+export async function runPracticeAttempt(
+  token: string,
+  problemId: string,
+  body: PracticeRunRequest
+): Promise<PracticeRunResultResponse> {
+  const response = await request<{ run: PracticeRunResultResponse }>(`/api/problems/${encodeURIComponent(problemId)}/runs`, {
+    token,
+    method: "POST",
+    body
+  });
+  return response.run;
 }
 
 async function request<T>(

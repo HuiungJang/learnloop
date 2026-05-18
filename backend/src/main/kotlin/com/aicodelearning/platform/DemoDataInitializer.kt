@@ -232,14 +232,13 @@ class DemoDataInitializer(
                 fileRole = "test",
                 content =
                     """
-                    import { describe, expect, it } from "vitest"
+                    import { strict as assert } from "node:assert"
+                    import { test } from "node:test"
                     import { formatTag } from "./formatTag"
 
-                    describe("formatTag", () => {
-                      it("normalizes generated labels", () => {
-                        expect(formatTag("  React Query  ")).toBe("react-query")
-                        expect(formatTag("SPRING__BOOT")).toBe("spring-boot")
-                      })
+                    test("normalizes generated labels", () => {
+                      assert.equal(formatTag("  React Query  "), "react-query")
+                      assert.equal(formatTag("SPRING__BOOT"), "spring-boot")
                     })
                     """.trimIndent(),
                 readOnly = true,
@@ -277,7 +276,16 @@ class DemoDataInitializer(
                 path = "hidden/formatTag.hidden.test.ts",
                 language = "typescript",
                 fileRole = "hidden_test",
-                content = """expect(formatTag("Gemini---OAuth")).toBe("gemini-oauth")""",
+                content =
+                    """
+                    import { strict as assert } from "node:assert"
+                    import { test } from "node:test"
+                    import { formatTag } from "../src/formatTag"
+
+                    test("normalizes repeated hyphens", () => {
+                      assert.equal(formatTag("Gemini---OAuth"), "gemini-oauth")
+                    })
+                    """.trimIndent(),
                 readOnly = true,
                 sortOrder = 100,
                 createdAt = now,
