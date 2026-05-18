@@ -281,17 +281,23 @@ Phase 1 notes:
 
 ### Phase 2: Backend Practice DTO Skeleton
 
-- [ ] Add DTOs for practice problem detail.
-- [ ] Add DTOs for exercise files.
-- [ ] Add DTOs for hints.
-- [ ] Add DTOs for provenance.
-- [ ] Add DTOs for user attempt sync.
-- [ ] Add DTOs for run results.
+- [x] Add DTOs for practice problem detail.
+- [x] Add DTOs for exercise files.
+- [x] Add DTOs for hints.
+- [x] Add DTOs for provenance.
+- [x] Add DTOs for user attempt sync.
+- [x] Add DTOs for run results.
 
 Verification:
 
-- [ ] Backend compiles.
-- [ ] DTOs do not expose `referenceAnswer`, solution files, hidden tests, or raw evidence by default.
+- [x] Backend compiles.
+- [x] DTOs do not expose `referenceAnswer`, solution files, hidden tests, or raw evidence by default.
+
+Phase 2 notes:
+
+- Added practice DTO skeletons in `LearningDtos.kt`.
+- Added `PracticeDtosTest` to verify the practice response contract does not serialize answer/solution/hidden/raw-evidence fields.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 3: Backend Constraint Constants and Validation Rules
 

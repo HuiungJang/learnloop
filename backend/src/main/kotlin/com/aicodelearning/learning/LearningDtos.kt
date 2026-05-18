@@ -41,6 +41,97 @@ data class ProblemResponse(
     val difficulty: String,
 )
 
+data class PracticeProblemResponse(
+    val id: String,
+    val patternCardId: String,
+    val title: String,
+    val prompt: String,
+    val difficulty: String,
+    val assetRevision: String,
+    val files: List<PracticeFileResponse>,
+    val hints: List<PracticeHintResponse>,
+    val provenance: List<PracticeProvenanceResponse>,
+    val attempt: PracticeAttemptResponse?,
+    val latestRun: PracticeRunResultResponse?,
+)
+
+data class PracticeFileResponse(
+    val path: String,
+    val language: String,
+    val role: String,
+    val content: String,
+    val readOnly: Boolean,
+    val sortOrder: Int,
+)
+
+data class PracticeHintResponse(
+    val id: String,
+    val revealOrder: Int,
+    val label: String,
+    val content: String?,
+    val revealed: Boolean,
+)
+
+data class PracticeProvenanceResponse(
+    val sourceType: String,
+    val sourceLabel: String,
+    val redactedExcerpt: String,
+    val evidenceItemId: String?,
+)
+
+data class PracticeAttemptSyncRequest(
+    val clientAttemptId: String,
+    val assetRevision: String,
+    val language: String,
+    val intent: String,
+    val files: List<PracticeAttemptFileRequest>,
+    val localUpdatedAt: Instant,
+)
+
+data class PracticeAttemptFileRequest(
+    val path: String,
+    val content: String,
+)
+
+data class PracticeAttemptResponse(
+    val id: String,
+    val problemId: String,
+    val clientAttemptId: String,
+    val assetRevision: String,
+    val language: String,
+    val status: String,
+    val files: List<PracticeAttemptFileResponse>,
+    val score: Int?,
+    val resultStatus: String?,
+    val updatedAt: Instant,
+    val submittedAt: Instant?,
+)
+
+data class PracticeAttemptFileResponse(
+    val path: String,
+    val content: String,
+)
+
+data class PracticeRunResultResponse(
+    val id: String,
+    val status: String,
+    val runnerKind: String,
+    val durationMs: Long?,
+    val tests: List<PracticeRunTestResponse>,
+    val stdoutExcerpt: String?,
+    val stderrExcerpt: String?,
+    val failedDiff: String?,
+    val failureReason: String?,
+    val createdAt: Instant,
+)
+
+data class PracticeRunTestResponse(
+    val name: String,
+    val status: String,
+    val message: String?,
+    val durationMs: Long?,
+)
+
 data class ReviewTaskResponse(
     val id: String,
     val patternCardId: String,
