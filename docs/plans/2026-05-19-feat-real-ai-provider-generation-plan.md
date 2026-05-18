@@ -49,14 +49,14 @@ Out of scope:
 
 ### Phase 1: Credential Storage Foundation
 
-- [ ] Add encrypted credential storage fields returned by `sealCredential`.
-- [ ] Add `openCredential` helper for server-side provider calls.
-- [ ] Preserve API redaction for all credential fields.
-- [ ] Add tests proving raw credentials are absent from API responses and raw DB JSON.
+- [x] Add encrypted credential storage fields returned by `sealCredential`.
+- [x] Add `openCredential` helper for server-side provider calls.
+- [x] Preserve API redaction for all credential fields.
+- [x] Add tests proving raw credentials are absent from API responses and raw DB JSON.
 
 Verification:
 
-- [ ] `npm test`
+- [x] `./scripts/test.sh`
 
 ### Phase 2: Provider Configuration Validation
 

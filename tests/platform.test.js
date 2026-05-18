@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { openCredential } from "../src/security.js";
 import { createPublishedPattern, request, withServer } from "./helpers.js";
 
 test("core workflow publishes a generated pattern and accepts learner submissions", async () => {
@@ -107,7 +108,11 @@ test("provider credentials are stored as references and redacted from API respon
 
     const rawProvider = store.db.aiProviders.find((provider) => provider.provider === "openai");
     assert.ok(rawProvider.credentialRef.startsWith("vault://"));
+    assert.equal(rawProvider.credentialAlgorithm, "aes-256-gcm");
+    assert.ok(rawProvider.credentialCiphertext);
+    assert.equal(openCredential(rawProvider), secret);
     assert.equal(JSON.stringify(rawProvider).includes(secret), false);
+    assert.equal(JSON.stringify(result.json).includes(rawProvider.credentialCiphertext), false);
   });
 });
 
