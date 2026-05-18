@@ -15,8 +15,18 @@ class PracticeController(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @PathVariable id: String,
     ): PracticeProblemDetailResponse = PracticeProblemDetailResponse(problem = practiceService.detail(currentUser, id))
+
+    @GetMapping("/api/problems/{id}/attempts/me")
+    fun currentUserAttempts(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable id: String,
+    ): PracticeAttemptListResponse = PracticeAttemptListResponse(attempts = practiceService.currentUserAttempts(currentUser, id))
 }
 
 data class PracticeProblemDetailResponse(
     val problem: PracticeProblemResponse,
+)
+
+data class PracticeAttemptListResponse(
+    val attempts: List<PracticeAttemptResponse>,
 )

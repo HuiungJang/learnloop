@@ -493,14 +493,22 @@ Phase 12 notes:
 
 ### Phase 13: Current User Attempt API
 
-- [ ] Implement `GET /api/problems/{id}/attempts/me`.
-- [ ] Return only the current user's draft/submitted attempts.
-- [ ] Include sync state inputs needed by the frontend.
+- [x] Implement `GET /api/problems/{id}/attempts/me`.
+- [x] Return only the current user's draft/submitted attempts.
+- [x] Include sync state inputs needed by the frontend.
 
 Verification:
 
-- [ ] User A cannot read User B attempts.
-- [ ] Empty attempts return a stable empty response.
+- [x] User A cannot read User B attempts.
+- [x] Empty attempts return a stable empty response.
+
+Phase 13 notes:
+
+- Added `GET /api/problems/{id}/attempts/me`.
+- Attempts are queried by `currentUser.id`; another user's rows for the same canonical problem are not returned.
+- Response includes `clientAttemptId`, `assetRevision`, language, status, timestamps, result status, and saved file snapshots for local sync hydration.
+- Empty attempt lists return `{ "attempts": [] }`.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 14: Local Sync API
 

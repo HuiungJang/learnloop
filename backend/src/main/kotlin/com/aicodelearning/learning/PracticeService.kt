@@ -14,6 +14,8 @@ class PracticeService(
     private val problemFileRepository: ProblemFileRepository,
     private val problemHintRepository: ProblemHintRepository,
     private val problemProvenanceLinkRepository: ProblemProvenanceLinkRepository,
+    private val submissionRepository: SubmissionRepository,
+    private val submissionFileRepository: SubmissionFileRepository,
     private val authorizationService: AuthorizationService,
 ) {
     @Transactional(readOnly = true)
@@ -74,6 +76,53 @@ class PracticeService(
         )
     }
 
+    @Transactional(readOnly = true)
+    fun currentUserAttempts(
+        currentUser: CurrentUser,
+        problemId: String,
+    ): List<PracticeAttemptResponse> {
+        val problem = problemRepository.findById(problemId).orElseThrow { NotFoundException("Problem not found") }
+        val card = patternCardRepository.findById(problem.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
+        authorizePracticeRead(currentUser, card)
+
+        val canonicalFiles = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
+        val currentAssetRevision = assetRevision(
+            problem = problem,
+            files = canonicalFiles,
+            hints = problemHintRepository.findByProblemIdOrderByRevealOrderAsc(problem.id),
+            provenance = problemProvenanceLinkRepository.findByProblemIdOrderBySortOrderAsc(problem.id),
+        )
+        val attempts = submissionRepository.findByUserIdAndProblemIdInOrderByUpdatedAtDesc(currentUser.id, listOf(problem.id))
+        val filesBySubmission =
+            if (attempts.isEmpty()) {
+                emptyMap()
+            } else {
+                submissionFileRepository
+                    .findBySubmissionIdInOrderBySubmissionIdAscPathAsc(attempts.map { it.id })
+                    .groupBy { it.submissionId }
+            }
+        val defaultLanguage = canonicalFiles.firstOrNull { it.fileRole == PracticeContract.FILE_ROLE_STARTER }?.language ?: PracticeContract.LANGUAGE_TYPESCRIPT
+
+        return attempts.map {
+            PracticeAttemptResponse(
+                id = it.id,
+                problemId = it.problemId,
+                clientAttemptId = it.clientAttemptId ?: it.id,
+                assetRevision = it.assetRevision ?: currentAssetRevision,
+                language = it.language ?: defaultLanguage,
+                status = it.attemptStatus,
+                files =
+                    filesBySubmission
+                        .getValueOrEmpty(it.id)
+                        .map { file -> PracticeAttemptFileResponse(path = file.path, content = file.content) },
+                score = it.score,
+                resultStatus = it.resultStatus,
+                updatedAt = it.updatedAt,
+                submittedAt = it.submittedAt,
+            )
+        }
+    }
+
     private fun authorizePracticeRead(
         currentUser: CurrentUser,
         card: PatternCardEntity,
@@ -112,3 +161,5 @@ class PracticeService(
         val visibleFileRoles = setOf(PracticeContract.FILE_ROLE_STARTER, PracticeContract.FILE_ROLE_SUPPORT)
     }
 }
+
+private fun <T> Map<String, List<T>>.getValueOrEmpty(key: String): List<T> = this[key] ?: emptyList()

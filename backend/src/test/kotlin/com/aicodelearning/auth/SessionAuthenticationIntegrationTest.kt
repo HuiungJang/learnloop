@@ -11,6 +11,10 @@ import com.aicodelearning.learning.ProblemEntity
 import com.aicodelearning.learning.ProblemRepository
 import com.aicodelearning.learning.ReviewTaskEntity
 import com.aicodelearning.learning.ReviewTaskRepository
+import com.aicodelearning.learning.SubmissionEntity
+import com.aicodelearning.learning.SubmissionFileEntity
+import com.aicodelearning.learning.SubmissionFileRepository
+import com.aicodelearning.learning.SubmissionRepository
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.organization.ProjectEntity
 import com.aicodelearning.organization.ProjectRepository
@@ -87,6 +91,12 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var reviewTaskRepository: ReviewTaskRepository
+
+    @Autowired
+    private lateinit var submissionRepository: SubmissionRepository
+
+    @Autowired
+    private lateinit var submissionFileRepository: SubmissionFileRepository
 
     @LocalServerPort
     private var port: Int = 0
@@ -533,6 +543,62 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `current user attempts returns stable empty response`() {
+        val problemId = saveAccessiblePracticeProblem("Empty practice attempts")
+        val learner = login("learner@example.com")
+
+        val response = getJson("/api/problems/$problemId/attempts/me", learner.token)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(0, json(response)["attempts"].size())
+    }
+
+    @Test
+    fun `current user attempts only returns the caller attempts`() {
+        val problemId = saveAccessiblePracticeProblem("Practice attempt isolation")
+        val now = Instant.now()
+        val contributorSubmissionId = "submission_contributor_${System.nanoTime()}"
+        submissionRepository.save(
+            SubmissionEntity(
+                id = contributorSubmissionId,
+                problemId = problemId,
+                userId = "u-contributor",
+                textAnswer = "",
+                resultStatus = "submitted",
+                createdAt = now,
+                clientAttemptId = "attempt-contributor",
+                assetRevision = "rev-contributor",
+                language = "typescript",
+                attemptStatus = "draft",
+                updatedAt = now,
+            ),
+        )
+        submissionFileRepository.save(
+            SubmissionFileEntity(
+                id = "submission_file_contributor_${System.nanoTime()}",
+                submissionId = contributorSubmissionId,
+                path = "src/answer.ts",
+                content = "export const answer = 1",
+                createdAt = now,
+            ),
+        )
+
+        val learner = login("learner@example.com")
+        val learnerResponse = getJson("/api/problems/$problemId/attempts/me", learner.token)
+        assertEquals(HttpStatus.OK, learnerResponse.statusCode)
+        assertEquals(0, json(learnerResponse)["attempts"].size())
+
+        val contributor = login("contributor@example.com")
+        val contributorResponse = getJson("/api/problems/$problemId/attempts/me", contributor.token)
+        val attempt = json(contributorResponse)["attempts"][0]
+        assertEquals(HttpStatus.OK, contributorResponse.statusCode)
+        assertEquals("attempt-contributor", attempt["clientAttemptId"].asText())
+        assertEquals("rev-contributor", attempt["assetRevision"].asText())
+        assertEquals("draft", attempt["status"].asText())
+        assertEquals(listOf("src/answer.ts"), attempt["files"].map { it["path"].asText() })
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -845,6 +911,39 @@ class SessionAuthenticationIntegrationTest {
             ),
         )
         return taskId
+    }
+
+    private fun saveAccessiblePracticeProblem(title: String): String {
+        val cardId = "card_accessible_${System.nanoTime()}"
+        val problemId = "problem_accessible_${System.nanoTime()}"
+        patternCardRepository.save(
+            PatternCardEntity(
+                id = cardId,
+                organizationId = "org-demo",
+                teamId = "team-platform",
+                projectId = "project-learning",
+                generationRunId = null,
+                createdByUserId = "u-contributor",
+                title = title,
+                summary = "A scoped card visible to platform learners.",
+                visibility = "organization",
+                publicationStatus = "published",
+                createdAt = Instant.now(),
+                publishedAt = Instant.now(),
+            ),
+        )
+        problemRepository.save(
+            ProblemEntity(
+                id = problemId,
+                patternCardId = cardId,
+                problemType = "implementation",
+                prompt = "A practice problem visible to platform learners.",
+                referenceAnswer = "Accessible answer",
+                difficulty = "easy",
+                createdAt = Instant.now(),
+            ),
+        )
+        return problemId
     }
 
     private fun saveScopedCard(
