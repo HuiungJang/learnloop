@@ -23,6 +23,7 @@
     "status:app": "./scripts/status.sh",
     "package:release": "./scripts/package-release.sh",
     "e2e:installed": "./scripts/e2e-installed.sh",
-    "perf:measure": "./scripts/perf-measure.sh"
+    "perf:measure": "./scripts/perf-measure.sh",
+    "runner:typescript:smoke": "./scripts/runner-typescript-smoke.sh"
   }
 }

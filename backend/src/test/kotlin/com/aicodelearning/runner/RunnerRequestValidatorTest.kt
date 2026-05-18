@@ -23,7 +23,7 @@ class RunnerRequestValidatorTest {
         val validated = validator.validate(request)
 
         assertTrue(validated.runId.startsWith("run_"))
-        assertEquals("typescript-vitest", validated.harness.id)
+        assertEquals("typescript-node-test", validated.harness.id)
         assertEquals("src/solution.ts", validated.files.single().path)
     }
 
@@ -101,7 +101,7 @@ class RunnerRequestValidatorTest {
 
     private fun runnerRequest(
         language: String = PracticeContract.LANGUAGE_TYPESCRIPT,
-        testHarnessId: String = "typescript-vitest",
+        testHarnessId: String = "typescript-node-test",
         timeoutMs: Long = 5_000,
         files: List<RunnerRunFile> = listOf(RunnerRunFile(path = "src/solution.ts", content = "export const answer = 1")),
         image: String? = null,

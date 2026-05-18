@@ -16,7 +16,7 @@ class DockerRunCommandBuilderTest {
             validator.validate(
                 RunnerRunRequest(
                     language = PracticeContract.LANGUAGE_TYPESCRIPT,
-                    testHarnessId = "typescript-vitest",
+                    testHarnessId = "typescript-node-test",
                     timeoutMs = 5_000,
                     files = listOf(RunnerRunFile(path = "src/solution.ts", content = "export const answer = 1")),
                 ),
@@ -36,6 +36,7 @@ class DockerRunCommandBuilderTest {
         assertTrue(plan.command.containsAll(listOf("--workdir", "/workspace")))
         assertTrue(plan.command.containsAll(listOf("--volume", "/tmp/learnloop-run:/workspace:rw")))
         assertTrue(plan.command.contains("learnloop-runner-typescript:latest"))
+        assertTrue(plan.command.containsAll(listOf("node", "/opt/learnloop-runner/run-tests.mjs")))
     }
 
     @Test
@@ -44,7 +45,7 @@ class DockerRunCommandBuilderTest {
             validator.validate(
                 RunnerRunRequest(
                     language = PracticeContract.LANGUAGE_TYPESCRIPT,
-                    testHarnessId = "typescript-vitest",
+                    testHarnessId = "typescript-node-test",
                     timeoutMs = 7_000,
                     files = listOf(RunnerRunFile(path = "src/solution.ts", content = "export const answer = 1")),
                 ),

@@ -972,15 +972,23 @@ Phase 36 notes:
 
 ### Phase 37: TypeScript Runner Image
 
-- [ ] Add TypeScript runner image.
-- [ ] Include Node and TypeScript execution dependencies offline.
-- [ ] Prefer Node built-in test runner for MVP.
-- [ ] Keep package install disabled during run.
+- [x] Add TypeScript runner image.
+- [x] Include Node and TypeScript execution dependencies offline.
+- [x] Prefer Node built-in test runner for MVP.
+- [x] Keep package install disabled during run.
 
 Verification:
 
-- [ ] TypeScript runner image builds.
-- [ ] Tiny TypeScript passing and failing exercises return normalized results.
+- [x] TypeScript runner image builds.
+- [x] Tiny TypeScript passing and failing exercises return normalized results.
+
+Phase 37 notes:
+
+- Added `runner/typescript` image with Node 22, TypeScript 5.9, and Node type definitions baked into the image.
+- Changed the TypeScript harness to `typescript-node-test`, using `node /opt/learnloop-runner/run-tests.mjs` instead of package-manager-driven commands.
+- Added `./scripts/runner-typescript-smoke.sh` and `npm run runner:typescript:smoke` for image build plus passing/failing TypeScript exercises.
+- `./scripts/runner-typescript-smoke.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 38: TypeScript Run API Integration
 

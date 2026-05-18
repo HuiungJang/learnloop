@@ -22,12 +22,12 @@ class RunnerRegistry {
     private val harnesses =
         listOf(
             RunnerHarness(
-                id = "typescript-vitest",
+                id = "typescript-node-test",
                 language = PracticeContract.LANGUAGE_TYPESCRIPT,
                 image = "learnloop-runner-typescript:latest",
-                command = listOf("npm", "test", "--", "--run"),
+                command = listOf("node", "/opt/learnloop-runner/run-tests.mjs"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
-                files = harnessFiles("typescript-vitest"),
+                files = harnessFiles("typescript-node-test"),
             ),
             RunnerHarness(
                 id = "kotlin-junit",

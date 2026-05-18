@@ -79,7 +79,7 @@ class RunnerWorkspaceServiceTest {
         validator.validate(
             RunnerRunRequest(
                 language = PracticeContract.LANGUAGE_TYPESCRIPT,
-                testHarnessId = "typescript-vitest",
+                testHarnessId = "typescript-node-test",
                 timeoutMs = 5_000,
                 files = files,
             ),
