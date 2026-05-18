@@ -106,6 +106,18 @@ export function formatTag(input: string): string {
     .replace(/^-|-$/g, "")
 }
 `.trimStart());
+  const [runResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/problems/") && response.url().includes("/runs") && response.status() === 200),
+    page.keyboard.press(`${shortcut}+Shift+Enter`)
+  ]);
+  const runPayload = await runResponse.json();
+  assert.ok(["passed", "runner_unavailable"].includes(runPayload.run.status));
+  if (runPayload.run.status === "runner_unavailable") {
+    await page.getByText(/Runner unavailable|Local runner is unavailable/i).first().waitFor({ timeout: 20_000 });
+  } else {
+    await page.getByText(/Run passed|Latest run passed/i).first().waitFor({ timeout: 20_000 });
+  }
+
   await Promise.all([
     page.waitForResponse((response) => response.url().includes("/attempts/local-sync") && response.status() === 200),
     page.keyboard.press(`${shortcut}+S`)

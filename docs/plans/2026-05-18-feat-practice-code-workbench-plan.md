@@ -1165,14 +1165,25 @@ Phase 45 notes:
 
 ### Phase 46: Installed-App E2E for Sandbox Flow
 
-- [ ] Add E2E path for TypeScript run when Docker is available.
-- [ ] Add smoke checks for Java and Kotlin runners.
-- [ ] Add Docker-unavailable path verifying run is disabled but edit/save/submit draft remain usable.
+- [x] Add E2E path for TypeScript run when Docker is available.
+- [x] Add smoke checks for Java and Kotlin runners.
+- [x] Add Docker-unavailable path verifying run is disabled but edit/save/submit draft remain usable.
 
 Verification:
 
-- [ ] Docker-available sandbox E2E passes.
-- [ ] Docker-unavailable test path passes or is documented with environment requirements.
+- [x] Docker-available sandbox E2E passes.
+- [x] Docker-unavailable test path passes or is documented with environment requirements.
+
+Phase 46 notes:
+
+- Extended installed-app E2E to press the Monaco run shortcut before saving/submitting. The script accepts `passed` when Docker is available and verifies `runner_unavailable` when the installed backend cannot access Docker.
+- Confirmed the Docker-unavailable installed path still allows edit, draft sync, submission, answer diff, and progress refresh.
+- Re-ran Docker-backed runner smoke checks for TypeScript, Java, and Kotlin on the host.
+- `. ./scripts/env.sh && "$NODE_BIN" --check scripts/e2e-installed.mjs`: passed.
+- `APP_URL=http://localhost:18080 ./scripts/e2e-installed.sh`: passed.
+- `./scripts/runner-typescript-smoke.sh`: passed.
+- `./scripts/runner-java-smoke.sh`: passed.
+- `./scripts/runner-kotlin-smoke.sh`: passed.
 
 ### Phase 47: Multi-User Isolation E2E
 
