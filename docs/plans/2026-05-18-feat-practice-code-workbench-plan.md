@@ -1247,14 +1247,23 @@ Phase 49 notes:
 
 ### Phase 50: Automated Secret and Asset Exposure Checks
 
-- [ ] Check production frontend assets for local AI API keys, runner tokens, hidden tests, raw provenance, and internal prompt markers.
-- [ ] Check install/package output for generated `.env` values and test secrets.
-- [ ] Ensure CSP remains compatible with Monaco workers.
+- [x] Check production frontend assets for local AI API keys, runner tokens, hidden tests, raw provenance, and internal prompt markers.
+- [x] Check install/package output for generated `.env` values and test secrets.
+- [x] Ensure CSP remains compatible with Monaco workers.
 
 Verification:
 
-- [ ] Asset exposure checks pass.
-- [ ] Frontend production build still passes.
+- [x] Asset exposure checks pass.
+- [x] Frontend production build still passes.
+
+Phase 50 notes:
+
+- Added `./scripts/check-asset-exposure.sh` and `npm run assets:security` to scan production frontend assets, release source, and release tarballs for internal prompt markers, local AI test keys, runner/database/demo secrets, hidden test strings, raw provenance markers, Docker socket paths, generated `.env` values, and test/source-only files.
+- Added a frontend nginx CSP compatible with Monaco workers: `script-src 'self'`, `worker-src 'self' blob:`, `style-src 'self' 'unsafe-inline'`, and `connect-src 'self'`.
+- `./scripts/frontend-build.sh`: passed with existing Monaco chunk-size warnings.
+- `./scripts/check-asset-exposure.sh`: passed.
+- Rebuilt the installed web container on `http://localhost:18080` and verified the CSP header is present.
+- Playwright opened the installed workbench and confirmed Monaco loaded `ts.worker` and `editor.worker` without CSP console errors.
 
 ### Phase 51: Performance Verification
 

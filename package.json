@@ -22,6 +22,7 @@
     "stop:app": "./scripts/stop.sh",
     "status:app": "./scripts/status.sh",
     "package:release": "./scripts/package-release.sh",
+    "assets:security": "./scripts/check-asset-exposure.sh",
     "e2e:installed": "./scripts/e2e-installed.sh",
     "perf:measure": "./scripts/perf-measure.sh",
     "runner:typescript:smoke": "./scripts/runner-typescript-smoke.sh",
