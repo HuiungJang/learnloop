@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -676,6 +677,74 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `submission stores multi file snapshot and duplicate submit returns existing result`() {
+        val problemId = saveAccessiblePracticeProblem("Multi-file submission")
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+
+        val first =
+            postJson(
+                "/api/problems/$problemId/submissions",
+                learner.token,
+                fileSubmissionBody(
+                    clientAttemptId = "attempt-submit",
+                    assetRevision = assetRevision,
+                    content = "export const value = 3",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, first.statusCode)
+        val submissionId = json(first)["submission"]["id"].asText()
+        assertFalse(json(first)["patternCard"]["problems"][0]["referenceAnswer"].isNull)
+
+        val duplicate =
+            postJson(
+                "/api/problems/$problemId/submissions",
+                learner.token,
+                fileSubmissionBody(
+                    clientAttemptId = "attempt-submit",
+                    assetRevision = assetRevision,
+                    content = "export const value = 4",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, duplicate.statusCode)
+        assertEquals(submissionId, json(duplicate)["submission"]["id"].asText())
+
+        val attempts = getJson("/api/problems/$problemId/attempts/me", learner.token)
+        val attempt = json(attempts)["attempts"][0]
+        assertEquals("submitted", attempt["status"].asText())
+        assertEquals("export const value = 3", attempt["files"][0]["content"].asText())
+    }
+
+    @Test
+    fun `multiple users can submit without mutating canonical problem`() {
+        val problemId = saveAccessiblePracticeProblem("User scoped submissions")
+        val learner = login("learner@example.com")
+        val contributor = login("contributor@example.com")
+        val detail = getJson("/api/problems/$problemId/practice", learner.token)
+        val assetRevision = json(detail)["problem"]["assetRevision"].asText()
+        val canonicalContent = json(detail)["problem"]["files"][0]["content"].asText()
+
+        val learnerSubmission =
+            postJson(
+                "/api/problems/$problemId/submissions",
+                learner.token,
+                fileSubmissionBody("shared-client-attempt", assetRevision, "export const value = 10"),
+            )
+        val contributorSubmission =
+            postJson(
+                "/api/problems/$problemId/submissions",
+                contributor.token,
+                fileSubmissionBody("shared-client-attempt", assetRevision, "export const value = 20"),
+            )
+
+        assertEquals(HttpStatus.CREATED, learnerSubmission.statusCode)
+        assertEquals(HttpStatus.CREATED, contributorSubmission.statusCode)
+        assertNotEquals(json(learnerSubmission)["submission"]["id"].asText(), json(contributorSubmission)["submission"]["id"].asText())
+        val refreshedDetail = getJson("/api/problems/$problemId/practice", learner.token)
+        assertEquals(canonicalContent, json(refreshedDetail)["problem"]["files"][0]["content"].asText())
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -916,6 +985,20 @@ class SessionAuthenticationIntegrationTest {
     ) = restTemplate.exchange(path, HttpMethod.GET, HttpEntity<Void>(bearerHeaders(token)), String::class.java)
 
     private fun json(response: org.springframework.http.ResponseEntity<String>): JsonNode = objectMapper.readTree(response.body)
+
+    private fun fileSubmissionBody(
+        clientAttemptId: String,
+        assetRevision: String,
+        content: String,
+    ): Map<String, Any?> =
+        mapOf(
+            "textAnswer" to "",
+            "resultStatus" to "submitted",
+            "clientAttemptId" to clientAttemptId,
+            "assetRevision" to assetRevision,
+            "language" to "typescript",
+            "files" to listOf(mapOf("path" to "src/main.ts", "content" to content)),
+        )
 
     private fun headersWithAuthorization(value: String): HttpHeaders =
         HttpHeaders().apply {

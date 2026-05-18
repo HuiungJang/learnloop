@@ -533,17 +533,25 @@ Phase 14 notes:
 
 ### Phase 15: Submission API Upgrade
 
-- [ ] Update `POST /api/problems/{id}/submissions` to store multi-file snapshots.
-- [ ] Make submission idempotent for the same `clientAttemptId`.
-- [ ] Store final submission snapshots immutably after submission.
-- [ ] Update proficiency only after submitted attempts.
-- [ ] Emit audit events without raw large code bodies.
+- [x] Update `POST /api/problems/{id}/submissions` to store multi-file snapshots.
+- [x] Make submission idempotent for the same `clientAttemptId`.
+- [x] Store final submission snapshots immutably after submission.
+- [x] Update proficiency only after submitted attempts.
+- [x] Emit audit events without raw large code bodies.
 
 Verification:
 
-- [ ] User can submit a multi-file answer.
-- [ ] Duplicate submit with the same `clientAttemptId` returns the existing submitted result.
-- [ ] Multiple users can submit to the same problem without mutating canonical content.
+- [x] User can submit a multi-file answer.
+- [x] Duplicate submit with the same `clientAttemptId` returns the existing submitted result.
+- [x] Multiple users can submit to the same problem without mutating canonical content.
+
+Phase 15 notes:
+
+- Upgraded `POST /api/problems/{id}/submissions` to accept optional file snapshots with `clientAttemptId`, `assetRevision`, and language.
+- Duplicate submitted `clientAttemptId` returns the existing submission without replacing saved final files.
+- Existing text-answer submission flow remains supported.
+- Final submissions update proficiency and audit only on the first submitted write.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 16: Frontend API Client Types
 

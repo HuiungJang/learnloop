@@ -1,7 +1,6 @@
 package com.aicodelearning.learning
 
 import com.aicodelearning.auth.CurrentUser
-import com.aicodelearning.auth.sha256Hex
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ConflictException
@@ -41,7 +40,7 @@ class PracticeService(
             title = card.title,
             prompt = problem.prompt,
             difficulty = problem.difficulty,
-            assetRevision = assetRevision(problem, files, hints, provenance),
+            assetRevision = PracticeAssetRevision.compute(problem, files, hints, provenance),
             files =
                 files
                     .filter { it.fileRole in visibleFileRoles }
@@ -192,29 +191,11 @@ class PracticeService(
         authorizationService.requireRole(currentUser, card.organizationId, "reviewer", card.teamId, card.projectId)
     }
 
-    private fun assetRevision(
-        problem: ProblemEntity,
-        files: List<ProblemFileEntity>,
-        hints: List<ProblemHintEntity>,
-        provenance: List<ProblemProvenanceLinkEntity>,
-    ): String =
-        "rev-" +
-            sha256Hex(
-                buildString {
-                    append(problem.id).append('\n')
-                    append(problem.prompt).append('\n')
-                    append(problem.difficulty).append('\n')
-                    files.forEach { append(it.path).append('|').append(it.fileRole).append('|').append(it.content).append('\n') }
-                    hints.forEach { append(it.id).append('|').append(it.revealOrder).append('|').append(it.content).append('\n') }
-                    provenance.forEach { append(it.id).append('|').append(it.redactedExcerpt).append('\n') }
-                },
-            ).take(16)
-
     private fun currentAssetRevision(
         problem: ProblemEntity,
         files: List<ProblemFileEntity> = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id),
     ): String =
-        assetRevision(
+        PracticeAssetRevision.compute(
             problem = problem,
             files = files,
             hints = problemHintRepository.findByProblemIdOrderByRevealOrderAsc(problem.id),
