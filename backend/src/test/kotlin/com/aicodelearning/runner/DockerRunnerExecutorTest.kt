@@ -142,6 +142,85 @@ class DockerRunnerExecutorTest {
         assertTrue(result.stderrExcerpt.toByteArray(Charsets.UTF_8).size <= PracticeContract.MAX_STDIO_EXCERPT_BYTES)
     }
 
+    @Test
+    fun `executes tiny Kotlin exercise when runner image is available`() {
+        assumeTrue(runnerImageAvailable("learnloop-runner-kotlin:latest"), "learnloop-runner-kotlin:latest is not built")
+
+        val request =
+            validator.validate(
+                RunnerRunRequest(
+                    language = PracticeContract.LANGUAGE_KOTLIN,
+                    testHarnessId = "kotlin-junit",
+                    timeoutMs = 5_000,
+                    files =
+                        listOf(
+                            RunnerRunFile(
+                                path = "src/main/kotlin/learnloop/Solution.kt",
+                                content =
+                                    """
+                                    package learnloop
+
+                                    object Solution {
+                                        fun add(left: Int, right: Int): Int = left + right
+                                    }
+                                    """.trimIndent(),
+                            ),
+                            RunnerRunFile(
+                                path = "src/test/kotlin/learnloop/SolutionTest.kt",
+                                content =
+                                    """
+                                    package learnloop
+
+                                    import org.junit.jupiter.api.Assertions.assertEquals
+                                    import org.junit.jupiter.api.Test
+
+                                    class SolutionTest {
+                                        @Test
+                                        fun addsNumbers() {
+                                            assertEquals(3, Solution.add(1, 2))
+                                        }
+                                    }
+                                    """.trimIndent(),
+                            ),
+                        ),
+                ),
+            )
+
+        val result = executor.run(request)
+
+        assertEquals(PracticeContract.RUN_STATUS_PASSED, result.status)
+    }
+
+    @Test
+    fun `normalizes Kotlin compile errors when runner image is available`() {
+        assumeTrue(runnerImageAvailable("learnloop-runner-kotlin:latest"), "learnloop-runner-kotlin:latest is not built")
+
+        val request =
+            validator.validate(
+                RunnerRunRequest(
+                    language = PracticeContract.LANGUAGE_KOTLIN,
+                    testHarnessId = "kotlin-junit",
+                    timeoutMs = 5_000,
+                    files =
+                        listOf(
+                            RunnerRunFile(
+                                path = "src/main/kotlin/learnloop/Solution.kt",
+                                content = "package learnloop\nobject Solution {",
+                            ),
+                            RunnerRunFile(
+                                path = "src/test/kotlin/learnloop/SolutionTest.kt",
+                                content = "package learnloop\nclass SolutionTest",
+                            ),
+                        ),
+                ),
+            )
+
+        val result = executor.run(request)
+
+        assertEquals(PracticeContract.RUN_STATUS_COMPILE_ERROR, result.status)
+        assertTrue(result.stderrExcerpt.toByteArray(Charsets.UTF_8).size <= PracticeContract.MAX_STDIO_EXCERPT_BYTES)
+    }
+
     private fun runnerImageAvailable(image: String): Boolean {
         val process =
             try {

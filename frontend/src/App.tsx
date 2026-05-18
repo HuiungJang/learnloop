@@ -1097,7 +1097,7 @@ export function App() {
     } else if (status === "failed") {
       summary = "Latest run failed.";
     } else if (status === "compile_error") {
-      summary = "TypeScript compilation failed.";
+      summary = "Compilation failed.";
     } else if (status === "timeout") {
       summary = "Latest run timed out.";
     } else if (status === "resource_limited") {

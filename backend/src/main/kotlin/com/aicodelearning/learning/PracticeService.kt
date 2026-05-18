@@ -351,6 +351,7 @@ class PracticeService(
         when (language) {
             PracticeContract.LANGUAGE_TYPESCRIPT -> "typescript-node-test"
             PracticeContract.LANGUAGE_JAVA -> "java-junit"
+            PracticeContract.LANGUAGE_KOTLIN -> "kotlin-junit"
             else -> throw BadRequestException("runner language is not available yet")
         }
 
@@ -360,6 +361,7 @@ class PracticeService(
     ): List<PracticeRunTestResponse> =
         when (language) {
             PracticeContract.LANGUAGE_JAVA -> parseJunitTests(stdout)
+            PracticeContract.LANGUAGE_KOTLIN -> parseJunitTests(stdout)
             else -> parseTapTests(stdout)
         }
 

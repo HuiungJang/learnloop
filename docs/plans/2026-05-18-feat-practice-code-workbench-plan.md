@@ -1078,14 +1078,24 @@ Phase 41 notes:
 
 ### Phase 42: Kotlin Run API Integration
 
-- [ ] Wire Kotlin problems to the runner registry.
-- [ ] Persist Kotlin run results.
-- [ ] Show Kotlin results in frontend feedback panel.
+- [x] Wire Kotlin problems to the runner registry.
+- [x] Persist Kotlin run results.
+- [x] Show Kotlin results in frontend feedback panel.
 
 Verification:
 
-- [ ] Backend integration test runs a Kotlin exercise.
-- [ ] Kotlin compile errors are clear and bounded.
+- [x] Backend integration test runs a Kotlin exercise.
+- [x] Kotlin compile errors are clear and bounded.
+
+Phase 42 notes:
+
+- Mapped Kotlin practice runs to the `kotlin-junit` harness and reused the JUnit result parser for Kotlin test names/statuses.
+- Added API integration coverage for Kotlin run persistence and bounded compile-error responses.
+- Added Docker-backed Kotlin pass and compile-error coverage when `learnloop-runner-kotlin:latest` is available.
+- Removed the TypeScript-specific compile failure label from the frontend feedback panel so Kotlin/Java compile errors render correctly.
+- `./scripts/runner-kotlin-smoke.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-typecheck.sh`: passed.
 
 ### Phase 43: Recommendation Refresh After Submission
 

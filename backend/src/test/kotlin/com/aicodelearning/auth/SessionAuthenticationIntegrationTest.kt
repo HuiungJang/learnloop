@@ -901,6 +901,82 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `practice run stores Kotlin runner result`() {
+        val problemId = saveAccessiblePracticeProblem("Runnable Kotlin practice")
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_kotlin_run_test_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/test/kotlin/learnloop/SolutionTest.kt",
+                language = "kotlin",
+                fileRole = "test",
+                content =
+                    """
+                    package learnloop
+
+                    import org.junit.jupiter.api.Assertions.assertEquals
+                    import org.junit.jupiter.api.Test
+
+                    class SolutionTest {
+                        @Test
+                        fun addsNumbers() {
+                            assertEquals(3, Solution.add(1, 2))
+                        }
+                    }
+                    """.trimIndent(),
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = Instant.now(),
+            ),
+        )
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+        fakeRunnerExecutor.reset()
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/runs",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-kotlin-run",
+                    "assetRevision" to assetRevision,
+                    "language" to "kotlin",
+                    "timeoutMs" to 5_000,
+                    "files" to
+                        listOf(
+                            mapOf(
+                                "path" to "src/main/kotlin/learnloop/Solution.kt",
+                                "content" to
+                                    """
+                                    package learnloop
+
+                                    object Solution {
+                                        fun add(left: Int, right: Int): Int = left + right
+                                    }
+                                    """.trimIndent(),
+                            ),
+                        ),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val run = json(response)["run"]
+        assertEquals("passed", run["status"].asText())
+        assertEquals("kotlin-junit", run["runnerKind"].asText())
+        assertEquals("addsNumbers()", run["tests"][0]["name"].asText())
+        assertEquals("passed", run["tests"][0]["status"].asText())
+
+        val saved = sandboxRunResultRepository.findFirstByUserIdAndProblemIdOrderByCreatedAtDesc("u-learner", problemId)
+        assertEquals(run["id"].asText(), saved?.id)
+        val runnerRequest = fakeRunnerExecutor.requests.single()
+        assertEquals("kotlin-junit", runnerRequest.harness.id)
+        assertEquals(
+            listOf("src/main/kotlin/learnloop/Solution.kt", "src/test/kotlin/learnloop/SolutionTest.kt"),
+            runnerRequest.files.map { it.path }.sorted(),
+        )
+    }
+
+    @Test
     fun `practice run returns bounded Java compile errors`() {
         val problemId = saveAccessiblePracticeProblem("Broken Java practice")
         problemFileRepository.save(
@@ -948,6 +1024,60 @@ class SessionAuthenticationIntegrationTest {
         assertEquals("compile_error", run["status"].asText())
         assertEquals("Compilation failed.", run["failureReason"].asText())
         assertTrue(run["stderrExcerpt"].asText().length < 240)
+        fakeRunnerExecutor.nextResult = null
+    }
+
+    @Test
+    fun `practice run returns bounded Kotlin compile errors`() {
+        val problemId = saveAccessiblePracticeProblem("Broken Kotlin practice")
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_kotlin_compile_test_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/test/kotlin/learnloop/SolutionTest.kt",
+                language = "kotlin",
+                fileRole = "test",
+                content = "package learnloop\nclass SolutionTest",
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = Instant.now(),
+            ),
+        )
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+        fakeRunnerExecutor.reset()
+        fakeRunnerExecutor.nextResult =
+            NormalizedRunnerResult(
+                status = PracticeContract.RUN_STATUS_COMPILE_ERROR,
+                stdoutExcerpt = "",
+                stderrExcerpt = "src/main/kotlin/learnloop/Solution.kt:3:1: error: expecting '}'",
+                durationMs = 13,
+            )
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/runs",
+                learner.token,
+                mapOf(
+                    "assetRevision" to assetRevision,
+                    "language" to "kotlin",
+                    "files" to
+                        listOf(
+                            mapOf(
+                                "path" to "src/main/kotlin/learnloop/Solution.kt",
+                                "content" to "package learnloop\nobject Solution {",
+                            ),
+                        ),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val run = json(response)["run"]
+        assertEquals("compile_error", run["status"].asText())
+        assertEquals("kotlin-junit", run["runnerKind"].asText())
+        assertEquals("Compilation failed.", run["failureReason"].asText())
+        assertTrue(run["stderrExcerpt"].asText().length < 240)
+        assertEquals("kotlin-junit", fakeRunnerExecutor.requests.single().harness.id)
         fakeRunnerExecutor.nextResult = null
     }
 
@@ -1452,7 +1582,7 @@ class FakeRunnerExecutor : RunnerExecutor {
             nextResult = null
             return it
         }
-        if (request.language == PracticeContract.LANGUAGE_JAVA) {
+        if (request.language == PracticeContract.LANGUAGE_JAVA || request.language == PracticeContract.LANGUAGE_KOTLIN) {
             return NormalizedRunnerResult(
                 status = PracticeContract.RUN_STATUS_PASSED,
                 stdoutExcerpt =
