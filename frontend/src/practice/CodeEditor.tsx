@@ -40,9 +40,6 @@ export function CodeEditor({ files, activePath, theme }: CodeEditorProps) {
   }, []);
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (editor === null) return;
-
     const nextPaths = new Set(files.map((file) => file.path));
     modelsRef.current.forEach((model, path) => {
       if (!nextPaths.has(path)) {
@@ -66,7 +63,11 @@ export function CodeEditor({ files, activePath, theme }: CodeEditorProps) {
         }
       }
     });
+  }, [files]);
 
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor === null) return;
     const selectedPath = activePath ?? files[0]?.path ?? null;
     const selectedModel = selectedPath === null ? null : modelsRef.current.get(selectedPath) ?? null;
     editor.setModel(selectedModel);

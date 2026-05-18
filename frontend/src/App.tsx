@@ -139,6 +139,7 @@ export function App() {
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
+  const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
@@ -551,14 +552,25 @@ export function App() {
                       <p>{activePractice.prompt}</p>
                     </div>
                     <div className="editor-shell-placeholder" aria-label="Practice files">
-                      <div className="file-strip">
+                      <div className="file-strip" role="tablist" aria-label="Practice files">
                         {activePractice.files.map((file) => (
-                          <span key={file.path}>{file.path}</span>
+                          <button
+                            aria-selected={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path}
+                            className={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path ? "file-tab active" : "file-tab"}
+                            key={file.path}
+                            onClick={() => setActivePracticePath(file.path)}
+                            role="tab"
+                            title={file.readOnly ? `${file.path} (read-only)` : file.path}
+                            type="button"
+                          >
+                            <span>{file.path}</span>
+                            {file.readOnly ? <LockKeyhole aria-hidden="true" size={12} /> : null}
+                          </button>
                         ))}
                       </div>
                       <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
                         <PracticeEditorShell
-                          activePath={activePractice.files[0]?.path ?? null}
+                          activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
                           files={activePractice.files}
                           theme="vs-dark"
                         />
@@ -706,9 +718,12 @@ export function App() {
     setPracticeLoading(true);
     setPracticeError("");
     try {
-      setActivePractice(await getPracticeProblem(session.token, problemId));
+      const problem = await getPracticeProblem(session.token, problemId);
+      setActivePractice(problem);
+      setActivePracticePath(problem.files[0]?.path ?? null);
     } catch (error) {
       setActivePractice(null);
+      setActivePracticePath(null);
       setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
     } finally {
       setPracticeLoading(false);
@@ -722,6 +737,7 @@ export function App() {
     setLibraryCards([]);
     setLibraryError("");
     setActivePractice(null);
+    setActivePracticePath(null);
     setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);

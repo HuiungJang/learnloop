@@ -719,15 +719,22 @@ Phase 23 notes:
 
 ### Phase 24: Multi-File Tabs and Read-Only Files
 
-- [ ] Add file tabs with stable dimensions.
-- [ ] Switch active Monaco model on tab change.
-- [ ] Keep read-only files visible but non-editable.
-- [ ] Preserve unsaved edits across tab switches.
+- [x] Add file tabs with stable dimensions.
+- [x] Switch active Monaco model on tab change.
+- [x] Keep read-only files visible but non-editable.
+- [x] Preserve unsaved edits across tab switches.
 
 Verification:
 
-- [ ] E2E or manual check edits two files and confirms both drafts remain.
-- [ ] Read-only file cannot be edited.
+- [x] E2E or manual check edits two files and confirms both drafts remain.
+- [x] Read-only file cannot be edited.
+
+Phase 24 notes:
+
+- Added active file tab state and stable tab buttons with read-only lock indicators.
+- Split Monaco model synchronization from active model switching so tab changes do not overwrite unsaved edits.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke edited TypeScript and Java files, switched between tabs, confirmed both in-memory drafts remained, and confirmed the read-only Markdown file rejected edits.
 
 ### Phase 25: Editor Theme Toggle
 

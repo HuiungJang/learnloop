@@ -682,12 +682,42 @@ h1 {
   background: rgba(252, 251, 248, 0.08);
 }
 
-.file-strip span {
-  flex-shrink: 0;
-  padding: 9px 12px;
-  color: var(--off-white);
+.file-tab {
+  display: inline-flex;
+  flex: 0 0 168px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  color: rgba(252, 251, 248, 0.74);
   background: rgba(252, 251, 248, 0.08);
+  font: inherit;
   font-size: 13px;
+  cursor: pointer;
+}
+
+.file-tab span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tab.active {
+  color: var(--off-white);
+  background: rgba(252, 251, 248, 0.16);
+}
+
+.file-tab:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline-offset: -2px;
+}
+
+.file-tab svg {
+  flex-shrink: 0;
 }
 
 .editor-shell-placeholder pre {
