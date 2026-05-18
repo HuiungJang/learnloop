@@ -30,6 +30,7 @@ class GenerationService(
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
     private val patternReadService: PatternReadService,
+    private val patternRecognitionPromptBuilder: PatternRecognitionPromptBuilder,
 ) {
     @Transactional
     fun run(
@@ -105,7 +106,8 @@ class GenerationService(
                 .mapNotNull { it.contentText }
                 .joinToString("\n")
 
-        val inferred = inferPattern(evidenceText)
+        val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
+        val inferred = inferPattern(recognitionPrompt.evidenceExcerpt)
         val card =
             patternCardRepository.save(
                 PatternCardEntity(

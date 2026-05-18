@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   Bot,
@@ -23,6 +22,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createSession,
   fetchHealth,
+  type HealthResponse,
   listProviders,
   registerUser,
   runLearningDemo,
@@ -35,6 +35,10 @@ import {
 type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
+type HealthState =
+  | { status: "pending" }
+  | { status: "success"; data: HealthResponse }
+  | { status: "error" };
 
 type LocalAiSettings = {
   provider: LocalAiProvider;
@@ -115,21 +119,33 @@ export function App() {
   const [localApiKey, setLocalApiKey] = useState("");
   const [oauthLabel, setOauthLabel] = useState("");
   const [onboardingError, setOnboardingError] = useState("");
+  const [health, setHealth] = useState<HealthState>({ status: "pending" });
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
 
-  const healthQuery = useQuery({
-    queryKey: ["health"],
-    queryFn: fetchHealth
-  });
-
   const healthLabel =
-    healthQuery.status === "success"
-      ? `API ${healthQuery.data.status}`
-      : healthQuery.status === "pending"
+    health.status === "success"
+      ? `API ${health.data.status}`
+      : health.status === "pending"
         ? "API checking"
         : "API offline";
+
+  useEffect(() => {
+    let ignore = false;
+
+    fetchHealth()
+      .then((data) => {
+        if (!ignore) setHealth({ status: "success", data });
+      })
+      .catch(() => {
+        if (!ignore) setHealth({ status: "error" });
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedProvider.oauth && selectedAuthMethod === "oauth") {
@@ -334,7 +350,7 @@ export function App() {
                 <p className="eyebrow">AI-assisted code learning workspace</p>
                 <h1>Generated code becomes reviewed practice.</h1>
               </div>
-              <div className={`health-pill ${healthQuery.status}`}>
+              <div className={`health-pill ${health.status}`}>
                 <CheckCircle2 aria-hidden="true" size={16} />
                 <span>{healthLabel}</span>
               </div>

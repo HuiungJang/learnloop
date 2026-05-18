@@ -6,6 +6,7 @@ import com.aicodelearning.evidence.SourceBundleEntity
 import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.learning.PatternCardEntity
 import com.aicodelearning.learning.PatternCardRepository
+import com.aicodelearning.learning.PatternRecognitionPromptBuilder
 import com.aicodelearning.learning.ReviewTaskEntity
 import com.aicodelearning.learning.ReviewTaskRepository
 import com.aicodelearning.organization.AuthorizationService
@@ -595,6 +596,33 @@ class SessionAuthenticationIntegrationTest {
             )
 
         assertEquals(HttpStatus.FORBIDDEN, generated.statusCode)
+    }
+
+    @Test
+    fun `generation does not expose internal pattern prompt`() {
+        val contributor = login("contributor@example.com")
+        val linkId = createConfirmedAccessibleSourceLink(contributor.token)
+
+        val generated =
+            postJson(
+                "/api/generation/run",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "organization",
+                ),
+            )
+
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        assertFalse(generated.body.orEmpty().contains(PatternRecognitionPromptBuilder.INTERNAL_PROMPT_MARKER))
+
+        val admin = login("admin@example.com")
+        val audit = getJson("/api/audit?organizationId=org-demo", admin.token)
+
+        assertEquals(HttpStatus.OK, audit.statusCode)
+        assertFalse(audit.body.orEmpty().contains(PatternRecognitionPromptBuilder.INTERNAL_PROMPT_MARKER))
     }
 
     @Test

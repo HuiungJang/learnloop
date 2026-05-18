@@ -31,161 +31,161 @@ Implement the next product-hardening slice for the installable AI Code Learning 
 
 ## Acceptance Criteria
 
-- [ ] A backend-only prompt builder exists for AI pattern recognition.
-- [ ] Prompt output includes strict JSON instructions for patterns, tags, implementation guidance, failure modes, generated problems, and review risks.
-- [ ] No endpoint returns the internal prompt.
-- [ ] Audit logs do not contain raw prompt text.
-- [ ] Frontend build artifacts do not contain the internal prompt marker.
-- [ ] Full first-user E2E browser test covers signup, login, local AI setup, local key non-transmission, and workflow start.
-- [ ] Spring API E2E covers ingest, source link confirmation, generation, review approval, library read, learner submission, and progress.
-- [ ] Baseline and final performance measurements are captured in a repeatable script.
-- [ ] At least one representative hot path improves by 30% or more, and any non-improved metric is documented with evidence.
-- [ ] Codex Security scan produces a report and all validated findings are fixed.
-- [ ] `./scripts/check-split.sh` passes.
-- [ ] Installed app is healthy at `http://localhost:8080`.
-- [ ] Release bundle is regenerated.
+- [x] A backend-only prompt builder exists for AI pattern recognition.
+- [x] Prompt output includes strict JSON instructions for patterns, tags, implementation guidance, failure modes, generated problems, and review risks.
+- [x] No endpoint returns the internal prompt.
+- [x] Audit logs do not contain raw prompt text.
+- [x] Frontend build artifacts do not contain the internal prompt marker.
+- [x] Full first-user E2E browser test covers signup, login, local AI setup, local key non-transmission, and workflow start.
+- [x] Spring API E2E covers ingest, source link confirmation, generation, review approval, library read, learner submission, and progress.
+- [x] Baseline and final performance measurements are captured in a repeatable script.
+- [x] At least one representative hot path improves by 30% or more, and any non-improved metric is documented with evidence.
+- [x] Codex Security scan produces a report and all validated findings are fixed.
+- [x] `./scripts/check-split.sh` passes.
+- [x] Installed app is healthy at `http://localhost:8080`.
+- [x] Release bundle is regenerated.
 
 ## Implementation Phases
 
 ### Phase 0: Workflow Documentation and Baseline Setup
 
-- [ ] Create the brainstorm document with chosen defaults and closed open questions.
-- [ ] Create this implementation plan with measurable acceptance criteria.
-- [ ] Commit brainstorm and plan before code changes.
-- [ ] Capture current git commit and working-tree status.
-- [ ] Confirm installed app status with `./scripts/status.sh`.
+- [x] Create the brainstorm document with chosen defaults and closed open questions.
+- [x] Create this implementation plan with measurable acceptance criteria.
+- [x] Commit brainstorm and plan before code changes.
+- [x] Capture current git commit and working-tree status.
+- [x] Confirm installed app status with `./scripts/status.sh`.
 
 ### Phase 1: Current-State Performance Baseline
 
-- [ ] Measure current installed-app API workflow runtime.
-- [ ] Measure current library list response runtime after multiple published cards exist.
-- [ ] Measure current pattern detail response runtime.
-- [ ] Measure current frontend production JS/CSS asset size from `frontend/dist`.
-- [ ] Record baseline command and raw numbers in the work log.
-- [ ] Avoid changing production code before this baseline is captured.
+- [x] Measure current installed-app API workflow runtime.
+- [x] Measure current library list response runtime after multiple published cards exist.
+- [x] Measure current pattern detail response runtime.
+- [x] Measure current frontend production JS/CSS asset size from `frontend/dist`.
+- [x] Record baseline command and raw numbers in the work log.
+- [x] Avoid changing production code before this baseline is captured.
 
 ### Phase 2: Hidden Prompt Contract Design
 
-- [ ] Define prompt schema version and internal prompt marker.
-- [ ] Define evidence input shape for prompt construction.
-- [ ] Define model output JSON contract:
-  - [ ] pattern title
-  - [ ] summary
-  - [ ] confidence
-  - [ ] tags
-  - [ ] evidence references
-  - [ ] language-agnostic explanation
-  - [ ] implementation guidance
-  - [ ] common failure modes
-  - [ ] generated problems
-  - [ ] review risks
-- [ ] Add prompt-injection defensive instructions that treat evidence as untrusted data.
-- [ ] Add privacy instructions to avoid secrets, proprietary identifiers, raw private code, and customer-specific details.
-- [ ] Decide what prompt metadata may be stored. Decision: schema/version/hash only if needed; never raw prompt text.
+- [x] Define prompt schema version and internal prompt marker.
+- [x] Define evidence input shape for prompt construction.
+- [x] Define model output JSON contract:
+  - [x] pattern title
+  - [x] summary
+  - [x] confidence
+  - [x] tags
+  - [x] evidence references
+  - [x] language-agnostic explanation
+  - [x] implementation guidance
+  - [x] common failure modes
+  - [x] generated problems
+  - [x] review risks
+- [x] Add prompt-injection defensive instructions that treat evidence as untrusted data.
+- [x] Add privacy instructions to avoid secrets, proprietary identifiers, raw private code, and customer-specific details.
+- [x] Decide what prompt metadata may be stored. Decision: schema/version/hash only if needed; never raw prompt text.
 
 ### Phase 3: Hidden Prompt Contract Implementation
 
-- [ ] Add backend prompt builder under the learning/generation module.
-- [ ] Bound evidence excerpt size before prompt construction.
-- [ ] Normalize evidence text enough to keep prompt size stable.
-- [ ] Keep prompt builder out of controllers and DTOs.
-- [ ] Inject prompt builder into `GenerationService`.
-- [ ] Build the prompt during generation without persisting or returning raw prompt text.
-- [ ] Preserve deterministic local mock generation output.
-- [ ] Add unit/integration tests for:
-  - [ ] prompt builder contains schema and JSON contract
-  - [ ] generation response does not contain internal prompt marker
-  - [ ] audit response does not contain internal prompt marker
-  - [ ] frontend built assets do not contain internal prompt marker
+- [x] Add backend prompt builder under the learning/generation module.
+- [x] Bound evidence excerpt size before prompt construction.
+- [x] Normalize evidence text enough to keep prompt size stable.
+- [x] Keep prompt builder out of controllers and DTOs.
+- [x] Inject prompt builder into `GenerationService`.
+- [x] Build the prompt during generation without persisting or returning raw prompt text.
+- [x] Preserve deterministic local mock generation output.
+- [x] Add unit/integration tests for:
+  - [x] prompt builder contains schema and JSON contract
+  - [x] generation response does not contain internal prompt marker
+  - [x] audit response does not contain internal prompt marker
+  - [x] frontend built assets do not contain internal prompt marker
 
 ### Phase 4: First-User Browser E2E
 
-- [ ] Add a Playwright-based script using bundled Node runtime and installed Chrome fallback.
-- [ ] Open `http://localhost:8080` as an unauthenticated user.
-- [ ] Sign up a unique user.
-- [ ] Confirm first login lands on AI setup.
-- [ ] Select Claude API key mode.
-- [ ] Save a generated local API key.
-- [ ] Assert the key is present only in browser localStorage.
-- [ ] Assert the key is absent from every observed request body.
-- [ ] Log out and log back in as the same user.
-- [ ] Assert onboarding is skipped after local setup exists.
-- [ ] Re-open local AI settings.
-- [ ] Select Gemini OAuth mode.
-- [ ] Save a local OAuth profile label.
-- [ ] Assert OAuth label is absent from observed request bodies.
-- [ ] Run the visible workflow action and assert a draft card/review state appears.
-- [ ] Add a script entry point such as `scripts/e2e-installed.sh`.
+- [x] Add a Playwright-based script using bundled Node runtime and installed Chrome fallback.
+- [x] Open `http://localhost:8080` as an unauthenticated user.
+- [x] Sign up a unique user.
+- [x] Confirm first login lands on AI setup.
+- [x] Select Claude API key mode.
+- [x] Save a generated local API key.
+- [x] Assert the key is present only in browser localStorage.
+- [x] Assert the key is absent from every observed request body.
+- [x] Log out and log back in as the same user.
+- [x] Assert onboarding is skipped after local setup exists.
+- [x] Re-open local AI settings.
+- [x] Select Gemini OAuth mode.
+- [x] Save a local OAuth profile label.
+- [x] Assert OAuth label is absent from observed request bodies.
+- [x] Run the visible workflow action and assert a draft card/review state appears.
+- [x] Add a script entry point such as `scripts/e2e-installed.sh`.
 
 ### Phase 5: Full API E2E and Security Invariants
 
-- [ ] Extend Spring integration tests or Node API smoke tests for full role flow.
-- [ ] Contributor ingests manual code evidence.
-- [ ] Contributor ingests `codex-obsidian-sync` conversation evidence.
-- [ ] Contributor confirms suggested source link.
-- [ ] Contributor runs generation.
-- [ ] Reviewer approves generated review task.
-- [ ] Learner sees published card in library.
-- [ ] Learner cannot see reference answer before submission.
-- [ ] Learner submits answer.
-- [ ] Learner can see reference answer after submission.
-- [ ] Learner progress/proficiency updates.
-- [ ] Admin audit log remains free of prompt text and local AI secrets.
-- [ ] Existing negative tests for authz, secret scanning, provider ownership, and idempotency still pass.
+- [x] Extend Spring integration tests or Node API smoke tests for full role flow.
+- [x] Contributor ingests manual code evidence.
+- [x] Contributor ingests `codex-obsidian-sync` conversation evidence.
+- [x] Contributor confirms suggested source link.
+- [x] Contributor runs generation.
+- [x] Reviewer approves generated review task.
+- [x] Learner sees published card in library.
+- [x] Learner cannot see reference answer before submission.
+- [x] Learner submits answer.
+- [x] Learner can see reference answer after submission.
+- [x] Learner progress/proficiency updates.
+- [x] Admin audit log remains free of prompt text and local AI secrets.
+- [x] Existing negative tests for authz, secret scanning, provider ownership, and idempotency still pass.
 
 ### Phase 6: Performance Script and Backend Hot Path Optimization
 
-- [ ] Add a repeatable performance script under `scripts/`.
-- [ ] Script reports:
-  - [ ] app URL
-  - [ ] library card count
-  - [ ] generation/workflow runtime
-  - [ ] library median latency
-  - [ ] detail median latency
-  - [ ] frontend JS/CSS asset size
-- [ ] Add script to `package.json`.
-- [ ] Optimize `PatternReadService` list path to batch tag links and problems.
-- [ ] Add repository methods for multi-card tag/problem lookup.
-- [ ] Keep detail path behavior unchanged.
-- [ ] Add or update tests that prove card tags/problems remain correct after batching.
-- [ ] Run performance script after optimization.
-- [ ] Compare baseline/final and document percentage improvement.
+- [x] Add a repeatable performance script under `scripts/`.
+- [x] Script reports:
+  - [x] app URL
+  - [x] library card count
+  - [x] generation/workflow runtime
+  - [x] library median latency
+  - [x] detail median latency
+  - [x] frontend JS/CSS asset size
+- [x] Add script to `package.json`.
+- [x] Optimize `PatternReadService` list path to batch tag links and problems.
+- [x] Add repository methods for multi-card tag/problem lookup.
+- [x] Keep detail path behavior unchanged.
+- [x] Add or update tests that prove card tags/problems remain correct after batching.
+- [x] Run performance script after optimization.
+- [x] Compare baseline/final and document percentage improvement.
 
 ### Phase 7: Frontend and E2E Runtime Optimization
 
-- [ ] Review bundle composition from production build output.
-- [ ] Remove unused frontend types/imports/state if any remain.
-- [ ] Ensure E2E waits use network/selector events, not fixed sleeps.
-- [ ] Keep the first screen consistent with the existing design prompt.
-- [ ] Verify mobile auth/onboarding still has no horizontal overflow.
-- [ ] Record final browser E2E runtime.
+- [x] Review bundle composition from production build output.
+- [x] Remove unused frontend types/imports/state if any remain.
+- [x] Ensure E2E waits use network/selector events, not fixed sleeps.
+- [x] Keep the first screen consistent with the existing design prompt.
+- [x] Verify mobile auth/onboarding still has no horizontal overflow.
+- [x] Record final browser E2E runtime.
 
 ### Phase 8: Codex Security Scan and Fixes
 
-- [ ] Run Codex Security `security-scan` over the implemented diff.
-- [ ] Produce or update repository threat model if needed.
-- [ ] Run finding discovery.
-- [ ] Validate candidate findings.
-- [ ] Run attack-path analysis for surviving findings.
-- [ ] Fix every validated finding.
-- [ ] Re-run targeted tests after each fix.
-- [ ] Save scan report under `/tmp/codex-security-scans`.
+- [x] Run Codex Security `security-scan` over the implemented diff.
+- [x] Produce or update repository threat model if needed.
+- [x] Run finding discovery.
+- [x] Validate candidate findings.
+- [x] Run attack-path analysis for surviving findings.
+- [x] Fix every validated finding.
+- [x] Re-run targeted tests after each fix.
+- [x] Save scan report under `/tmp/codex-security-scans`.
 
 ### Phase 9: Final Verification, Packaging, and Commit
 
-- [ ] Run `./scripts/test.sh`.
-- [ ] Run `./scripts/backend-test.sh`.
-- [ ] Run `./scripts/frontend-typecheck.sh`.
-- [ ] Run `./scripts/frontend-build.sh`.
-- [ ] Run `./scripts/check-split.sh`.
-- [ ] Run installed app E2E.
-- [ ] Run performance measurement script.
-- [ ] Run `./scripts/install.sh`.
-- [ ] Confirm `./scripts/status.sh` reports all services healthy.
-- [ ] Run `./scripts/package-release.sh`.
-- [ ] Confirm release bundle checksum exists.
-- [ ] Update this plan checklist to reflect completed work.
-- [ ] Commit implementation with Korean conventional commit message.
+- [x] Run `./scripts/test.sh`.
+- [x] Run `./scripts/backend-test.sh`.
+- [x] Run `./scripts/frontend-typecheck.sh`.
+- [x] Run `./scripts/frontend-build.sh`.
+- [x] Run `./scripts/check-split.sh`.
+- [x] Run installed app E2E.
+- [x] Run performance measurement script.
+- [x] Run `./scripts/install.sh`.
+- [x] Confirm `./scripts/status.sh` reports all services healthy.
+- [x] Run `./scripts/package-release.sh`.
+- [x] Confirm release bundle checksum exists.
+- [x] Update this plan checklist to reflect completed work.
+- [x] Commit implementation with Korean conventional commit message.
 
 ## Risks and Mitigations
 

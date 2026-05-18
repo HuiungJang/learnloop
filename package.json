@@ -19,6 +19,8 @@
     "start:app": "./scripts/start.sh",
     "stop:app": "./scripts/stop.sh",
     "status:app": "./scripts/status.sh",
-    "package:release": "./scripts/package-release.sh"
+    "package:release": "./scripts/package-release.sh",
+    "e2e:installed": "./scripts/e2e-installed.sh",
+    "perf:measure": "./scripts/perf-measure.sh"
   }
 }
