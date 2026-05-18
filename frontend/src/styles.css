@@ -927,6 +927,31 @@ h1 {
   color: var(--charcoal);
 }
 
+.hint-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.hint-row small {
+  grid-column: 1 / -1;
+}
+
+.hint-row button {
+  align-self: start;
+  padding: 5px 10px;
+  border: 1px solid rgba(28, 28, 28, 0.4);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hint-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .guidance-row small,
 .feedback-placeholder small {
   color: var(--muted);

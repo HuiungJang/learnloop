@@ -56,13 +56,13 @@ class PracticeService(
                     },
             hints =
                 hints.map {
-                    val revealed = it.revealPolicy == PracticeContract.HINT_REVEAL_MANUAL
                     PracticeHintResponse(
                         id = it.id,
                         revealOrder = it.revealOrder,
                         label = it.label,
-                        content = if (revealed) it.content else null,
-                        revealed = revealed,
+                        content = if (it.revealPolicy == PracticeContract.HINT_REVEAL_MANUAL) it.content else null,
+                        revealed = false,
+                        revealPolicy = it.revealPolicy,
                     )
                 },
             provenance =

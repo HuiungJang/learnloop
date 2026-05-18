@@ -70,6 +70,7 @@ data class PracticeHintResponse(
     val label: String,
     val content: String?,
     val revealed: Boolean,
+    val revealPolicy: String,
 )
 
 data class PracticeProvenanceResponse(

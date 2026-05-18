@@ -521,10 +521,12 @@ class SessionAuthenticationIntegrationTest {
         assertFalse(response.body.orEmpty().contains("hidden/formatTag.hidden.test.ts"))
         assertFalse(response.body.orEmpty().contains("Gemini---OAuth"))
         assertFalse(response.body.orEmpty().contains("toLowerCase"))
-        assertTrue(problem["hints"][0]["revealed"].asBoolean())
+        assertFalse(problem["hints"][0]["revealed"].asBoolean())
         assertFalse(problem["hints"][0]["content"].isNull)
+        assertEquals("manual", problem["hints"][0]["revealPolicy"].asText())
         assertFalse(problem["hints"][1]["revealed"].asBoolean())
         assertTrue(problem["hints"][1]["content"].isNull)
+        assertEquals("after_run", problem["hints"][1]["revealPolicy"].asText())
         assertEquals("Redacted AI-assisted diff", problem["provenance"][0]["sourceLabel"].asText())
         assertTrue(problem["provenance"][0]["evidenceItemId"].isNull)
     }

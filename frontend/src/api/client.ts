@@ -80,6 +80,7 @@ export type PracticeHintResponse = {
   label: string;
   content: string | null;
   revealed: boolean;
+  revealPolicy: string;
 };
 
 export type PracticeProvenanceResponse = {

@@ -37,6 +37,7 @@ class PracticeDtosTest {
                             label = "Query key",
                             content = null,
                             revealed = false,
+                            revealPolicy = PracticeContract.HINT_REVEAL_AFTER_RUN,
                         ),
                     ),
                 provenance =

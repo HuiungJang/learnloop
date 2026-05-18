@@ -817,15 +817,24 @@ Phase 28 notes:
 
 ### Phase 29: Progressive Hints
 
-- [ ] Render hint reveal controls.
-- [ ] Persist revealed hint IDs per user/problem.
-- [ ] Reveal recognized pattern only according to problem metadata.
-- [ ] Log hint reveal without sensitive evidence content.
+- [x] Render hint reveal controls.
+- [x] Persist revealed hint IDs per user/problem.
+- [x] Reveal recognized pattern only according to problem metadata.
+- [x] Log hint reveal without sensitive evidence content.
 
 Verification:
 
-- [ ] Revealed hints remain visible after refresh.
-- [ ] Hidden hints are not pre-rendered in visible UI text.
+- [x] Revealed hints remain visible after refresh.
+- [x] Hidden hints are not pre-rendered in visible UI text.
+
+Phase 29 notes:
+
+- Added `revealPolicy` to practice hint responses so the frontend can gate reveal controls by problem metadata.
+- Changed manual hints to require learner reveal in the UI while keeping non-manual hint content hidden.
+- Added local hint reveal persistence and a reveal log that records IDs/order/policy only, not hint content.
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed hidden hint text is not visible before reveal, reveal persists after refresh, and the reveal log excludes hint content.
 
 ### Phase 30: Provenance Panel
 

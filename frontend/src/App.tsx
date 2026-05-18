@@ -37,6 +37,7 @@ import {
   syncLocalPracticeAttempt,
   type Membership,
   type PatternCardResponse,
+  type PracticeHintResponse,
   type PracticeProblemResponse,
   type ProviderResponse,
   type SessionResponse
@@ -50,6 +51,7 @@ import {
   markPracticeSyncing,
   type PracticeSyncStatus
 } from "./practice/practiceSyncQueue";
+import { loadRevealedHintIds, logHintReveal, saveRevealedHintId } from "./practice/hintProgress";
 
 type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
@@ -170,6 +172,7 @@ export function App() {
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
+  const [revealedHintIds, setRevealedHintIds] = useState<string[]>([]);
   const [workbenchOverlay, setWorkbenchOverlay] = useState<WorkbenchOverlay>(null);
   const [workbenchQuery, setWorkbenchQuery] = useState("");
   const [diffVisible, setDiffVisible] = useState(false);
@@ -659,9 +662,14 @@ export function App() {
                       <strong>Hints</strong>
                       <div className="review-table">
                         {activePractice.hints.map((hint) => (
-                          <div className="guidance-row" key={hint.id}>
+                          <div className="guidance-row hint-row" key={hint.id}>
                             <span>{hint.label}</span>
-                            <small>{hint.revealed ? hint.content : "Locked until progress"}</small>
+                            {isHintRevealed(hint) ? <small>{hint.content}</small> : <small>Locked</small>}
+                            {!isHintRevealed(hint) ? (
+                              <button disabled={!canRevealHint(hint)} onClick={() => revealHint(hint)} type="button">
+                                Reveal
+                              </button>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -986,6 +994,25 @@ export function App() {
     });
   }
 
+  function isHintRevealed(hint: PracticeHintResponse): boolean {
+    return hint.revealed || revealedHintIds.includes(hint.id);
+  }
+
+  function canRevealHint(hint: PracticeHintResponse): boolean {
+    return hint.revealPolicy === "manual" && hint.content !== null;
+  }
+
+  function revealHint(hint: PracticeHintResponse) {
+    if (session === null || activePractice === null || !canRevealHint(hint)) {
+      setPracticeSaveStatus({ state: "idle", message: "Hint locked" });
+      return;
+    }
+    const scope = { userId: session.user.id, problemId: activePractice.id };
+    setRevealedHintIds(saveRevealedHintId(scope, hint.id));
+    logHintReveal(scope, hint);
+    setPracticeSaveStatus({ state: "idle", message: "Hint revealed" });
+  }
+
   async function submitPracticeSolution(files: PracticeAttemptFileRequest[]) {
     if (session === null || activePractice === null) return;
 
@@ -1018,6 +1045,7 @@ export function App() {
       const problem = await getPracticeProblem(session.token, problemId);
       setActivePractice(problem);
       setActivePracticePath(problem.files[0]?.path ?? null);
+      setRevealedHintIds(loadRevealedHintIds({ userId: session.user.id, problemId: problem.id }));
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
@@ -1025,6 +1053,7 @@ export function App() {
     } catch (error) {
       setActivePractice(null);
       setActivePracticePath(null);
+      setRevealedHintIds([]);
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
@@ -1043,6 +1072,7 @@ export function App() {
     setLibraryError("");
     setActivePractice(null);
     setActivePracticePath(null);
+    setRevealedHintIds([]);
     editorSnapshotRef.current = null;
     closeWorkbenchOverlay();
     setDiffVisible(false);
