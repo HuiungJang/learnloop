@@ -42,7 +42,7 @@ class RunnerRequestValidator(
             throw BadRequestException("timeout must be between 1 and ${harness.maxTimeoutMs} milliseconds")
         }
 
-        val files = validateFiles(request.files)
+        val files = validateFiles(request.files, harness.files.map { it.path }.toSet())
         return ValidatedRunnerRunRequest(
             runId = prefixedId("run"),
             language = request.language,
@@ -61,7 +61,10 @@ class RunnerRequestValidator(
         }
     }
 
-    private fun validateFiles(files: List<RunnerRunFile>): List<RunnerRunFile> {
+    private fun validateFiles(
+        files: List<RunnerRunFile>,
+        reservedPaths: Set<String>,
+    ): List<RunnerRunFile> {
         if (files.isEmpty()) {
             throw BadRequestException("runner files are required")
         }
@@ -73,6 +76,9 @@ class RunnerRequestValidator(
         val normalizedPaths = mutableSetOf<String>()
         return files.map { file ->
             val normalizedPath = PracticeContract.normalizeFilePath(file.path)
+            if (normalizedPath in reservedPaths) {
+                throw BadRequestException("runner file path is reserved")
+            }
             if (!normalizedPaths.add(normalizedPath)) {
                 throw BadRequestException("runner file paths must be unique")
             }

@@ -933,15 +933,22 @@ Phase 34 notes:
 
 ### Phase 35: Runner Workspace and Cleanup
 
-- [ ] Create per-run temporary workspace.
-- [ ] Copy only validated files and selected harness content.
-- [ ] Enforce cleanup after success, failure, and timeout.
-- [ ] Truncate stdout/stderr before persistence.
+- [x] Create per-run temporary workspace.
+- [x] Copy only validated files and selected harness content.
+- [x] Enforce cleanup after success, failure, and timeout.
+- [x] Truncate stdout/stderr before persistence.
 
 Verification:
 
-- [ ] Tests prove workspaces are cleaned after run completion and timeout.
-- [ ] Oversized output is truncated.
+- [x] Tests prove workspaces are cleaned after run completion and timeout.
+- [x] Oversized output is truncated.
+
+Phase 35 notes:
+
+- Added a runner workspace service that creates a per-run temp directory, writes registry-selected harness files and validated request files, and deletes the workspace in `finally`.
+- Added reserved harness-path rejection so client files cannot replace server-selected harness content.
+- Added UTF-8-aware stdout/stderr truncation helper using the existing stdio excerpt limit.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 36: Docker Execution Constraints
 

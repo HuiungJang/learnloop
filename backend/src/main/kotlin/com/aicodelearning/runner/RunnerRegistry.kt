@@ -9,6 +9,12 @@ data class RunnerHarness(
     val image: String,
     val command: List<String>,
     val maxTimeoutMs: Long,
+    val files: List<RunnerHarnessFile>,
+)
+
+data class RunnerHarnessFile(
+    val path: String,
+    val content: String,
 )
 
 @Component
@@ -21,6 +27,7 @@ class RunnerRegistry {
                 image = "learnloop-runner-typescript:latest",
                 command = listOf("npm", "test", "--", "--run"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
+                files = harnessFiles("typescript-vitest"),
             ),
             RunnerHarness(
                 id = "kotlin-junit",
@@ -28,6 +35,7 @@ class RunnerRegistry {
                 image = "learnloop-runner-kotlin:latest",
                 command = listOf("./gradlew", "test"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
+                files = harnessFiles("kotlin-junit"),
             ),
             RunnerHarness(
                 id = "java-junit",
@@ -35,6 +43,7 @@ class RunnerRegistry {
                 image = "learnloop-runner-java:latest",
                 command = listOf("./gradlew", "test"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
+                files = harnessFiles("java-junit"),
             ),
         ).associateBy { "${it.language}:${it.id}" }
 
@@ -42,6 +51,14 @@ class RunnerRegistry {
         language: String,
         harnessId: String,
     ): RunnerHarness? = harnesses["$language:$harnessId"]
+
+    private fun harnessFiles(harnessId: String): List<RunnerHarnessFile> =
+        listOf(
+            RunnerHarnessFile(
+                path = ".learnloop/harness.json",
+                content = """{"harnessId":"$harnessId"}""",
+            ),
+        )
 
     private companion object {
         const val MAX_TIMEOUT_MS = 10_000L
