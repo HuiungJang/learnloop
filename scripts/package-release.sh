@@ -99,6 +99,11 @@ printf '%s\n' "$VERSION" > "$STAGING_DIR/.release-version"
 
 chmod +x "$STAGING_DIR/install.sh" "$STAGING_DIR/start.sh" "$STAGING_DIR/status.sh" "$STAGING_DIR/stop.sh"
 
+if [ "$OS_NAME" = "macos" ] && [ -d "packaging/macos-app/AI Code Learning Platform.app" ]; then
+  cp -R "packaging/macos-app/AI Code Learning Platform.app" "$STAGING_DIR/"
+  chmod +x "$STAGING_DIR/AI Code Learning Platform.app/Contents/MacOS/AI Code Learning Platform"
+fi
+
 echo "Saving Docker images"
 docker save "$BACKEND_IMAGE" -o "$STAGING_DIR/images/backend.tar"
 docker save "$WEB_IMAGE" -o "$STAGING_DIR/images/web.tar"
@@ -119,6 +124,16 @@ ARCHIVE="$OUTPUT_DIR/$PACKAGE_NAME.tar.gz"
 tar -C "$TMP_DIR" -czf "$ARCHIVE" "$PACKAGE_NAME"
 write_checksum "$ARCHIVE"
 
+DMG=""
+if [ "$OS_NAME" = "macos" ] && command -v hdiutil >/dev/null 2>&1; then
+  DMG="$OUTPUT_DIR/$PACKAGE_NAME.dmg"
+  hdiutil create -volname "AI Code Learning $VERSION" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG" >/dev/null
+  write_checksum "$DMG"
+fi
+
 echo
 echo "Release bundle created:"
 echo "$ARCHIVE"
+if [ -n "$DMG" ]; then
+  echo "$DMG"
+fi

@@ -1,0 +1,74 @@
+#!/usr/bin/env sh
+set -eu
+
+APP_DIR=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd -P)
+ROOT_DIR=$(CDPATH= cd -- "$APP_DIR/.." && pwd -P)
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  cd "$ROOT_DIR"
+  exec ./install.sh
+fi
+
+if ! command -v osascript >/dev/null 2>&1; then
+  cd "$ROOT_DIR"
+  exec ./install.sh
+fi
+
+quote_shell() {
+  printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
+}
+
+RUNNER="${TMPDIR:-/tmp}/ai-code-learning-platform-installer-$$.sh"
+ROOT_QUOTED=$(quote_shell "$ROOT_DIR")
+
+cat > "$RUNNER" <<EOF
+#!/usr/bin/env sh
+set -u
+
+ROOT_DIR=$ROOT_QUOTED
+cd "\$ROOT_DIR" || exit 1
+
+echo "AI Code Learning Platform installer"
+echo "Bundle: \$ROOT_DIR"
+echo
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker Desktop or Docker Engine with Compose v2 is required."
+  echo "Install Docker, start it, then double-click this app again."
+  echo
+  echo "Press Return to close this window."
+  read _
+  rm -f "\$0"
+  exit 1
+fi
+
+./install.sh
+status=\$?
+
+if [ "\$status" -eq 0 ] && [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+  open "http://localhost:\${AI_CODE_WEB_PORT:-8080}" >/dev/null 2>&1 || true
+fi
+
+echo
+if [ "\$status" -eq 0 ]; then
+  echo "Install complete. The app is available in your browser."
+else
+  echo "Install failed with exit code \$status."
+fi
+echo "Press Return to close this window."
+read _
+rm -f "\$0"
+exit "\$status"
+EOF
+
+chmod +x "$RUNNER"
+
+osascript <<EOF
+tell application "Terminal"
+  activate
+  do script "/bin/sh $(quote_shell "$RUNNER")"
+end tell
+EOF

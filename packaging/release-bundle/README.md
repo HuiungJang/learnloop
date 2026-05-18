@@ -8,6 +8,16 @@ This bundle contains the runtime Compose file, install scripts, and Docker image
 
 ## Install
 
+On macOS, double-click:
+
+```text
+AI Code Learning Platform.app
+```
+
+The app opens Terminal, installs the bundled Docker images, starts the services, and opens the browser.
+
+You can also install from a shell:
+
 ```sh
 ./install.sh
 ```
