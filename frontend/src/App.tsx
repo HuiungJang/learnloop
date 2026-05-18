@@ -10,10 +10,12 @@ import {
   LockKeyhole,
   LogIn,
   LogOut,
+  Moon,
   Play,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Sun,
   UploadCloud,
   UserPlus,
   type LucideIcon
@@ -38,6 +40,7 @@ import {
 type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
+type EditorTheme = "vs" | "vs-dark";
 type HealthState =
   | { status: "pending" }
   | { status: "success"; data: HealthResponse }
@@ -92,6 +95,7 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
 
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
+const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
 );
@@ -122,6 +126,10 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
     window.localStorage.removeItem(legacyKey);
     return null;
   }
+}
+
+function readEditorTheme(): EditorTheme {
+  return window.localStorage.getItem(EDITOR_THEME_STORAGE_KEY) === "vs" ? "vs" : "vs-dark";
 }
 
 function primaryMembership(session: SessionResponse | null): Membership | null {
@@ -156,6 +164,7 @@ export function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<LocalAuthMethod>("api_key");
+  const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => readEditorTheme());
   const [localApiKey, setLocalApiKey] = useState("");
   const [oauthLabel, setOauthLabel] = useState("");
   const [onboardingError, setOnboardingError] = useState("");
@@ -552,27 +561,38 @@ export function App() {
                       <p>{activePractice.prompt}</p>
                     </div>
                     <div className="editor-shell-placeholder" aria-label="Practice files">
-                      <div className="file-strip" role="tablist" aria-label="Practice files">
-                        {activePractice.files.map((file) => (
-                          <button
-                            aria-selected={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path}
-                            className={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path ? "file-tab active" : "file-tab"}
-                            key={file.path}
-                            onClick={() => setActivePracticePath(file.path)}
-                            role="tab"
-                            title={file.readOnly ? `${file.path} (read-only)` : file.path}
-                            type="button"
-                          >
-                            <span>{file.path}</span>
-                            {file.readOnly ? <LockKeyhole aria-hidden="true" size={12} /> : null}
-                          </button>
-                        ))}
+                      <div className="editor-topbar">
+                        <div className="file-strip" role="tablist" aria-label="Practice files">
+                          {activePractice.files.map((file) => (
+                            <button
+                              aria-selected={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path}
+                              className={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path ? "file-tab active" : "file-tab"}
+                              key={file.path}
+                              onClick={() => setActivePracticePath(file.path)}
+                              role="tab"
+                              title={file.readOnly ? `${file.path} (read-only)` : file.path}
+                              type="button"
+                            >
+                              <span>{file.path}</span>
+                              {file.readOnly ? <LockKeyhole aria-hidden="true" size={12} /> : null}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          aria-label={editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme"}
+                          className="editor-tool-button"
+                          onClick={toggleEditorTheme}
+                          title={editorTheme === "vs-dark" ? "Light editor theme" : "Dark editor theme"}
+                          type="button"
+                        >
+                          {editorTheme === "vs-dark" ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
+                        </button>
                       </div>
                       <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
                         <PracticeEditorShell
                           activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
                           files={activePractice.files}
-                          theme="vs-dark"
+                          theme={editorTheme}
                         />
                       </Suspense>
                     </div>
@@ -711,6 +731,14 @@ export function App() {
 
   function updateLibraryFilter<Key extends keyof LibraryFilters>(key: Key, value: LibraryFilters[Key]) {
     setLibraryFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleEditorTheme() {
+    setEditorTheme((current) => {
+      const next = current === "vs-dark" ? "vs" : "vs-dark";
+      window.localStorage.setItem(EDITOR_THEME_STORAGE_KEY, next);
+      return next;
+    });
   }
 
   async function openPractice(problemId: string) {

@@ -674,12 +674,20 @@ h1 {
   background: rgba(28, 28, 28, 0.96);
 }
 
+.editor-topbar {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  background: rgba(252, 251, 248, 0.08);
+}
+
 .file-strip {
   display: flex;
+  flex: 1 1 auto;
   gap: 1px;
   min-width: 0;
   overflow-x: auto;
-  background: rgba(252, 251, 248, 0.08);
 }
 
 .file-tab {
@@ -718,6 +726,27 @@ h1 {
 
 .file-tab svg {
   flex-shrink: 0;
+}
+
+.editor-tool-button {
+  display: inline-flex;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  border: 0;
+  color: var(--off-white);
+  background: rgba(252, 251, 248, 0.1);
+  cursor: pointer;
+}
+
+.editor-tool-button:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.7);
+  outline-offset: -2px;
+}
+
+.editor-tool-button:active {
+  opacity: 0.8;
 }
 
 .editor-shell-placeholder pre {

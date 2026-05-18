@@ -738,14 +738,21 @@ Phase 24 notes:
 
 ### Phase 25: Editor Theme Toggle
 
-- [ ] Support VS Code Dark and Light editor themes.
-- [ ] Persist editor theme as UI preference.
-- [ ] Keep LearnLoop shell cream-toned.
+- [x] Support VS Code Dark and Light editor themes.
+- [x] Persist editor theme as UI preference.
+- [x] Keep LearnLoop shell cream-toned.
 
 Verification:
 
-- [ ] Theme toggle affects editor only.
-- [ ] Preference survives refresh.
+- [x] Theme toggle affects editor only.
+- [x] Preference survives refresh.
+
+Phase 25 notes:
+
+- Added an editor-only light/dark toggle using Monaco `vs` and `vs-dark`.
+- Persisted the editor preference in `localStorage` under `learnloop:editor-theme`.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed the Monaco theme class changes, the LearnLoop shell background stays unchanged, and the preference survives refresh.
 
 ### Phase 26: Save Shortcut and Local Draft Flow
 
