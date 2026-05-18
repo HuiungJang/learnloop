@@ -52,6 +52,8 @@ class RunnerRegistry {
         harnessId: String,
     ): RunnerHarness? = harnesses["$language:$harnessId"]
 
+    fun requiredImages(): List<String> = harnesses.values.map { it.image }.distinct().sorted()
+
     private fun harnessFiles(harnessId: String): List<RunnerHarnessFile> =
         listOf(
             RunnerHarnessFile(

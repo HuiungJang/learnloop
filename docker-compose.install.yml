@@ -32,7 +32,6 @@ services:
       APP_RUNNER_ENABLED: ${APP_RUNNER_ENABLED:-true}
       APP_RUNNER_BASE_URL: ${APP_RUNNER_BASE_URL:-}
       APP_RUNNER_TOKEN: ${APP_RUNNER_TOKEN:-}
-      APP_RUNNER_IMAGE: ${APP_RUNNER_IMAGE:-learnloop-runner:latest}
       APP_RUNNER_REQUIRE_LIMITS: ${APP_RUNNER_REQUIRE_LIMITS:-true}
     depends_on:
       postgres:

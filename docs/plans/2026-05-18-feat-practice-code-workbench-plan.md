@@ -1331,19 +1331,34 @@ Phase 52 notes:
 
 ### Phase 53: Documentation and Packaging
 
-- [ ] Update README runtime requirements for optional Docker-backed sandbox execution.
-- [ ] Document Docker-unavailable behavior.
-- [ ] Document supported runner languages and limitations.
-- [ ] Document local-first attempt storage and server sync behavior.
-- [ ] Rebuild release bundle if packaging scripts or Docker services changed.
-- [ ] Verify install/start/status/stop scripts handle runner lifecycle.
-- [ ] Verify fresh install, restart, and cleanup paths do not delete user attempts unexpectedly.
+- [x] Update README runtime requirements for optional Docker-backed sandbox execution.
+- [x] Document Docker-unavailable behavior.
+- [x] Document supported runner languages and limitations.
+- [x] Document local-first attempt storage and server sync behavior.
+- [x] Rebuild release bundle if packaging scripts or Docker services changed.
+- [x] Verify install/start/status/stop scripts handle runner lifecycle.
+- [x] Verify fresh install, restart, and cleanup paths do not delete user attempts unexpectedly.
 
 Verification:
 
-- [ ] Release bundle is regenerated when needed.
-- [ ] README and install docs match the actual app behavior.
-- [ ] Fresh install path is tested or explicitly documented as pending.
+- [x] Release bundle is regenerated when needed.
+- [x] README and install docs match the actual app behavior.
+- [x] Fresh install path is tested or explicitly documented as pending.
+
+Notes:
+
+- Updated `README.md`, `README.ko.md`, and `packaging/release-bundle/README.md` with practice workbench behavior, optional sandbox requirements, Docker-unavailable behavior, TypeScript/Java/Kotlin runner limitations, local-first attempts, and per-user server sync semantics.
+- Changed runner health to inspect the fixed language runner images registered in `RunnerRegistry` instead of the obsolete single `APP_RUNNER_IMAGE` value.
+- Removed `APP_RUNNER_IMAGE` from new install `.env` generation and release compose configuration.
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/package-release.sh`: passed and regenerated `dist/release/learnloop-0.1.0-macos-arm64.tar.gz` and `dist/release/learnloop-0.1.0-macos-arm64.dmg`.
+- `./scripts/check-asset-exposure.sh`: passed after packaging.
+- Fresh release install was tested from the final regenerated tarball with `AI_CODE_PROJECT_NAME=learnloop-phase53-final` and `AI_CODE_WEB_PORT=18082`.
+- Release `./install.sh`, `./stop.sh`, `./start.sh`, and `./status.sh` passed. Status reported healthy PostgreSQL/backend/web services and runner `missing` because the default release backend has no Docker CLI, matching the documented fail-closed behavior.
+- Created a per-user practice draft/submission through the release API, restarted with `./stop.sh` and `./start.sh`, and verified the same user attempt was still present after restart.
+- Removed only the isolated `learnloop-phase53-final` test compose project and test volume after persistence verification.
+- Final verification reran `./scripts/check-split.sh`, `APP_URL=http://localhost:18080 ./scripts/e2e-installed.sh`, `./scripts/runner-typescript-smoke.sh && ./scripts/runner-java-smoke.sh && ./scripts/runner-kotlin-smoke.sh`, and `./scripts/check-asset-exposure.sh`.
+- Final Codex Security diff-scoped scan report: `/tmp/codex-security-scans/spring-react-platform-split/852cc2e_20260518T120459Z_final-working-tree/report.md` with no reportable findings.
 
 ## User Flow Coverage
 
@@ -1378,33 +1393,33 @@ Verification:
 
 ### Functional Requirements
 
-- [ ] Learners can browse published practice assets by pattern, language, library/API tag, and difficulty.
-- [ ] Learners can open a multi-file problem in a VS Code-like Monaco workbench.
-- [ ] Learners can use the agreed shortcut set.
-- [ ] Learners can save local drafts and sync per-user attempts to the server.
-- [ ] TypeScript, Kotlin, and Java exercises can run in Docker-backed local sandbox execution.
-- [ ] Docker-unavailable state disables run actions without blocking reading, editing, saving, or draft submission.
-- [ ] Submitted attempts do not mutate canonical problem/card assets.
-- [ ] Feedback includes test results, output excerpts, diff, pattern feedback, and next recommendations.
-- [ ] Provenance is available through a collapsible redacted panel.
+- [x] Learners can browse published practice assets by pattern, language, library/API tag, and difficulty.
+- [x] Learners can open a multi-file problem in a VS Code-like Monaco workbench.
+- [x] Learners can use the agreed shortcut set.
+- [x] Learners can save local drafts and sync per-user attempts to the server.
+- [x] TypeScript, Kotlin, and Java exercises can run in Docker-backed local sandbox execution.
+- [x] Docker-unavailable state disables run actions without blocking reading, editing, saving, or draft submission.
+- [x] Submitted attempts do not mutate canonical problem/card assets.
+- [x] Feedback includes test results, output excerpts, diff, pattern feedback, and next recommendations.
+- [x] Provenance is available through a collapsible redacted panel.
 
 ### Non-Functional Requirements
 
-- [ ] Monaco is lazy-loaded.
-- [ ] Sandbox execution has CPU, memory, process, output, network, filesystem, and timeout limits.
-- [ ] Raw evidence, hidden answers, and local AI credentials are not exposed through new APIs or frontend bundles.
-- [ ] Attempt sync is idempotent by user/problem/clientAttemptId.
-- [ ] UI remains usable on desktop and mobile widths.
+- [x] Monaco is lazy-loaded.
+- [x] Sandbox execution has CPU, memory, process, output, network, filesystem, and timeout limits.
+- [x] Raw evidence, hidden answers, and local AI credentials are not exposed through new APIs or frontend bundles.
+- [x] Attempt sync is idempotent by user/problem/clientAttemptId.
+- [x] UI remains usable on desktop and mobile widths.
 
 ### Quality Gates
 
-- [ ] Backend tests pass.
-- [ ] Frontend typecheck passes.
-- [ ] Frontend build passes.
-- [ ] Installed-app E2E passes.
-- [ ] Sandbox smoke tests pass for TypeScript, Kotlin, and Java.
-- [ ] Codex Security scan has no unresolved validated findings.
-- [ ] Release bundle is regenerated if install/runtime shape changes.
+- [x] Backend tests pass.
+- [x] Frontend typecheck passes.
+- [x] Frontend build passes.
+- [x] Installed-app E2E passes.
+- [x] Sandbox smoke tests pass for TypeScript, Kotlin, and Java.
+- [x] Codex Security scan has no unresolved validated findings.
+- [x] Release bundle is regenerated if install/runtime shape changes.
 
 ## Dependencies and Risks
 

@@ -37,7 +37,6 @@ app:
     enabled: ${APP_RUNNER_ENABLED:true}
     base-url: ${APP_RUNNER_BASE_URL:}
     token: ${APP_RUNNER_TOKEN:}
-    image: ${APP_RUNNER_IMAGE:learnloop-runner:latest}
     docker-command: ${APP_RUNNER_DOCKER_COMMAND:docker}
     command-timeout: ${APP_RUNNER_COMMAND_TIMEOUT:PT2S}
     require-limits: ${APP_RUNNER_REQUIRE_LIMITS:true}

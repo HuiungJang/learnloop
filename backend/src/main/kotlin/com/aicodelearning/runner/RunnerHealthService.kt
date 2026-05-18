@@ -33,13 +33,17 @@ data class RunnerEnvironmentInspection(
 )
 
 fun interface RunnerEnvironmentProbe {
-    fun inspect(properties: RunnerProperties): RunnerEnvironmentInspection
+    fun inspect(
+        properties: RunnerProperties,
+        requiredImages: List<String>,
+    ): RunnerEnvironmentInspection
 }
 
 @Service
 class RunnerHealthService(
     private val properties: RunnerProperties,
     private val environmentProbe: RunnerEnvironmentProbe,
+    private val runnerRegistry: RunnerRegistry,
 ) {
     fun health(): RunnerHealthResponse {
         if (!properties.enabled) {
@@ -56,7 +60,7 @@ class RunnerHealthService(
             )
         }
 
-        val inspection = environmentProbe.inspect(properties)
+        val inspection = environmentProbe.inspect(properties, runnerRegistry.requiredImages())
         val state =
             when {
                 !inspection.dockerAvailable -> RunnerHealthState.MISSING
@@ -85,7 +89,10 @@ class RunnerHealthService(
 
 @Component
 class ProcessRunnerEnvironmentProbe : RunnerEnvironmentProbe {
-    override fun inspect(properties: RunnerProperties): RunnerEnvironmentInspection {
+    override fun inspect(
+        properties: RunnerProperties,
+        requiredImages: List<String>,
+    ): RunnerEnvironmentInspection {
         val version = runDocker(properties, "version", "--format", "{{.Server.Version}}")
         if (version.missing) {
             return RunnerEnvironmentInspection(
@@ -106,14 +113,27 @@ class ProcessRunnerEnvironmentProbe : RunnerEnvironmentProbe {
             )
         }
 
-        val image = runDocker(properties, "image", "inspect", properties.image)
-        if (!image.success) {
+        if (requiredImages.isEmpty()) {
             return RunnerEnvironmentInspection(
                 dockerAvailable = true,
                 dockerReachable = true,
                 imagePresent = false,
                 limitsSupported = true,
-                detail = "Runner image is not available locally",
+                detail = "No runner images are registered",
+            )
+        }
+
+        val missingImages =
+            requiredImages.filter { image ->
+                !runDocker(properties, "image", "inspect", image).success
+            }
+        if (missingImages.isNotEmpty()) {
+            return RunnerEnvironmentInspection(
+                dockerAvailable = true,
+                dockerReachable = true,
+                imagePresent = false,
+                limitsSupported = true,
+                detail = "Runner image is not available locally: ${missingImages.joinToString(", ")}",
             )
         }
 

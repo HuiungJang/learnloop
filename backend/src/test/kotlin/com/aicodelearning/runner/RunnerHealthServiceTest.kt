@@ -10,9 +10,9 @@ class RunnerHealthServiceTest {
     fun `reports missing when docker is unavailable`() {
         val response =
             RunnerHealthService(
-                properties = RunnerProperties(image = "learnloop-runner:test"),
+                properties = RunnerProperties(),
                 environmentProbe =
-                    RunnerEnvironmentProbe { _ ->
+                    RunnerEnvironmentProbe { _, _ ->
                         RunnerEnvironmentInspection(
                             dockerAvailable = false,
                             dockerReachable = false,
@@ -21,6 +21,7 @@ class RunnerHealthServiceTest {
                             detail = "Docker command is not installed",
                         )
                     },
+                runnerRegistry = RunnerRegistry(),
             ).health()
 
         assertEquals("missing", response.status)
@@ -32,9 +33,17 @@ class RunnerHealthServiceTest {
     fun `reports image missing when docker is reachable without runner image`() {
         val response =
             RunnerHealthService(
-                properties = RunnerProperties(image = "learnloop-runner:test"),
+                properties = RunnerProperties(),
                 environmentProbe =
-                    RunnerEnvironmentProbe { _ ->
+                    RunnerEnvironmentProbe { _, requiredImages ->
+                        assertEquals(
+                            listOf(
+                                "learnloop-runner-java:latest",
+                                "learnloop-runner-kotlin:latest",
+                                "learnloop-runner-typescript:latest",
+                            ),
+                            requiredImages,
+                        )
                         RunnerEnvironmentInspection(
                             dockerAvailable = true,
                             dockerReachable = true,
@@ -43,6 +52,7 @@ class RunnerHealthServiceTest {
                             detail = "Runner image is not available locally",
                         )
                     },
+                runnerRegistry = RunnerRegistry(),
             ).health()
 
         assertEquals("image_missing", response.status)
@@ -55,9 +65,9 @@ class RunnerHealthServiceTest {
     fun `reports limit unsupported when limits are required but missing`() {
         val response =
             RunnerHealthService(
-                properties = RunnerProperties(image = "learnloop-runner:test", requireLimits = true),
+                properties = RunnerProperties(requireLimits = true),
                 environmentProbe =
-                    RunnerEnvironmentProbe { _ ->
+                    RunnerEnvironmentProbe { _, _ ->
                         RunnerEnvironmentInspection(
                             dockerAvailable = true,
                             dockerReachable = true,
@@ -66,6 +76,7 @@ class RunnerHealthServiceTest {
                             detail = "Docker resource limits are unsupported",
                         )
                     },
+                runnerRegistry = RunnerRegistry(),
             ).health()
 
         assertEquals("limit_unsupported", response.status)
@@ -76,9 +87,9 @@ class RunnerHealthServiceTest {
     fun `reports ready when runner prerequisites are available`() {
         val response =
             RunnerHealthService(
-                properties = RunnerProperties(image = "learnloop-runner:test", token = "runner-token"),
+                properties = RunnerProperties(token = "runner-token"),
                 environmentProbe =
-                    RunnerEnvironmentProbe { _ ->
+                    RunnerEnvironmentProbe { _, _ ->
                         RunnerEnvironmentInspection(
                             dockerAvailable = true,
                             dockerReachable = true,
@@ -87,6 +98,7 @@ class RunnerHealthServiceTest {
                             detail = "Runner prerequisites are available",
                         )
                     },
+                runnerRegistry = RunnerRegistry(),
             ).health()
 
         assertEquals("ready", response.status)

@@ -73,6 +73,37 @@ http://localhost:8080
 
 데이터는 `learnloop_install-postgres-data` Docker volume에 저장됩니다. `./scripts/stop.sh`는 컨테이너만 중지하고 데이터를 삭제하지 않습니다.
 
+### 실습 워크벤치와 샌드박스 실행
+
+실습 워크벤치는 TypeScript, Java, Kotlin 문제를 VS Code에 익숙한 편집 경험으로 풀 수 있게 합니다. 사용자는 로컬 코드 실행이 불가능한 환경에서도 실습을 탐색하고, 파일을 수정하고, 초안을 저장하고, 답안을 제출하고, 피드백과 정답 diff를 확인할 수 있습니다.
+
+샌드박스 실행은 선택 기능이며 실패 시 안전하게 비활성화됩니다. Run 동작은 backend runtime이 Docker CLI, 접근 가능한 Docker daemon, 로컬 언어별 runner image를 사용할 수 있을 때만 동작합니다. 이 조건이 없으면 앱은 `runner_unavailable`을 표시하지만 읽기, 편집, 로컬 저장, draft sync, 제출 흐름은 유지합니다.
+
+현재 runner 제한:
+
+- 지원 언어: TypeScript, Java, Kotlin
+- 코드 실행 중 네트워크 접근 없음
+- 실행 중 package 설치 없음; 필요한 의존성은 runner image에 포함해야 함
+- browser가 아니라 backend가 고정 harness command를 선택
+- wall-clock timeout, CPU, memory, process 수, stdout/stderr excerpt 제한 적용
+
+소스에서 runner를 확인하는 명령:
+
+```sh
+./scripts/runner-typescript-smoke.sh
+./scripts/runner-java-smoke.sh
+./scripts/runner-kotlin-smoke.sh
+./scripts/status.sh
+```
+
+기본 설치형 container는 backend에 Docker 접근 권한을 mount하지 않습니다. 설치를 단순하게 유지하고 host Docker socket 노출을 기본값으로 피하기 위한 선택입니다. `./scripts/status.sh`는 runner health를 출력하므로 운영자는 현재 환경에서 코드 실행이 가능한지 확인할 수 있습니다.
+
+### 풀이기록과 동기화
+
+Editor state는 local-first로 동작합니다. Browser는 아직 전송하지 않은 수정사항을 로컬에 유지하고, draft와 제출 답안을 사용자별 attempt record로 서버에 동기화합니다. 패턴 카드, 실습 파일, 힌트, 정답 참조 같은 조직의 canonical asset은 사용자가 답안을 제출해도 변경되지 않습니다.
+
+서버 동기화는 `(user, problem, clientAttemptId)` 기준으로 idempotent하게 처리됩니다. 따라서 재시도는 조직 자산에 충돌 레코드를 만들지 않고 해당 사용자의 draft/submission을 갱신합니다. Reviewer와 admin은 권한에 따라 제출 기록을 확인할 수 있지만, 로컬 AI provider credential은 사용자 브라우저에만 남고 서버로 전송되지 않습니다.
+
 ### 첫 사용자 플로우
 
 1. 회원가입 또는 로그인합니다.
@@ -106,6 +137,8 @@ cd learnloop-0.1.0-*
 ```
 
 릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 Docker image를 로드하고 stack을 시작한 뒤 demo password를 출력합니다.
+
+릴리즈 번들은 application과 database image를 포함합니다. 언어별 runner image는 크기가 크고 Docker 실행 권한이 있는 환경이 필요하므로 application bundle과 분리했습니다. Runner 조건이 준비되지 않은 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
 
 ## CI/CD
 
@@ -153,6 +186,16 @@ Health: http://localhost:8080/api/health
 ./scripts/check-split.sh
 ./scripts/npm.sh --prefix frontend audit
 ```
+
+샌드박스 runner image 빌드 및 검증:
+
+```sh
+./scripts/runner-typescript-smoke.sh
+./scripts/runner-java-smoke.sh
+./scripts/runner-kotlin-smoke.sh
+```
+
+추후 새로운 runner 언어를 추가하려면 `runner/` 아래에 runner image를 만들고, `backend/src/main/kotlin/com/aicodelearning/runner/RunnerRegistry.kt`에 고정 harness를 등록하고, practice contract test를 확장하고, 네트워크 없이 passing/failing exercise를 모두 증명하는 smoke script를 추가합니다.
 
 ## Demo Users
 

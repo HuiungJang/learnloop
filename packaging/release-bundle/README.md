@@ -40,6 +40,22 @@ The installer creates `.env` with generated local credentials and prints the gen
 
 `./stop.sh` stops containers without deleting the PostgreSQL Docker volume.
 
+The application stores learner attempts in PostgreSQL. Stopping and starting the bundle keeps that volume intact, so saved drafts and submitted attempts remain available after restart.
+
+## Practice Workbench
+
+The bundled app supports the LearnLoop practice workbench for TypeScript, Java, and Kotlin exercises. Learners can browse practices, edit files, save drafts, submit answers, and inspect answer diffs without any extra setup.
+
+Sandbox execution is optional. The Run action is available only when the backend runtime can use a Docker CLI, reach a Docker daemon, and find the local language runner images. The default bundle does not mount host Docker access into the backend container, so runner health may report `missing` or `runner_unavailable`. In that state, reading, editing, local save, draft sync, submission, and review still work.
+
+Runner limits in this version:
+
+- Supported languages: TypeScript, Java, Kotlin
+- No network access during code execution
+- No package installation during a run
+- Fixed backend-selected harness commands
+- Bounded timeout, CPU, memory, process count, and stdout/stderr excerpts
+
 ## Configuration
 
 Edit `.env` before running `./start.sh` to change the browser port or project name:
@@ -48,11 +64,10 @@ Edit `.env` before running `./start.sh` to change the browser port or project na
 AI_CODE_PROJECT_NAME=learnloop
 AI_CODE_WEB_PORT=8080
 APP_RUNNER_ENABLED=true
-APP_RUNNER_IMAGE=learnloop-runner:latest
 ```
 
 Use a different `AI_CODE_PROJECT_NAME` when running multiple isolated installations on the same machine.
-Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings until the sandbox runner image is installed.
+Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments that do not provide Docker-backed sandbox execution.
 
 ## License
 

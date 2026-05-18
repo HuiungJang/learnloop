@@ -73,6 +73,37 @@ To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
 
 Data is stored in the `learnloop_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
 
+### Practice Workbench and Sandbox Runs
+
+The practice workbench supports a VS Code-style editor experience for TypeScript, Java, and Kotlin exercises. Learners can browse a practice, edit files, save drafts, submit answers, inspect feedback, and compare answer diffs even when local code execution is unavailable.
+
+Sandbox execution is optional and fail-closed. The Run action requires the backend runtime to have access to a Docker CLI, a reachable Docker daemon, and local language runner images. If those prerequisites are missing, the app reports `runner_unavailable` while preserving read, edit, local save, draft sync, and submit flows.
+
+Runner limitations for the current version:
+
+- Supported languages: TypeScript, Java, Kotlin
+- No network access during code execution
+- No package installation during a run; dependencies must be baked into runner images
+- Fixed harness commands selected by the backend, not by the browser
+- Bounded wall-clock timeout, CPU, memory, process count, and stdout/stderr excerpts
+
+Useful runner checks from source:
+
+```sh
+./scripts/runner-typescript-smoke.sh
+./scripts/runner-java-smoke.sh
+./scripts/runner-kotlin-smoke.sh
+./scripts/status.sh
+```
+
+The default installed containers do not mount Docker access into the backend. That keeps installation simple and avoids exposing the host Docker socket by default; `./scripts/status.sh` prints runner health so operators can see whether execution is available in their environment.
+
+### Attempts and Sync
+
+Editor state is local-first. The browser keeps unsent edits locally, then syncs drafts and submitted answers to the server as per-user attempt records. Canonical organization assets such as pattern cards, practice files, hints, and answer references are not mutated when a learner submits an attempt.
+
+Server sync is idempotent by `(user, problem, clientAttemptId)`, so retries update the learner's own draft/submission instead of creating conflicting organization-level records. Reviewers and administrators can inspect submitted attempts according to their role, but local AI provider credentials remain in the user's browser and are not sent to the server.
+
 ### First User Flow
 
 1. Sign up or log in.
@@ -106,6 +137,8 @@ cd learnloop-0.1.0-*
 ```
 
 Release-bundle installation does not build from source. It loads the packaged Docker images, starts the stack, and prints the generated demo password.
+
+The release bundle includes the application and database images. Language runner images are intentionally separate from the application bundle because they are larger and require an execution environment with Docker access. When runner prerequisites are not available, the release app still supports browsing, editing, saving, submitting, and reviewing practice attempts.
 
 ## CI/CD
 
@@ -153,6 +186,16 @@ Run the current split-stack verification:
 ./scripts/check-split.sh
 ./scripts/npm.sh --prefix frontend audit
 ```
+
+Build and verify sandbox runner images:
+
+```sh
+./scripts/runner-typescript-smoke.sh
+./scripts/runner-java-smoke.sh
+./scripts/runner-kotlin-smoke.sh
+```
+
+To add another runner language later, add a runner image under `runner/`, register a fixed harness in `backend/src/main/kotlin/com/aicodelearning/runner/RunnerRegistry.kt`, extend the practice contract tests, and add a smoke script that proves both passing and failing exercises without network access.
 
 ## Demo Users
 
