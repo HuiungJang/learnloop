@@ -1208,15 +1208,21 @@ Phase 47 notes:
 
 ### Phase 48: Responsive and Visual Verification
 
-- [ ] Check desktop workbench layout.
-- [ ] Check mobile workbench layout.
-- [ ] Check long file names, long tags, long stdout/stderr, and long problem titles.
-- [ ] Capture screenshots if Browser/Playwright is available.
+- [x] Check desktop workbench layout.
+- [x] Check mobile workbench layout.
+- [x] Check long file names, long tags, long stdout/stderr, and long problem titles.
+- [x] Capture screenshots if Browser/Playwright is available.
 
 Verification:
 
-- [ ] No incoherent overlap or text overflow in target viewports.
-- [ ] Editor, panels, and buttons keep stable dimensions.
+- [x] No incoherent overlap or text overflow in target viewports.
+- [x] Editor, panels, and buttons keep stable dimensions.
+
+Phase 48 notes:
+
+- Ran a Playwright visual stress check against the installed app at `http://localhost:18080`.
+- Captured desktop and mobile screenshots at `.test-data/phase48-desktop.png` and `.test-data/phase48-mobile.png`.
+- Injected long problem titles, tags, file paths, and stdout/stderr strings into the workbench UI and verified zero horizontal document overflow at 1440x1000 and 390x900.
 
 ### Phase 49: Security Scan and Fixes
 
