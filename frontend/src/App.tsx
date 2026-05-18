@@ -75,6 +75,12 @@ type PracticeSaveStatus = {
   message: string;
 };
 type WorkbenchOverlay = "quick-open" | "command-palette" | null;
+type AnswerDiffState = {
+  language: string;
+  path: string;
+  referenceAnswer: string;
+  submittedAnswer: string;
+};
 
 type LocalAiSettings = {
   provider: LocalAiProvider;
@@ -122,6 +128,9 @@ const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
+);
+const PracticeAnswerDiff = lazy(() =>
+  import("./practice/PracticeAnswerDiff").then((module) => ({ default: module.PracticeAnswerDiff }))
 );
 
 function localAiStorageKey(userId: string) {
@@ -179,6 +188,7 @@ export function App() {
   const [workbenchOverlay, setWorkbenchOverlay] = useState<WorkbenchOverlay>(null);
   const [workbenchQuery, setWorkbenchQuery] = useState("");
   const [diffVisible, setDiffVisible] = useState(false);
+  const [answerDiff, setAnswerDiff] = useState<AnswerDiffState | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
@@ -646,6 +656,17 @@ export function App() {
                       {diffVisible && activePractice.latestRun?.failedDiff != null ? (
                         <pre className="diff-panel">{activePractice.latestRun.failedDiff}</pre>
                       ) : null}
+                      {answerDiff !== null ? (
+                        <Suspense fallback={<pre className="answer-diff-fallback">Loading answer diff.</pre>}>
+                          <PracticeAnswerDiff
+                            language={answerDiff.language}
+                            path={answerDiff.path}
+                            referenceAnswer={answerDiff.referenceAnswer}
+                            submittedAnswer={answerDiff.submittedAnswer}
+                            theme={editorTheme}
+                          />
+                        </Suspense>
+                      ) : null}
                       {workbenchOverlay !== null ? renderWorkbenchOverlay(activePractice) : null}
                     </div>
                   </div>
@@ -1085,15 +1106,31 @@ export function App() {
       assetRevision: activePractice.assetRevision,
       files
     });
+    setAnswerDiff(null);
     setPracticeSaveStatus({ state: "submitting", message: "Submitting" });
     try {
-      await submitPracticeAttempt(session.token, activePractice.id, {
+      const response = await submitPracticeAttempt(session.token, activePractice.id, {
         clientAttemptId: draft.clientAttemptId,
         assetRevision: draft.assetRevision,
         language: activePractice.files[0]?.language ?? "typescript",
         files: draft.files.map((file) => ({ path: file.path, content: file.content })),
         resultStatus: "submitted"
       });
+      const submittedProblem = response.patternCard.problems.find((problem) => problem.id === activePractice.id);
+      const referenceAnswer = submittedProblem?.referenceAnswer;
+      const answerFile =
+        draft.files.find((file) => activePractice.files.some((source) => source.path === file.path && !source.readOnly)) ?? draft.files[0];
+      if (referenceAnswer != null && answerFile !== undefined) {
+        const sourceFile = activePractice.files.find((file) => file.path === answerFile.path);
+        setAnswerDiff({
+          language: sourceFile?.language ?? activePractice.files[0]?.language ?? "plaintext",
+          path: answerFile.path,
+          referenceAnswer,
+          submittedAnswer: answerFile.content
+        });
+      } else {
+        setAnswerDiff(null);
+      }
       setPracticeSaveStatus({ state: "submitted", message: "Submitted" });
     } catch {
       setPracticeSaveStatus({ state: "failed", message: "Submit failed" });
@@ -1113,6 +1150,7 @@ export function App() {
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
+      setAnswerDiff(null);
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     } catch (error) {
       setActivePractice(null);
@@ -1122,6 +1160,7 @@ export function App() {
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
+      setAnswerDiff(null);
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
       setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
     } finally {
@@ -1142,6 +1181,7 @@ export function App() {
     editorSnapshotRef.current = null;
     closeWorkbenchOverlay();
     setDiffVisible(false);
+    setAnswerDiff(null);
     setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     setPracticeError("");
     setActivity([]);

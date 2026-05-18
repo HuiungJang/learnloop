@@ -806,6 +806,50 @@ h1 {
   white-space: pre-wrap;
 }
 
+.answer-diff-shell {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(252, 251, 248, 0.12);
+  background: rgba(28, 28, 28, 0.98);
+}
+
+.answer-diff-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.answer-diff-header strong {
+  color: #fcfbf8;
+}
+
+.answer-diff-header small {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(252, 251, 248, 0.72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.answer-diff-editor {
+  height: 260px;
+  min-height: 220px;
+}
+
+.answer-diff-fallback {
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(252, 251, 248, 0.12);
+  color: rgba(252, 251, 248, 0.72);
+  background: rgba(28, 28, 28, 0.98);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .workbench-overlay-backdrop {
   position: absolute;
   inset: 0;

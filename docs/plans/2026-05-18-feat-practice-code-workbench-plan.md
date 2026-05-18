@@ -875,14 +875,22 @@ Phase 31 notes:
 
 ### Phase 32: Answer Diff After Submission
 
-- [ ] Use Monaco diff editor for answer/reference comparison.
-- [ ] Show diff only after answer eligibility.
-- [ ] Dispose diff editor models.
+- [x] Use Monaco diff editor for answer/reference comparison.
+- [x] Show diff only after answer eligibility.
+- [x] Dispose diff editor models.
 
 Verification:
 
-- [ ] Learner cannot see answer diff before submission.
-- [ ] Learner sees diff after valid submission.
+- [x] Learner cannot see answer diff before submission.
+- [x] Learner sees diff after valid submission.
+
+Phase 32 notes:
+
+- Added a lazy Monaco answer diff component for submitted answer/reference comparison.
+- Built the answer diff only from the submission response that includes eligible `referenceAnswer` data.
+- Disposed the diff editor and both models on cleanup, with StrictMode-safe delayed creation.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed the answer diff and reference answer are hidden before submission and visible after a valid submission.
 
 ### Phase 33: Runner Service Health Skeleton
 
