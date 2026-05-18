@@ -187,6 +187,11 @@ export type PracticeSubmissionResponse = {
   patternCard: PatternCardResponse;
 };
 
+export type ProficiencyResponse = {
+  tagName: string;
+  score: number;
+};
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiRequestError extends Error {
@@ -343,6 +348,16 @@ export async function getLibrary(
   if (filters.page !== undefined) params.set("page", String(filters.page));
   if (filters.pageSize !== undefined) params.set("pageSize", String(filters.pageSize));
   const response = await request<{ cards: PatternCardResponse[] }>(`/api/library?${params.toString()}`, { token });
+  return response.cards;
+}
+
+export async function getProgress(token: string, organizationId: string): Promise<ProficiencyResponse[]> {
+  const response = await request<{ proficiency: ProficiencyResponse[] }>(`/api/progress?organizationId=${encodeURIComponent(organizationId)}`, { token });
+  return response.proficiency;
+}
+
+export async function getRecommendations(token: string, organizationId: string): Promise<PatternCardResponse[]> {
+  const response = await request<{ cards: PatternCardResponse[] }>(`/api/recommendations?organizationId=${encodeURIComponent(organizationId)}`, { token });
   return response.cards;
 }
 

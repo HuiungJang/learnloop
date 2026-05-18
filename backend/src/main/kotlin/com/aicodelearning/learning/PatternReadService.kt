@@ -16,6 +16,7 @@ class PatternReadService(
     private val patternTagRepository: PatternTagRepository,
     private val problemRepository: ProblemRepository,
     private val submissionRepository: SubmissionRepository,
+    private val proficiencyScoreRepository: ProficiencyScoreRepository,
     private val authorizationService: AuthorizationService,
 ) {
     private val publishedPracticeCache = ConcurrentHashMap<String, PracticeContent>()
@@ -36,6 +37,42 @@ class PatternReadService(
                 .let { if (limit == null) it else it.take(limit) }
 
         return toResponses(cards, includeAnswers = false, filters = filters)
+    }
+
+    @Transactional(readOnly = true)
+    fun listRecommended(
+        currentUser: CurrentUser,
+        organizationId: String,
+        limit: Int = DEFAULT_RECOMMENDATION_LIMIT,
+    ): List<PatternCardResponse> {
+        if (!currentUser.hasOrganizationMemberRole("learner", organizationId)) {
+            authorizationService.requireOrganizationMember(currentUser, organizationId, "learner")
+        }
+
+        val normalizedLimit = limit.coerceIn(1, MAX_RECOMMENDATION_LIMIT)
+        val candidateLimit = (normalizedLimit * RECOMMENDATION_CANDIDATE_MULTIPLIER).coerceAtMost(MAX_RECOMMENDATION_CANDIDATES)
+        val cards =
+            findPublishedCards(organizationId, candidateLimit, LibraryFilters(pageSize = candidateLimit))
+                .filter { currentUser.hasRole("learner", it.organizationId, it.teamId, it.projectId) }
+        if (cards.isEmpty()) {
+            return emptyList()
+        }
+
+        val tagsByCard = loadTagsByCard(cards.map { it.id })
+        val scoreByTagName =
+            proficiencyScoreRepository
+                .findByUserIdAndOrganizationId(currentUser.id, organizationId)
+                .associateBy({ it.tagName.normalizedTagKey() }, { it.score })
+        val ranked =
+            cards
+                .sortedWith(
+                    compareByDescending<PatternCardEntity> { card ->
+                        recommendationAffinity(tagsByCard.getValueOrEmpty(card.id), scoreByTagName)
+                    }.thenByDescending { it.publishedAt ?: it.createdAt },
+                )
+                .take(normalizedLimit)
+
+        return toResponses(ranked, includeAnswers = false)
     }
 
     @Transactional(readOnly = true)
@@ -236,6 +273,10 @@ class PatternReadService(
     }
 
     private companion object {
+        const val DEFAULT_RECOMMENDATION_LIMIT = 5
+        const val MAX_RECOMMENDATION_LIMIT = 10
+        const val MAX_RECOMMENDATION_CANDIDATES = 50
+        const val RECOMMENDATION_CANDIDATE_MULTIPLIER = 5
         val roleOrder = listOf("learner", "contributor", "reviewer", "admin")
     }
 }
@@ -281,3 +322,10 @@ private fun String?.normalizedFilter(): String? =
         ?.lowercase()
 
 private fun String.normalizedContains(filter: String): Boolean = lowercase().contains(filter)
+
+private fun String.normalizedTagKey(): String = trim().lowercase()
+
+private fun recommendationAffinity(
+    tags: List<PatternTagResponse>,
+    scoreByTagName: Map<String, Int>,
+): Int = tags.sumOf { scoreByTagName[it.name.normalizedTagKey()] ?: 0 }

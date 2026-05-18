@@ -1099,14 +1099,24 @@ Phase 42 notes:
 
 ### Phase 43: Recommendation Refresh After Submission
 
-- [ ] Refresh progress after valid submission.
-- [ ] Refresh recommendations based on updated tags/proficiency.
-- [ ] Keep recommendation refresh bounded or asynchronous.
+- [x] Refresh progress after valid submission.
+- [x] Refresh recommendations based on updated tags/proficiency.
+- [x] Keep recommendation refresh bounded or asynchronous.
 
 Verification:
 
-- [ ] Submission updates progress.
-- [ ] Recommendation endpoint remains bounded.
+- [x] Submission updates progress.
+- [x] Recommendation endpoint remains bounded.
+
+Phase 43 notes:
+
+- Updated `/api/recommendations` to rank a bounded candidate pool by the learner's current tag proficiency and recent publication date.
+- Kept recommendation work bounded to 25 candidates for the default 5-card response, with an internal hard cap of 50 candidates.
+- Added API coverage proving a valid submission updates progress and refreshes tag-based recommendations.
+- Added frontend progress/recommendation refresh after successful submission and rendered current progress scores plus recommended next cards.
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-typecheck.sh`: passed.
+- `./scripts/frontend-build.sh`: passed with existing Monaco chunk-size warnings.
 
 ### Phase 44: Conversion Workbench Read-Only Trace
 

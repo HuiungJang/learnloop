@@ -7,6 +7,11 @@ import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.learning.PatternCardEntity
 import com.aicodelearning.learning.PatternCardRepository
 import com.aicodelearning.learning.PatternRecognitionPromptBuilder
+import com.aicodelearning.learning.PatternTagEntity
+import com.aicodelearning.learning.PatternTagLinkEntity
+import com.aicodelearning.learning.PatternTagLinkId
+import com.aicodelearning.learning.PatternTagLinkRepository
+import com.aicodelearning.learning.PatternTagRepository
 import com.aicodelearning.learning.PracticeContract
 import com.aicodelearning.learning.ProblemEntity
 import com.aicodelearning.learning.ProblemFileEntity
@@ -99,6 +104,12 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var patternCardRepository: PatternCardRepository
+
+    @Autowired
+    private lateinit var patternTagRepository: PatternTagRepository
+
+    @Autowired
+    private lateinit var patternTagLinkRepository: PatternTagLinkRepository
 
     @Autowired
     private lateinit var problemRepository: ProblemRepository
@@ -1318,6 +1329,43 @@ class SessionAuthenticationIntegrationTest {
         assertTrue(json(bounded)["cards"].size() <= 1)
     }
 
+    @Test
+    fun `submission updates progress and refreshes tag based recommendations`() {
+        val tagName = "Phase43 Shared ${System.nanoTime()}"
+        val submittedProblemId =
+            saveAccessiblePracticeProblem(
+                title = "Submitted recommendation seed",
+                tags = listOf(tagName),
+                publishedAt = Instant.now().plusSeconds(120),
+            )
+        val nextProblemId =
+            saveAccessiblePracticeProblem(
+                title = "Next recommendation match",
+                tags = listOf(tagName),
+                publishedAt = Instant.now().plusSeconds(180),
+            )
+        val nextCardId = problemRepository.findById(nextProblemId).orElseThrow().patternCardId
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$submittedProblemId/practice", learner.token))["problem"]["assetRevision"].asText()
+
+        val submission =
+            postJson(
+                "/api/problems/$submittedProblemId/submissions",
+                learner.token,
+                fileSubmissionBody("attempt-recommendation-${System.nanoTime()}", assetRevision, "export const value = 1"),
+            )
+
+        assertEquals(HttpStatus.CREATED, submission.statusCode)
+        val progress = getJson("/api/progress?organizationId=org-demo", learner.token)
+        val score = json(progress)["proficiency"].firstOrNull { it["tagName"].asText() == tagName }
+        assertEquals(1, score?.get("score")?.asInt())
+
+        val recommendations = getJson("/api/recommendations?organizationId=org-demo", learner.token)
+        val cards = json(recommendations)["cards"]
+        assertTrue(cards.size() <= 5)
+        assertEquals(nextCardId, cards[0]["id"].asText())
+    }
+
     private fun login(email: String): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
@@ -1429,7 +1477,11 @@ class SessionAuthenticationIntegrationTest {
         return taskId
     }
 
-    private fun saveAccessiblePracticeProblem(title: String): String {
+    private fun saveAccessiblePracticeProblem(
+        title: String,
+        tags: List<String> = emptyList(),
+        publishedAt: Instant = Instant.now(),
+    ): String {
         val cardId = "card_accessible_${System.nanoTime()}"
         val problemId = "problem_accessible_${System.nanoTime()}"
         patternCardRepository.save(
@@ -1444,10 +1496,11 @@ class SessionAuthenticationIntegrationTest {
                 summary = "A scoped card visible to platform learners.",
                 visibility = "organization",
                 publicationStatus = "published",
-                createdAt = Instant.now(),
-                publishedAt = Instant.now(),
+                createdAt = publishedAt,
+                publishedAt = publishedAt,
             ),
         )
+        tags.forEach { linkPatternTag(cardId, it) }
         problemRepository.save(
             ProblemEntity(
                 id = problemId,
@@ -1473,6 +1526,27 @@ class SessionAuthenticationIntegrationTest {
             ),
         )
         return problemId
+    }
+
+    private fun linkPatternTag(
+        cardId: String,
+        tagName: String,
+    ) {
+        val normalizedName = "pattern:${tagName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')}"
+        val tag =
+            patternTagRepository.findByNormalizedName(normalizedName)
+                ?: patternTagRepository.save(
+                    PatternTagEntity(
+                        id = "tag_test_${System.nanoTime()}",
+                        tagType = "pattern",
+                        name = tagName,
+                        normalizedName = normalizedName,
+                    ),
+                )
+        val linkId = PatternTagLinkId(patternCardId = cardId, tagId = tag.id)
+        if (!patternTagLinkRepository.existsById(linkId)) {
+            patternTagLinkRepository.save(PatternTagLinkEntity(patternCardId = cardId, tagId = tag.id))
+        }
     }
 
     private fun saveScopedCard(

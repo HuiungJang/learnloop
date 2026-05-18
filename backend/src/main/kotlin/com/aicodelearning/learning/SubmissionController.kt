@@ -48,7 +48,7 @@ class SubmissionController(
     fun recommendations(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @RequestParam organizationId: String,
-    ): LibraryResponse = LibraryResponse(cards = patternReadService.listPublished(currentUser, organizationId, limit = 5))
+    ): LibraryResponse = LibraryResponse(cards = patternReadService.listRecommended(currentUser, organizationId, limit = 5))
 }
 
 data class SubmissionCreateResponse(

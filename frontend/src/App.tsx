@@ -29,6 +29,8 @@ import {
   fetchHealth,
   getLibrary,
   getPracticeProblem,
+  getProgress,
+  getRecommendations,
   type HealthResponse,
   isConflictError,
   listProviders,
@@ -43,6 +45,7 @@ import {
   type PracticeHintResponse,
   type PracticeProblemResponse,
   type PracticeRunResultResponse,
+  type ProficiencyResponse,
   type ProviderResponse,
   type SessionResponse
 } from "./api/client";
@@ -182,6 +185,8 @@ export function App() {
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
+  const [progressScores, setProgressScores] = useState<ProficiencyResponse[]>([]);
+  const [recommendationCards, setRecommendationCards] = useState<PatternCardResponse[]>([]);
   const [activePractice, setActivePractice] = useState<PracticeProblemResponse | null>(null);
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
@@ -249,6 +254,11 @@ export function App() {
     if (session === null || membership === null || showOnboarding) return;
     void refreshLibrary(session);
   }, [libraryFilters, membership, session, showOnboarding]);
+
+  useEffect(() => {
+    if (session === null || membership === null || showOnboarding) return;
+    void refreshLearningSignals(session);
+  }, [membership, session, showOnboarding]);
 
   if (session === null) {
     return (
@@ -770,7 +780,16 @@ export function App() {
                   <h2>Progress</h2>
                 </div>
                 <div className="review-table">
-                  <p className="muted-copy">No submissions yet.</p>
+                  {progressScores.length === 0 ? (
+                    <p className="muted-copy">No submissions yet.</p>
+                  ) : (
+                    progressScores.slice(0, 6).map((score) => (
+                      <div className="review-row" key={score.tagName}>
+                        <span>{score.tagName}</span>
+                        <strong>{score.score}</strong>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </section>
@@ -833,6 +852,27 @@ export function App() {
       setLibraryCards([]);
     } finally {
       setLibraryLoading(false);
+    }
+  }
+
+  async function refreshLearningSignals(currentSession: SessionResponse) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setProgressScores([]);
+      setRecommendationCards([]);
+      return;
+    }
+
+    try {
+      const [progress, recommendations] = await Promise.all([
+        getProgress(currentSession.token, currentMembership.organizationId),
+        getRecommendations(currentSession.token, currentMembership.organizationId)
+      ]);
+      setProgressScores(progress);
+      setRecommendationCards(recommendations);
+    } catch {
+      setProgressScores([]);
+      setRecommendationCards([]);
     }
   }
 
@@ -915,7 +955,7 @@ export function App() {
         {
           id: "run",
           label: "Run tests",
-          detail: "Execute visible TypeScript tests in the local sandbox",
+          detail: "Execute visible tests in the local sandbox",
           disabled: editorSnapshotRef.current === null || practiceSaveStatus.state === "running",
           disabledReason: practiceSaveStatus.state === "running" ? "Run in progress" : "Editor is still loading",
           run: () => {
@@ -1081,6 +1121,7 @@ export function App() {
 
   function renderFeedbackPanel(problem: PracticeProblemResponse) {
     const run = problem.latestRun;
+    const nextRecommendations = recommendationCards.filter((card) => card.id !== problem.patternCardId).slice(0, 3);
     const status =
       practiceSaveStatus.state === "submitted"
         ? "submitted"
@@ -1141,7 +1182,13 @@ export function App() {
         </div>
         <div className="feedback-section">
           <span>Recommendations</span>
-          <small>{status === "failed" || status === "compile_error" ? "Review the runner output and try again." : "Run or submit to receive recommendations."}</small>
+          {status === "failed" || status === "compile_error" ? (
+            <small>Review the runner output and try again.</small>
+          ) : nextRecommendations.length > 0 ? (
+            nextRecommendations.map((card) => <small key={card.id}>{card.title}</small>)
+          ) : (
+            <small>Run or submit to receive recommendations.</small>
+          )}
         </div>
       </div>
     );
@@ -1208,6 +1255,8 @@ export function App() {
         setAnswerDiff(null);
       }
       setPracticeSaveStatus({ state: "submitted", message: "Submitted" });
+      void refreshLearningSignals(session);
+      void refreshLibrary(session);
     } catch {
       setPracticeSaveStatus({ state: "failed", message: "Submit failed" });
     }
@@ -1258,6 +1307,8 @@ export function App() {
     setProviders([]);
     setLatestCard(null);
     setLibraryCards([]);
+    setProgressScores([]);
+    setRecommendationCards([]);
     setLibraryError("");
     setActivePractice(null);
     setActivePracticePath(null);
