@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/learnloop-logo.png" alt="LearnLoop" width="320">
+  <img src="assets/learnloop-logo.svg" alt="LearnLoop" width="180">
 </p>
 
 # LearnLoop
