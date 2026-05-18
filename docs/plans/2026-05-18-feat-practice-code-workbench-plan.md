@@ -431,16 +431,24 @@ Phase 9 notes:
 
 ### Phase 10: Repository and Read Model Wiring
 
-- [ ] Add repositories for problem files.
-- [ ] Add repositories for hints.
-- [ ] Add repositories for provenance links.
-- [ ] Add repositories for submission files and run results.
-- [ ] Add batched read methods needed by practice detail.
+- [x] Add repositories for problem files.
+- [x] Add repositories for hints.
+- [x] Add repositories for provenance links.
+- [x] Add repositories for submission files and run results.
+- [x] Add batched read methods needed by practice detail.
 
 Verification:
 
-- [ ] Repository integration tests load one problem with files, hints, provenance, and latest attempt without N+1 behavior in obvious paths.
-- [ ] Backend tests pass.
+- [x] Repository integration tests load one problem with files, hints, provenance, and latest attempt without N+1 behavior in obvious paths.
+- [x] Backend tests pass.
+
+Phase 10 notes:
+
+- Added JPA entities for practice files, hints, provenance links, submission files, and sandbox run results.
+- Added repository methods for single-problem and batched practice detail reads.
+- Extended `SubmissionEntity` and repository reads for user-scoped latest attempts and idempotent client attempts.
+- Added `PracticeRepositoryIntegrationTest` over a real PostgreSQL/Flyway schema.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 11: Demo Exercise Seed Data
 

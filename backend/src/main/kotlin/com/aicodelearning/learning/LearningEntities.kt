@@ -142,6 +142,93 @@ class ProblemEntity(
 )
 
 @Entity
+@Table(name = "problem_files")
+class ProblemFileEntity(
+    @Id
+    var id: String = "",
+
+    @Column(name = "problem_id", nullable = false)
+    var problemId: String = "",
+
+    @Column(nullable = false)
+    var path: String = "",
+
+    @Column(nullable = false)
+    var language: String = "",
+
+    @Column(name = "file_role", nullable = false)
+    var fileRole: String = "",
+
+    @Column(nullable = false)
+    var content: String = "",
+
+    @Column(name = "read_only", nullable = false)
+    var readOnly: Boolean = false,
+
+    @Column(name = "sort_order", nullable = false)
+    var sortOrder: Int = 0,
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant = Instant.now(),
+)
+
+@Entity
+@Table(name = "problem_hints")
+class ProblemHintEntity(
+    @Id
+    var id: String = "",
+
+    @Column(name = "problem_id", nullable = false)
+    var problemId: String = "",
+
+    @Column(name = "reveal_order", nullable = false)
+    var revealOrder: Int = 0,
+
+    @Column(nullable = false)
+    var label: String = "",
+
+    @Column(nullable = false)
+    var content: String = "",
+
+    @Column(name = "reveal_policy", nullable = false)
+    var revealPolicy: String = "",
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant = Instant.now(),
+)
+
+@Entity
+@Table(name = "problem_provenance_links")
+class ProblemProvenanceLinkEntity(
+    @Id
+    var id: String = "",
+
+    @Column(name = "problem_id", nullable = false)
+    var problemId: String = "",
+
+    @Column(name = "evidence_item_id")
+    var evidenceItemId: String? = null,
+
+    @Column(name = "source_link_id")
+    var sourceLinkId: String? = null,
+
+    @Column(name = "source_type", nullable = false)
+    var sourceType: String = "",
+
+    @Column(name = "source_label", nullable = false)
+    var sourceLabel: String = "",
+
+    @Column(name = "redacted_excerpt", nullable = false)
+    var redactedExcerpt: String = "",
+
+    @Column(name = "sort_order", nullable = false)
+    var sortOrder: Int = 0,
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant = Instant.now(),
+)
+
+@Entity
 @Table(name = "review_tasks")
 class ReviewTaskEntity(
     @Id
@@ -205,6 +292,92 @@ class SubmissionEntity(
 
     @Column(name = "result_status", nullable = false)
     var resultStatus: String = "",
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant = Instant.now(),
+
+    @Column(name = "client_attempt_id")
+    var clientAttemptId: String? = null,
+
+    @Column(name = "asset_revision")
+    var assetRevision: String? = null,
+
+    @Column
+    var language: String? = null,
+
+    @Column(name = "attempt_status", nullable = false)
+    var attemptStatus: String = "submitted",
+
+    @Column
+    var score: Int? = null,
+
+    @Column(name = "metadata_json", nullable = false)
+    var metadataJson: String = "{}",
+
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant = Instant.now(),
+
+    @Column(name = "submitted_at")
+    var submittedAt: Instant? = null,
+)
+
+@Entity
+@Table(name = "submission_files")
+class SubmissionFileEntity(
+    @Id
+    var id: String = "",
+
+    @Column(name = "submission_id", nullable = false)
+    var submissionId: String = "",
+
+    @Column(nullable = false)
+    var path: String = "",
+
+    @Column(nullable = false)
+    var content: String = "",
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant = Instant.now(),
+)
+
+@Entity
+@Table(name = "sandbox_run_results")
+class SandboxRunResultEntity(
+    @Id
+    var id: String = "",
+
+    @Column(name = "problem_id", nullable = false)
+    var problemId: String = "",
+
+    @Column(name = "user_id", nullable = false)
+    var userId: String = "",
+
+    @Column(name = "submission_id")
+    var submissionId: String? = null,
+
+    @Column(nullable = false)
+    var status: String = "",
+
+    @Column(name = "runner_kind", nullable = false)
+    var runnerKind: String = "",
+
+    @Column(name = "duration_ms")
+    var durationMs: Long? = null,
+
+    @Column(name = "tests_json", nullable = false)
+    var testsJson: String = "[]",
+
+    @Column(name = "stdout_excerpt")
+    var stdoutExcerpt: String? = null,
+
+    @Column(name = "stderr_excerpt")
+    var stderrExcerpt: String? = null,
+
+    @Column(name = "failed_diff")
+    var failedDiff: String? = null,
+
+    @Column(name = "failure_reason")
+    var failureReason: String? = null,
 
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
