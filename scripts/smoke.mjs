@@ -1,13 +1,49 @@
 import { once } from "node:events";
 import { rm } from "node:fs/promises";
+import http from "node:http";
 import { createApp } from "../src/app.js";
 import { JsonStore } from "../src/store.js";
 
 const dataDir = process.env.APP_DATA_DIR || ".local-data-smoke";
 const port = Number(process.env.APP_PORT || 4183);
+const previousAllowInsecureProviderBaseUrl = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
 if (dataDir === ".local-data-smoke") {
   await rm(dataDir, { recursive: true, force: true });
 }
+const fakeProviderOutput = {
+  title: "Smoke Provider Generated Pattern",
+  summary: "A provider-generated learning pattern for wrapping service calls with reusable timeout and retry behavior.",
+  tags: [
+    { tagType: "language", name: "TypeScript" },
+    { tagType: "pattern", name: "Retry/Timeout" }
+  ],
+  problems: [
+    {
+      type: "qa",
+      prompt: "When is a bounded timeout pattern appropriate around an API boundary?",
+      referenceAnswer: "Use it when callers need predictable failure behavior around transient network or service delays.",
+      difficulty: "beginner"
+    }
+  ]
+};
+const fakeProviderRequests = [];
+const fakeProviderServer = http.createServer(async (req, res) => {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  fakeProviderRequests.push({
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    body: Buffer.concat(chunks).toString("utf8")
+  });
+  res.writeHead(req.url === "/v1/responses" ? 200 : 404, { "content-type": "application/json" });
+  res.end(`${JSON.stringify({ output_text: JSON.stringify(fakeProviderOutput), usage: { input_tokens: 180, output_tokens: 220 } })}\n`);
+});
+fakeProviderServer.listen(0, "127.0.0.1");
+await once(fakeProviderServer, "listening");
+const fakeProviderAddress = fakeProviderServer.address();
+const fakeProviderBaseUrl = `http://127.0.0.1:${fakeProviderAddress.port}`;
 const store = new JsonStore(dataDir);
 await store.init();
 const server = await createApp(store);
@@ -97,7 +133,54 @@ try {
     body: { textAnswer: "Smoke answer", resultStatus: "self_marked_complete" }
   });
   const progress = await api("/api/progress?organizationId=org-demo", { userId: "u-learner" });
-  console.log(JSON.stringify({ ok: true, publishedCards: library.cards.length, proficiency: progress.proficiency.length }, null, 2));
+  const provider = await api("/api/providers", {
+    userId: "u-admin",
+    method: "POST",
+    body: {
+      organizationId: "org-demo",
+      provider: "openai",
+      model: "fake-responses-model",
+      scope: "organization",
+      credential: "smoke-provider-secret",
+      orgApproved: true,
+      baseUrl: fakeProviderBaseUrl
+    }
+  });
+  const providerGenerated = await api("/api/generation/run", {
+    userId: "u-contributor",
+    method: "POST",
+    body: {
+      organizationId: "org-demo",
+      providerConfigId: provider.provider.id,
+      sourceLinkIds: [linkId],
+      visibility: "organization"
+    }
+  });
+  if (providerGenerated.patternCard.title !== fakeProviderOutput.title) {
+    throw new Error("Provider generation did not use fake provider output");
+  }
+  if (fakeProviderRequests.length !== 1) {
+    throw new Error("Expected exactly one fake provider request");
+  }
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        publishedCards: library.cards.length,
+        proficiency: progress.proficiency.length,
+        providerDraftTitle: providerGenerated.patternCard.title,
+        providerRequests: fakeProviderRequests.length
+      },
+      null,
+      2
+    )
+  );
 } finally {
-  server.close();
+  await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => fakeProviderServer.close(resolve));
+  if (previousAllowInsecureProviderBaseUrl === undefined) {
+    delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+  } else {
+    process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previousAllowInsecureProviderBaseUrl;
+  }
 }

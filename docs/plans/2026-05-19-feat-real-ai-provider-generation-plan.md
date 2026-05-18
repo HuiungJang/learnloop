@@ -95,25 +95,25 @@ Verification:
 
 ### Phase 5: E2E And Documentation
 
-- [ ] Update smoke/E2E coverage to exercise real provider HTTP generation through a fake local provider.
-- [ ] Keep the existing deterministic local mock smoke path passing.
-- [ ] Update README with real provider setup and test-only loopback guidance.
-- [ ] Run full test and smoke suite in a clean local environment.
+- [x] Update smoke/E2E coverage to exercise real provider HTTP generation through a fake local provider.
+- [x] Keep the existing deterministic local mock smoke path passing.
+- [x] Update README with real provider setup and test-only loopback guidance.
+- [x] Run full test and smoke suite in a clean local environment.
 
 Verification:
 
-- [ ] `npm test`
-- [ ] `npm run smoke`
+- [x] `./scripts/test.sh`
+- [x] `./scripts/smoke.sh`
 
 ## Acceptance Criteria
 
-- [ ] `provider-local-mock` still uses deterministic local generation.
-- [ ] A registered non-mock provider is actually called over HTTP during generation.
-- [ ] Generated assets use the provider's returned structured pattern data.
-- [ ] Provider credentials are encrypted at rest and redacted from APIs.
-- [ ] Unsafe provider endpoint configuration is rejected unless explicit loopback dev mode is enabled.
-- [ ] Provider failures create failed generation runs without partial draft assets.
-- [ ] E2E test covers the first-use flow through a local fake AI provider.
+- [x] `provider-local-mock` still uses deterministic local generation.
+- [x] A registered non-mock provider is actually called over HTTP during generation.
+- [x] Generated assets use the provider's returned structured pattern data.
+- [x] Provider credentials are encrypted at rest and redacted from APIs.
+- [x] Unsafe provider endpoint configuration is rejected unless explicit loopback dev mode is enabled.
+- [x] Provider failures create failed generation runs without partial draft assets.
+- [x] E2E test covers the first-use flow through a local fake AI provider.
 
 ## Risks And Mitigations
 
