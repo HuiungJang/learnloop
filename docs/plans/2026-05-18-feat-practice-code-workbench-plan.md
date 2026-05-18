@@ -1035,14 +1035,24 @@ Phase 39 notes:
 
 ### Phase 40: Java Run API Integration
 
-- [ ] Wire Java problems to the runner registry.
-- [ ] Persist Java run results.
-- [ ] Show Java results in frontend feedback panel.
+- [x] Wire Java problems to the runner registry.
+- [x] Persist Java run results.
+- [x] Show Java results in frontend feedback panel.
 
 Verification:
 
-- [ ] Backend integration test runs a Java exercise.
-- [ ] Java compile errors are clear and bounded.
+- [x] Backend integration test runs a Java exercise.
+- [x] Java compile errors are clear and bounded.
+
+Phase 40 notes:
+
+- Extended the practice run API to route Java requests to the `java-junit` harness while keeping Kotlin blocked until its runner phase.
+- Added JUnit tree-output parsing so Java test names and statuses reuse the existing feedback panel response shape.
+- Changed the Java harness to exit with `compile_error` semantics when `javac` fails.
+- Added API integration coverage for Java run persistence and bounded compile-error responses.
+- Added Docker-backed Java runner verification when `learnloop-runner-java:latest` is available.
+- `./scripts/runner-java-smoke.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 41: Kotlin Runner Image
 

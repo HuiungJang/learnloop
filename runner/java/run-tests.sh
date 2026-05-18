@@ -20,5 +20,7 @@ if [ ! -s "$SOURCES_FILE" ]; then
   exit 2
 fi
 
-javac -encoding UTF-8 -cp "$JUNIT_JAR" -d "$OUT_DIR" @"$SOURCES_FILE"
+if ! javac -encoding UTF-8 -cp "$JUNIT_JAR" -d "$OUT_DIR" @"$SOURCES_FILE"; then
+  exit 2
+fi
 java -jar "$JUNIT_JAR" execute --disable-ansi-colors --class-path "$OUT_DIR" --scan-class-path

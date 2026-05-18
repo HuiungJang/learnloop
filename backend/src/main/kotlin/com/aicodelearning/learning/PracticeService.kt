@@ -98,9 +98,6 @@ class PracticeService(
         val card = patternCardRepository.findById(problem.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
         authorizePracticeRead(currentUser, card)
         PracticeContract.requireSupportedLanguage(request.language)
-        if (request.language != PracticeContract.LANGUAGE_TYPESCRIPT) {
-            throw BadRequestException("only TypeScript runs are available")
-        }
 
         val canonicalFiles = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem.id)
         val currentAssetRevision = currentAssetRevision(problem, canonicalFiles)
@@ -111,13 +108,13 @@ class PracticeService(
         val runnerRequest =
             RunnerRunRequest(
                 language = request.language,
-                testHarnessId = TYPESCRIPT_HARNESS_ID,
+                testHarnessId = harnessIdFor(request.language),
                 timeoutMs = request.timeoutMs ?: DEFAULT_RUN_TIMEOUT_MS,
                 files = runnerFiles(request.files, canonicalFiles),
             )
         val validatedRequest = runnerRequestValidator.validate(runnerRequest)
         val result = runnerExecutor.run(validatedRequest)
-        val tests = parseTapTests(result.stdoutExcerpt)
+        val tests = parseRunTests(request.language, result.stdoutExcerpt)
         val submissionId =
             request.clientAttemptId
                 ?.takeIf { it.isNotBlank() }
@@ -343,16 +340,49 @@ class PracticeService(
         when (status) {
             PracticeContract.RUN_STATUS_PASSED -> "All tests passed."
             PracticeContract.RUN_STATUS_FAILED -> "One or more tests failed."
-            PracticeContract.RUN_STATUS_COMPILE_ERROR -> "TypeScript compilation failed."
+            PracticeContract.RUN_STATUS_COMPILE_ERROR -> "Compilation failed."
             PracticeContract.RUN_STATUS_TIMEOUT -> "The run exceeded the time limit."
             PracticeContract.RUN_STATUS_RESOURCE_LIMITED -> "The run exceeded sandbox resource limits."
             PracticeContract.RUN_STATUS_RUNNER_UNAVAILABLE -> "The local runner is unavailable."
             else -> null
         }
 
+    private fun harnessIdFor(language: String): String =
+        when (language) {
+            PracticeContract.LANGUAGE_TYPESCRIPT -> "typescript-node-test"
+            PracticeContract.LANGUAGE_JAVA -> "java-junit"
+            else -> throw BadRequestException("runner language is not available yet")
+        }
+
+    private fun parseRunTests(
+        language: String,
+        stdout: String,
+    ): List<PracticeRunTestResponse> =
+        when (language) {
+            PracticeContract.LANGUAGE_JAVA -> parseJunitTests(stdout)
+            else -> parseTapTests(stdout)
+        }
+
+    private fun parseJunitTests(stdout: String): List<PracticeRunTestResponse> =
+        stdout
+            .lineSequence()
+            .mapNotNull { line ->
+                val match = junitResultRegex.find(line.trim()) ?: return@mapNotNull null
+                val name = match.groupValues[1].trim()
+                if (!name.contains("(")) return@mapNotNull null
+                val message = match.groupValues.getOrNull(3)?.trim()?.takeIf { it.isNotBlank() }
+                PracticeRunTestResponse(
+                    name = name,
+                    status = if (match.groupValues[2] == "\u2714") PracticeContract.RUN_STATUS_PASSED else PracticeContract.RUN_STATUS_FAILED,
+                    message = message,
+                    durationMs = null,
+                )
+            }
+            .toList()
+
     private companion object {
         const val DEFAULT_RUN_TIMEOUT_MS = 5_000L
-        const val TYPESCRIPT_HARNESS_ID = "typescript-node-test"
+        val junitResultRegex = Regex(".*[\\u2514\\u251C]\\u2500\\s+(.+?)\\s+([\\u2714\\u2718])(?:\\s+(.*))?$")
         val tapResultRegex = Regex("^(ok|not ok)\\s+\\d+\\s+-\\s+(.+)$")
         val visibleFileRoles = setOf(PracticeContract.FILE_ROLE_STARTER, PracticeContract.FILE_ROLE_SUPPORT)
     }

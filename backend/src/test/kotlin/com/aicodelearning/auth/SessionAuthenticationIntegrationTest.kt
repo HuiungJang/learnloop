@@ -821,6 +821,137 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `practice run stores Java runner result`() {
+        val problemId = saveAccessiblePracticeProblem("Runnable Java practice")
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_java_run_test_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/test/java/learnloop/SolutionTest.java",
+                language = "java",
+                fileRole = "test",
+                content =
+                    """
+                    package learnloop;
+
+                    import org.junit.jupiter.api.Test;
+
+                    import static org.junit.jupiter.api.Assertions.assertEquals;
+
+                    class SolutionTest {
+                        @Test
+                        void addsNumbers() {
+                            assertEquals(3, Solution.add(1, 2));
+                        }
+                    }
+                    """.trimIndent(),
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = Instant.now(),
+            ),
+        )
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+        fakeRunnerExecutor.reset()
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/runs",
+                learner.token,
+                mapOf(
+                    "clientAttemptId" to "attempt-java-run",
+                    "assetRevision" to assetRevision,
+                    "language" to "java",
+                    "timeoutMs" to 5_000,
+                    "files" to
+                        listOf(
+                            mapOf(
+                                "path" to "src/main/java/learnloop/Solution.java",
+                                "content" to
+                                    """
+                                    package learnloop;
+
+                                    public final class Solution {
+                                        private Solution() {
+                                        }
+
+                                        public static int add(int left, int right) {
+                                            return left + right;
+                                        }
+                                    }
+                                    """.trimIndent(),
+                            ),
+                        ),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val run = json(response)["run"]
+        assertEquals("passed", run["status"].asText())
+        assertEquals("java-junit", run["runnerKind"].asText())
+        assertEquals("addsNumbers()", run["tests"][0]["name"].asText())
+        assertEquals("passed", run["tests"][0]["status"].asText())
+
+        val runnerRequest = fakeRunnerExecutor.requests.single()
+        assertEquals("java-junit", runnerRequest.harness.id)
+        assertEquals(
+            listOf("src/main/java/learnloop/Solution.java", "src/test/java/learnloop/SolutionTest.java"),
+            runnerRequest.files.map { it.path }.sorted(),
+        )
+    }
+
+    @Test
+    fun `practice run returns bounded Java compile errors`() {
+        val problemId = saveAccessiblePracticeProblem("Broken Java practice")
+        problemFileRepository.save(
+            ProblemFileEntity(
+                id = "problem_file_java_compile_test_${System.nanoTime()}",
+                problemId = problemId,
+                path = "src/test/java/learnloop/SolutionTest.java",
+                language = "java",
+                fileRole = "test",
+                content = "package learnloop; class SolutionTest {}",
+                readOnly = true,
+                sortOrder = 2,
+                createdAt = Instant.now(),
+            ),
+        )
+        val learner = login("learner@example.com")
+        val assetRevision = json(getJson("/api/problems/$problemId/practice", learner.token))["problem"]["assetRevision"].asText()
+        fakeRunnerExecutor.nextResult =
+            NormalizedRunnerResult(
+                status = PracticeContract.RUN_STATUS_COMPILE_ERROR,
+                stdoutExcerpt = "",
+                stderrExcerpt = "src/main/java/learnloop/Solution.java:3: error: reached end of file while parsing",
+                durationMs = 11,
+            )
+
+        val response =
+            postJson(
+                "/api/problems/$problemId/runs",
+                learner.token,
+                mapOf(
+                    "assetRevision" to assetRevision,
+                    "language" to "java",
+                    "files" to
+                        listOf(
+                            mapOf(
+                                "path" to "src/main/java/learnloop/Solution.java",
+                                "content" to "package learnloop; public class Solution {",
+                            ),
+                        ),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val run = json(response)["run"]
+        assertEquals("compile_error", run["status"].asText())
+        assertEquals("Compilation failed.", run["failureReason"].asText())
+        assertTrue(run["stderrExcerpt"].asText().length < 240)
+        fakeRunnerExecutor.nextResult = null
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -1313,9 +1444,30 @@ class SessionAuthenticationIntegrationTest {
 
 class FakeRunnerExecutor : RunnerExecutor {
     val requests = CopyOnWriteArrayList<ValidatedRunnerRunRequest>()
+    var nextResult: NormalizedRunnerResult? = null
 
     override fun run(request: ValidatedRunnerRunRequest): NormalizedRunnerResult {
         requests += request
+        nextResult?.let {
+            nextResult = null
+            return it
+        }
+        if (request.language == PracticeContract.LANGUAGE_JAVA) {
+            return NormalizedRunnerResult(
+                status = PracticeContract.RUN_STATUS_PASSED,
+                stdoutExcerpt =
+                    listOf(
+                        "Thanks for using JUnit!",
+                        "",
+                        "\u2577",
+                        "\u251c\u2500 JUnit Jupiter \u2714",
+                        "\u2502  \u2514\u2500 SolutionTest \u2714",
+                        "\u2502     \u2514\u2500 addsNumbers() \u2714",
+                    ).joinToString("\n"),
+                stderrExcerpt = "",
+                durationMs = 19,
+            )
+        }
         return NormalizedRunnerResult(
             status = PracticeContract.RUN_STATUS_PASSED,
             stdoutExcerpt =
@@ -1333,6 +1485,7 @@ class FakeRunnerExecutor : RunnerExecutor {
 
     fun reset() {
         requests.clear()
+        nextResult = null
     }
 }
 
