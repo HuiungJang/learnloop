@@ -471,17 +471,25 @@ Phase 11 notes:
 
 ### Phase 12: Practice Detail API
 
-- [ ] Implement `GET /api/problems/{id}/practice`.
-- [ ] Return `assetRevision`.
-- [ ] Return starter/support files only.
-- [ ] Return hints metadata without revealing all hint content if policy requires progressive reveal.
-- [ ] Return redacted provenance only.
+- [x] Implement `GET /api/problems/{id}/practice`.
+- [x] Return `assetRevision`.
+- [x] Return starter/support files only.
+- [x] Return hints metadata without revealing all hint content if policy requires progressive reveal.
+- [x] Return redacted provenance only.
 
 Verification:
 
-- [ ] Learner can read a published practice problem.
-- [ ] Learner cannot read hidden tests, solution files, or reference answer before eligibility.
-- [ ] Unauthorized user receives the expected 401/403.
+- [x] Learner can read a published practice problem.
+- [x] Learner cannot read hidden tests, solution files, or reference answer before eligibility.
+- [x] Unauthorized user receives the expected 401/403.
+
+Phase 12 notes:
+
+- Added `GET /api/problems/{id}/practice` through `PracticeController` and `PracticeService`.
+- Practice detail computes a deterministic `assetRevision` from canonical problem content.
+- Learner responses include starter/support files only; solution, visible test, hidden test, reference answer, and raw evidence links are not exposed.
+- Manual hints include content, progressive hints stay metadata-only.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 13: Current User Attempt API
 

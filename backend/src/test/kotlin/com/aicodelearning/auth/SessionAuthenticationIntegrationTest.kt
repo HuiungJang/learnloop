@@ -7,6 +7,8 @@ import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.learning.PatternCardEntity
 import com.aicodelearning.learning.PatternCardRepository
 import com.aicodelearning.learning.PatternRecognitionPromptBuilder
+import com.aicodelearning.learning.ProblemEntity
+import com.aicodelearning.learning.ProblemRepository
 import com.aicodelearning.learning.ReviewTaskEntity
 import com.aicodelearning.learning.ReviewTaskRepository
 import com.aicodelearning.organization.AuthorizationService
@@ -79,6 +81,9 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var patternCardRepository: PatternCardRepository
+
+    @Autowired
+    private lateinit var problemRepository: ProblemRepository
 
     @Autowired
     private lateinit var reviewTaskRepository: ReviewTaskRepository
@@ -484,6 +489,50 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    fun `practice detail exposes only learner safe exercise content`() {
+        val learner = login("learner@example.com")
+
+        val response = getJson("/api/problems/problem-demo-practice-workbench/practice", learner.token)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val problem = json(response)["problem"]
+        assertEquals("problem-demo-practice-workbench", problem["id"].asText())
+        assertTrue(problem["assetRevision"].asText().startsWith("rev-"))
+        assertEquals(listOf("src/formatTag.ts"), problem["files"].map { it["path"].asText() })
+        assertEquals(listOf("starter"), problem["files"].map { it["role"].asText() })
+        assertFalse(response.body.orEmpty().contains("referenceAnswer"))
+        assertFalse(response.body.orEmpty().contains("solution/formatTag.ts"))
+        assertFalse(response.body.orEmpty().contains("hidden/formatTag.hidden.test.ts"))
+        assertFalse(response.body.orEmpty().contains("Gemini---OAuth"))
+        assertFalse(response.body.orEmpty().contains("toLowerCase"))
+        assertTrue(problem["hints"][0]["revealed"].asBoolean())
+        assertFalse(problem["hints"][0]["content"].isNull)
+        assertFalse(problem["hints"][1]["revealed"].asBoolean())
+        assertTrue(problem["hints"][1]["content"].isNull)
+        assertEquals("Redacted AI-assisted diff", problem["provenance"][0]["sourceLabel"].asText())
+        assertTrue(problem["provenance"][0]["evidenceItemId"].isNull)
+    }
+
+    @Test
+    fun `practice detail requires authentication`() {
+        val response = restTemplate.getForEntity("/api/problems/problem-demo-practice-workbench/practice", String::class.java)
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+    }
+
+    @Test
+    fun `practice detail rejects learner outside scoped project`() {
+        ensureOtherScope()
+        val cardId = saveScopedCard("Foreign practice detail", publicationStatus = "published")
+        val problemId = saveScopedProblem(cardId)
+        val learner = login("learner@example.com")
+
+        val response = getJson("/api/problems/$problemId/practice", learner.token)
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+    }
+
+    @Test
     fun `source link suggestion rejects inaccessible code bundle scope`() {
         ensureOtherScope()
         val contributor = login("contributor@example.com")
@@ -820,6 +869,22 @@ class SessionAuthenticationIntegrationTest {
             ),
         )
         return cardId
+    }
+
+    private fun saveScopedProblem(cardId: String): String {
+        val problemId = "problem_foreign_${System.nanoTime()}"
+        problemRepository.save(
+            ProblemEntity(
+                id = problemId,
+                patternCardId = cardId,
+                problemType = "implementation",
+                prompt = "A scoped problem that must not be visible to platform scoped users.",
+                referenceAnswer = "Scoped answer",
+                difficulty = "easy",
+                createdAt = Instant.now(),
+            ),
+        )
+        return problemId
     }
 
     private fun createConfirmedAccessibleSourceLink(contributorToken: String): String {
