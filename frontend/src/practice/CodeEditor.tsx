@@ -11,6 +11,10 @@ type CodeEditorProps = {
   onOpenQuickFile?: () => void;
   onSave?: (files: PracticeAttemptFileRequest[]) => void;
   onSnapshotReady?: (snapshotter: (() => PracticeAttemptFileRequest[]) | null) => void;
+  onStatus?: (message: string) => void;
+  onSubmit?: (files: PracticeAttemptFileRequest[]) => void;
+  onToggleDiff?: () => void;
+  onToggleTheme?: () => void;
   theme: "vs" | "vs-dark";
 };
 
@@ -21,6 +25,10 @@ export function CodeEditor({
   onOpenQuickFile,
   onSave,
   onSnapshotReady,
+  onStatus,
+  onSubmit,
+  onToggleDiff,
+  onToggleTheme,
   theme
 }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -31,6 +39,10 @@ export function CodeEditor({
   const onOpenQuickFileRef = useRef(onOpenQuickFile);
   const onSaveRef = useRef(onSave);
   const onSnapshotReadyRef = useRef(onSnapshotReady);
+  const onStatusRef = useRef(onStatus);
+  const onSubmitRef = useRef(onSubmit);
+  const onToggleDiffRef = useRef(onToggleDiff);
+  const onToggleThemeRef = useRef(onToggleTheme);
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
 
   useEffect(() => {
@@ -54,6 +66,22 @@ export function CodeEditor({
   }, [onSnapshotReady]);
 
   useEffect(() => {
+    onStatusRef.current = onStatus;
+  }, [onStatus]);
+
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
+
+  useEffect(() => {
+    onToggleDiffRef.current = onToggleDiff;
+  }, [onToggleDiff]);
+
+  useEffect(() => {
+    onToggleThemeRef.current = onToggleTheme;
+  }, [onToggleTheme]);
+
+  useEffect(() => {
     if (containerRef.current === null || editorRef.current !== null) return;
 
     const editor = monaco.editor.create(containerRef.current, {
@@ -62,8 +90,10 @@ export function CodeEditor({
       fontSize: 13,
       lineHeight: 21,
       minimap: { enabled: false },
+      occurrencesHighlight: "off",
       readOnly: true,
       scrollBeyondLastLine: false,
+      selectionHighlight: false,
       theme,
       wordWrap: "on"
     });
@@ -73,11 +103,31 @@ export function CodeEditor({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
       void editor.getAction("actions.find")?.run();
     });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, () => {
+      const formatAction = editor.getAction("editor.action.formatDocument");
+      if (formatAction?.isSupported() !== true) {
+        onStatusRef.current?.("Format unavailable");
+        return;
+      }
+      void formatAction
+        .run()
+        .then(() => onStatusRef.current?.("Formatted"))
+        .catch(() => onStatusRef.current?.("Format failed"));
+    });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => {
       onOpenQuickFileRef.current?.();
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, () => {
       onCommandPaletteRef.current?.();
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      onSubmitRef.current?.(snapshotCurrentFiles());
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyD, () => {
+      onToggleDiffRef.current?.();
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyT, () => {
+      onToggleThemeRef.current?.();
     });
     editorRef.current = editor;
     onSnapshotReadyRef.current?.(snapshotCurrentFiles);

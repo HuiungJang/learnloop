@@ -8,6 +8,10 @@ type PracticeEditorShellProps = {
   onOpenQuickFile?: () => void;
   onSave?: (files: PracticeAttemptFileRequest[]) => void;
   onSnapshotReady?: (snapshotter: (() => PracticeAttemptFileRequest[]) | null) => void;
+  onStatus?: (message: string) => void;
+  onSubmit?: (files: PracticeAttemptFileRequest[]) => void;
+  onToggleDiff?: () => void;
+  onToggleTheme?: () => void;
   theme: "vs" | "vs-dark";
 };
 
@@ -18,6 +22,10 @@ export function PracticeEditorShell({
   onOpenQuickFile,
   onSave,
   onSnapshotReady,
+  onStatus,
+  onSubmit,
+  onToggleDiff,
+  onToggleTheme,
   theme
 }: PracticeEditorShellProps) {
   return (
@@ -28,6 +36,10 @@ export function PracticeEditorShell({
       onOpenQuickFile={onOpenQuickFile}
       onSave={onSave}
       onSnapshotReady={onSnapshotReady}
+      onStatus={onStatus}
+      onSubmit={onSubmit}
+      onToggleDiff={onToggleDiff}
+      onToggleTheme={onToggleTheme}
       theme={theme}
     />
   );

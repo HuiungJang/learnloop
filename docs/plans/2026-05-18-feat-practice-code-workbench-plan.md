@@ -796,15 +796,24 @@ Phase 27 notes:
 
 ### Phase 28: Format, Submit, Diff, and Theme Shortcuts
 
-- [ ] Implement `Cmd/Ctrl + Shift + F` for format when supported.
-- [ ] Implement `Cmd/Ctrl + Enter` for submit.
-- [ ] Implement `Cmd/Ctrl + Shift + D` for diff toggle.
-- [ ] Implement `Cmd/Ctrl + Shift + T` for theme toggle.
+- [x] Implement `Cmd/Ctrl + Shift + F` for format when supported.
+- [x] Implement `Cmd/Ctrl + Enter` for submit.
+- [x] Implement `Cmd/Ctrl + Shift + D` for diff toggle.
+- [x] Implement `Cmd/Ctrl + Shift + T` for theme toggle.
 
 Verification:
 
-- [ ] Shortcut checks pass in E2E where reliable.
-- [ ] Disabled actions show clear status instead of failing silently.
+- [x] Shortcut checks pass in E2E where reliable.
+- [x] Disabled actions show clear status instead of failing silently.
+
+Phase 28 notes:
+
+- Added Monaco shortcuts for format, submit, failed diff toggle, and editor theme toggle.
+- Connected submit to the existing submission API using the current editor snapshot.
+- Added a compact failed diff panel and no-diff status handling.
+- Disabled Monaco occurrence/selection highlight to avoid stale model occurrence requests during problem switches.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed format status, submit payload snapshot, diff show/no-diff status, theme shortcut, and command palette disabled diff reason.
 
 ### Phase 29: Progressive Hints
 

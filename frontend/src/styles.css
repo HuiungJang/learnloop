@@ -746,6 +746,10 @@ h1 {
   color: #d7f7dd;
 }
 
+.save-status.submitted {
+  color: #d7f7dd;
+}
+
 .save-status.conflict,
 .save-status.failed {
   color: #ffd5ca;
@@ -786,6 +790,20 @@ h1 {
 .code-editor-root {
   height: 320px;
   min-height: 260px;
+}
+
+.diff-panel {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(252, 251, 248, 0.12);
+  color: #ffd5ca;
+  background: rgba(28, 28, 28, 0.98);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .workbench-overlay-backdrop {

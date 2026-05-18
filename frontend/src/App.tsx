@@ -33,6 +33,7 @@ import {
   type PracticeAttemptFileRequest,
   registerUser,
   runLearningDemo,
+  submitPracticeAttempt,
   syncLocalPracticeAttempt,
   type Membership,
   type PatternCardResponse,
@@ -64,7 +65,7 @@ type LibraryFilters = {
   difficulty: string;
   publicationStatus: "published";
 };
-type PracticeSaveState = PracticeSyncStatus | "idle";
+type PracticeSaveState = PracticeSyncStatus | "idle" | "submitted" | "submitting";
 type PracticeSaveStatus = {
   state: PracticeSaveState;
   message: string;
@@ -171,6 +172,7 @@ export function App() {
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
   const [workbenchOverlay, setWorkbenchOverlay] = useState<WorkbenchOverlay>(null);
   const [workbenchQuery, setWorkbenchQuery] = useState("");
+  const [diffVisible, setDiffVisible] = useState(false);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [practiceError, setPracticeError] = useState("");
   const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
@@ -626,9 +628,18 @@ export function App() {
                           onSnapshotReady={(snapshotter) => {
                             editorSnapshotRef.current = snapshotter;
                           }}
+                          onStatus={showEditorStatus}
+                          onSubmit={(files) => {
+                            void submitPracticeSolution(files);
+                          }}
+                          onToggleDiff={togglePracticeDiff}
+                          onToggleTheme={toggleEditorTheme}
                           theme={editorTheme}
                         />
                       </Suspense>
+                      {diffVisible && activePractice.latestRun?.failedDiff != null ? (
+                        <pre className="diff-panel">{activePractice.latestRun.failedDiff}</pre>
+                      ) : null}
                       {workbenchOverlay !== null ? renderWorkbenchOverlay(activePractice) : null}
                     </div>
                   </div>
@@ -843,10 +854,26 @@ export function App() {
         {
           id: "submit",
           label: "Submit solution",
-          detail: "Submission is not available yet",
-          disabled: true,
-          disabledReason: "Submission is not available yet",
-          run: () => {}
+          detail: "Submit the current editor snapshot",
+          disabled: editorSnapshotRef.current === null,
+          disabledReason: "Editor is still loading",
+          run: () => {
+            const snapshot = editorSnapshotRef.current;
+            if (snapshot === null) return;
+            closeWorkbenchOverlay();
+            void submitPracticeSolution(snapshot());
+          }
+        },
+        {
+          id: "toggle-diff",
+          label: diffVisible ? "Hide failed diff" : "Show failed diff",
+          detail: problem.latestRun?.failedDiff == null ? "No diff available yet" : "Toggle the latest failed diff",
+          disabled: problem.latestRun?.failedDiff == null,
+          disabledReason: "No diff available yet",
+          run: () => {
+            togglePracticeDiff();
+            closeWorkbenchOverlay();
+          }
         }
       ];
     }
@@ -943,6 +970,46 @@ export function App() {
     }
   }
 
+  function showEditorStatus(message: string) {
+    setPracticeSaveStatus({ state: "idle", message });
+  }
+
+  function togglePracticeDiff() {
+    if (activePractice?.latestRun?.failedDiff == null) {
+      setPracticeSaveStatus({ state: "idle", message: "No diff available" });
+      return;
+    }
+    setDiffVisible((current) => {
+      const next = !current;
+      setPracticeSaveStatus({ state: "idle", message: next ? "Diff shown" : "Diff hidden" });
+      return next;
+    });
+  }
+
+  async function submitPracticeSolution(files: PracticeAttemptFileRequest[]) {
+    if (session === null || activePractice === null) return;
+
+    const draft = ensurePracticeDraft({
+      userId: session.user.id,
+      problemId: activePractice.id,
+      assetRevision: activePractice.assetRevision,
+      files
+    });
+    setPracticeSaveStatus({ state: "submitting", message: "Submitting" });
+    try {
+      await submitPracticeAttempt(session.token, activePractice.id, {
+        clientAttemptId: draft.clientAttemptId,
+        assetRevision: draft.assetRevision,
+        language: activePractice.files[0]?.language ?? "typescript",
+        files: draft.files.map((file) => ({ path: file.path, content: file.content })),
+        resultStatus: "submitted"
+      });
+      setPracticeSaveStatus({ state: "submitted", message: "Submitted" });
+    } catch {
+      setPracticeSaveStatus({ state: "failed", message: "Submit failed" });
+    }
+  }
+
   async function openPractice(problemId: string) {
     if (session === null) return;
     setPracticeLoading(true);
@@ -953,12 +1020,14 @@ export function App() {
       setActivePracticePath(problem.files[0]?.path ?? null);
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
+      setDiffVisible(false);
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     } catch (error) {
       setActivePractice(null);
       setActivePracticePath(null);
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
+      setDiffVisible(false);
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
       setPracticeError(error instanceof Error ? error.message : "Practice problem failed to load");
     } finally {
@@ -976,6 +1045,7 @@ export function App() {
     setActivePracticePath(null);
     editorSnapshotRef.current = null;
     closeWorkbenchOverlay();
+    setDiffVisible(false);
     setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     setPracticeError("");
     setActivity([]);
