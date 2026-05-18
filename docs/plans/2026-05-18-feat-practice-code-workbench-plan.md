@@ -412,15 +412,22 @@ Phase 8 notes:
 
 ### Phase 9: Migration for Submission Files and Run Results
 
-- [ ] Add `submission_files`.
-- [ ] Add `sandbox_run_results`.
-- [ ] Add indexes for submission and run-created timestamps.
-- [ ] Add excerpt-length columns or constraints where practical.
+- [x] Add `submission_files`.
+- [x] Add `sandbox_run_results`.
+- [x] Add indexes for submission and run-created timestamps.
+- [x] Add excerpt-length columns or constraints where practical.
 
 Verification:
 
-- [ ] Integration test persists a submitted multi-file snapshot.
-- [ ] Integration test persists a bounded run result.
+- [x] Integration test persists a submitted multi-file snapshot.
+- [x] Integration test persists a bounded run result.
+
+Phase 9 notes:
+
+- Added `V8__practice_submission_files_run_results.sql`.
+- `sandbox_run_results` supports pre-submission runs through `(problem_id, user_id)` and optional `submission_id`.
+- stdout/stderr excerpts are bounded at the database layer.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 10: Repository and Read Model Wiring
 
