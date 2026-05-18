@@ -910,7 +910,7 @@ h1 {
 }
 
 .guidance-row,
-.feedback-placeholder {
+.feedback-panel {
   display: grid;
   gap: 4px;
   padding: 12px 0;
@@ -922,7 +922,7 @@ h1 {
 }
 
 .guidance-row span,
-.feedback-placeholder strong,
+.feedback-panel strong,
 .guidance-stack strong {
   color: var(--charcoal);
 }
@@ -975,10 +975,34 @@ h1 {
   opacity: 0.5;
 }
 
+.feedback-section {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-section span {
+  color: var(--charcoal);
+}
+
 .guidance-row small,
-.feedback-placeholder small {
+.feedback-section small {
   color: var(--muted);
   line-height: 1.45;
+}
+
+.feedback-output {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .card-detail strong {

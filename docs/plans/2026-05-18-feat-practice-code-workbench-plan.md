@@ -856,15 +856,22 @@ Phase 30 notes:
 
 ### Phase 31: Feedback Panel Skeleton
 
-- [ ] Add feedback panel layout.
-- [ ] Render placeholder states for not run, running, failed, and submitted.
-- [ ] Render stdout/stderr as escaped plain text.
-- [ ] Establish deterministic order: summary, tests, diff, explanation, pattern feedback, recommendations.
+- [x] Add feedback panel layout.
+- [x] Render placeholder states for not run, running, failed, and submitted.
+- [x] Render stdout/stderr as escaped plain text.
+- [x] Establish deterministic order: summary, tests, diff, explanation, pattern feedback, recommendations.
 
 Verification:
 
-- [ ] Frontend build passes.
-- [ ] Long output text does not overflow its container.
+- [x] Frontend build passes.
+- [x] Long output text does not overflow its container.
+
+Phase 31 notes:
+
+- Added deterministic feedback sections for summary, tests, diff, explanation, pattern feedback, and recommendations.
+- Rendered stdout/stderr excerpts as escaped text in bounded `pre` blocks.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed not-run/running/failed/submitted placeholders, escaped output, section order, and no horizontal overflow with long output.
 
 ### Phase 32: Answer Diff After Submission
 

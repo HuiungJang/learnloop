@@ -698,10 +698,7 @@ export function App() {
                         </div>
                       ) : null}
                     </div>
-                    <div className="feedback-placeholder">
-                      <strong>Feedback</strong>
-                      <small>Run and submission feedback will appear here.</small>
-                    </div>
+                    {renderFeedbackPanel(activePractice)}
                   </div>
                 )}
               </div>
@@ -1024,6 +1021,59 @@ export function App() {
     setRevealedHintIds(saveRevealedHintId(scope, hint.id));
     logHintReveal(scope, hint);
     setPracticeSaveStatus({ state: "idle", message: "Hint revealed" });
+  }
+
+  function renderFeedbackPanel(problem: PracticeProblemResponse) {
+    const run = problem.latestRun;
+    const status = practiceSaveStatus.state === "submitted" ? "submitted" : run?.status ?? "not run";
+    let summary = "No run yet.";
+    if (status === "submitted") {
+      summary = "Submission received.";
+    } else if (status === "running") {
+      summary = "Run in progress.";
+    } else if (status === "failed") {
+      summary = "Latest run failed.";
+    }
+
+    return (
+      <div className="feedback-panel">
+        <strong>Feedback</strong>
+        <div className="feedback-section">
+          <span>Summary</span>
+          <small>{summary}</small>
+        </div>
+        <div className="feedback-section">
+          <span>Tests</span>
+          {run?.tests.length ? (
+            run.tests.map((test) => (
+              <small key={test.name}>
+                {test.name}: {test.status}{test.message === null ? "" : ` - ${test.message}`}
+              </small>
+            ))
+          ) : (
+            <small>No test results yet.</small>
+          )}
+        </div>
+        <div className="feedback-section">
+          <span>Diff</span>
+          {run?.failedDiff ? <pre className="feedback-output">{run.failedDiff}</pre> : <small>No failed diff yet.</small>}
+        </div>
+        <div className="feedback-section">
+          <span>Explanation</span>
+          <small>{run?.failureReason ?? "Feedback explanation will appear after a run."}</small>
+          {run?.stdoutExcerpt ? <pre className="feedback-output">stdout: {run.stdoutExcerpt}</pre> : null}
+          {run?.stderrExcerpt ? <pre className="feedback-output">stderr: {run.stderrExcerpt}</pre> : null}
+        </div>
+        <div className="feedback-section">
+          <span>Pattern feedback</span>
+          <small>Pattern feedback will appear after review.</small>
+        </div>
+        <div className="feedback-section">
+          <span>Recommendations</span>
+          <small>{status === "failed" ? "Review the failed diff and try again." : "Run or submit to receive recommendations."}</small>
+        </div>
+      </div>
+    );
   }
 
   async function submitPracticeSolution(files: PracticeAttemptFileRequest[]) {
