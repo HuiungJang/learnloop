@@ -915,14 +915,21 @@ Phase 33 notes:
 
 ### Phase 34: Runner Request Validation and Registry
 
-- [ ] Add static runner registry.
-- [ ] Reject client-provided image names or raw commands.
-- [ ] Validate language, files, test harness ID, timeout, and payload size.
-- [ ] Add per-run ID generation.
+- [x] Add static runner registry.
+- [x] Reject client-provided image names or raw commands.
+- [x] Validate language, files, test harness ID, timeout, and payload size.
+- [x] Add per-run ID generation.
 
 Verification:
 
-- [ ] Tests reject unsupported languages, invalid paths, oversized payloads, and arbitrary image/command attempts.
+- [x] Tests reject unsupported languages, invalid paths, oversized payloads, and arbitrary image/command attempts.
+
+Phase 34 notes:
+
+- Added static runner harness registry entries for TypeScript, Kotlin, and Java.
+- Added runner request validation that normalizes paths, enforces file and total payload limits, validates timeout and harness compatibility, and rejects client-selected images or commands.
+- Added per-run `run_` ID generation in validated runner requests.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 35: Runner Workspace and Cleanup
 
