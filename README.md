@@ -128,3 +128,7 @@ Default local development password: `demo-password`. The Docker installer genera
 ## Scope
 
 The Node MVP remains as a parity oracle. The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and deterministic local pattern generation. Provider credentials are represented by non-reversible references only.
+
+## License
+
+GNU Affero General Public License v3.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

@@ -2,6 +2,8 @@
   "name": "ai-code-learning-platform",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "장희웅 <jhw1345@gmail.com>",
   "type": "module",
   "scripts": {
     "dev": "./scripts/dev.sh",

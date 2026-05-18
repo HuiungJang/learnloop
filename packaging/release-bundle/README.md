@@ -50,3 +50,7 @@ AI_CODE_WEB_PORT=8080
 ```
 
 Use a different `AI_CODE_PROJECT_NAME` when running multiple isolated installations on the same machine.
+
+## License
+
+AI Code Learning Platform is licensed under the GNU Affero General Public License, Version 3. See `LICENSE` and `NOTICE`.
