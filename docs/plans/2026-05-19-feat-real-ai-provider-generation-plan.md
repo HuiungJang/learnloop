@@ -72,15 +72,15 @@ Verification:
 
 ### Phase 3: OpenAI-Compatible Generation Adapter
 
-- [ ] Add a provider adapter for OpenAI-compatible Responses API.
-- [ ] Build a structured pattern-generation prompt from evidence.
-- [ ] Send `model`, `input`, and `text.format.json_schema`.
-- [ ] Parse `output_text`, Responses `output[].content[].text`, or compatible chat response text.
-- [ ] Validate title, summary, tags, and problems before persistence.
+- [x] Add a provider adapter for OpenAI-compatible Responses API.
+- [x] Build a structured pattern-generation prompt from evidence.
+- [x] Send `model`, `input`, and `text.format.json_schema`.
+- [x] Parse `output_text`, Responses `output[].content[].text`, or compatible chat response text.
+- [x] Validate title, summary, tags, and problems before persistence.
 
 Verification:
 
-- [ ] Unit/integration test uses a local fake AI server and asserts the HTTP request shape.
+- [x] Unit/integration test uses a local fake AI server and asserts the HTTP request shape.
 
 ### Phase 4: Generation Failure Handling
 

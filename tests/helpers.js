@@ -54,7 +54,7 @@ export async function request(baseUrl, path, { userId = "u-admin", method = "GET
   return { response, json };
 }
 
-export async function createPublishedPattern(baseUrl) {
+export async function createConfirmedSourceLink(baseUrl) {
   const common = {
     organizationId: "org-demo",
     teamId: "team-platform",
@@ -105,6 +105,11 @@ export async function createPublishedPattern(baseUrl) {
     method: "POST",
     body: {}
   });
+  return { common, codeBundle: code.json.bundle, conversationBundle: conversation.json.bundle, linkId };
+}
+
+export async function createPublishedPattern(baseUrl) {
+  const { linkId } = await createConfirmedSourceLink(baseUrl);
   const generated = await request(baseUrl, "/api/generation/run", {
     userId: "u-contributor",
     method: "POST",

@@ -99,13 +99,17 @@ export function redactForApi(value) {
   if (!value || typeof value !== "object") return value;
   const output = {};
   for (const [key, item] of Object.entries(value)) {
-    if (/credential|secret|token|password|apiKey|keyMaterial/i.test(key)) {
+    if (isSensitiveField(key)) {
       output[key] = item ? "[redacted]" : item;
     } else {
       output[key] = redactForApi(item);
     }
   }
   return output;
+}
+
+function isSensitiveField(key) {
+  return /credential|secret|password|apiKey|keyMaterial|accessToken|refreshToken|idToken|sessionToken|tokenHash/i.test(key);
 }
 
 export function escapeHtml(text) {
