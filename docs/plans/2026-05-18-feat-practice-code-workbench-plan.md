@@ -393,15 +393,22 @@ Phase 7 notes:
 
 ### Phase 8: Migration for Per-User Attempts
 
-- [ ] Extend `submissions` or add a compatible attempt table for `client_attempt_id`, `language`, `score`, `submitted_at`, `updated_at`, and structured metadata.
-- [ ] Add uniqueness for `(user_id, problem_id, client_attempt_id)`.
-- [ ] Preserve existing submission rows through additive migration strategy.
-- [ ] Add indexes for user/problem lookup.
+- [x] Extend `submissions` or add a compatible attempt table for `client_attempt_id`, `language`, `score`, `submitted_at`, `updated_at`, and structured metadata.
+- [x] Add uniqueness for `(user_id, problem_id, client_attempt_id)`.
+- [x] Preserve existing submission rows through additive migration strategy.
+- [x] Add indexes for user/problem lookup.
 
 Verification:
 
-- [ ] Flyway migration applies on existing demo data.
-- [ ] Existing submission/proficiency tests still pass.
+- [x] Flyway migration applies on existing demo data.
+- [x] Existing submission/proficiency tests still pass.
+
+Phase 8 notes:
+
+- Added `V7__practice_attempts.sql`.
+- Existing `submissions` rows are preserved and `submitted_at` is backfilled from `created_at`.
+- `client_attempt_id` uniqueness is scoped to `(user_id, problem_id)` and only applies when present.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 9: Migration for Submission Files and Run Results
 
