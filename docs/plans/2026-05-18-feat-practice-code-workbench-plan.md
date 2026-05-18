@@ -301,14 +301,20 @@ Phase 2 notes:
 
 ### Phase 3: Backend Constraint Constants and Validation Rules
 
-- [ ] Define constrained values for language, file role, hint reveal policy, attempt status, run status, and result status.
-- [ ] Define maximum file count, individual file size, total payload size, output excerpt length, and provenance excerpt length.
-- [ ] Add validation helpers for supported languages and file roles.
+- [x] Define constrained values for language, file role, hint reveal policy, attempt status, run status, and result status.
+- [x] Define maximum file count, individual file size, total payload size, output excerpt length, and provenance excerpt length.
+- [x] Add validation helpers for supported languages and file roles.
 
 Verification:
 
-- [ ] Unit tests cover accepted and rejected enum/string values.
-- [ ] Oversized payload cases fail before service work starts.
+- [x] Unit tests cover accepted and rejected enum/string values.
+- [x] Oversized payload cases fail before service work starts.
+
+Phase 3 notes:
+
+- Added `PracticeContract` for supported languages, roles, statuses, size limits, and attempt payload validation.
+- Added `PracticeContractTest` for accepted/rejected values and payload limit failures.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 4: Exercise File Path Validation
 
