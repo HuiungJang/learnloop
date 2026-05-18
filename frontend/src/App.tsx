@@ -2,6 +2,8 @@ import {
   BookOpen,
   Bot,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Cloud,
   GitPullRequest,
   KeyRound,
@@ -173,6 +175,7 @@ export function App() {
   const [activePracticePath, setActivePracticePath] = useState<string | null>(null);
   const [practiceSaveStatus, setPracticeSaveStatus] = useState<PracticeSaveStatus>({ state: "idle", message: "Not saved" });
   const [revealedHintIds, setRevealedHintIds] = useState<string[]>([]);
+  const [provenanceExpanded, setProvenanceExpanded] = useState(true);
   const [workbenchOverlay, setWorkbenchOverlay] = useState<WorkbenchOverlay>(null);
   const [workbenchQuery, setWorkbenchQuery] = useState("");
   const [diffVisible, setDiffVisible] = useState(false);
@@ -674,16 +677,26 @@ export function App() {
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <strong>Provenance</strong>
-                      <div className="review-table">
-                        {activePractice.provenance.map((source) => (
-                          <div className="guidance-row" key={`${source.sourceType}:${source.sourceLabel}`}>
-                            <span>{source.sourceLabel}</span>
-                            <small>{source.redactedExcerpt}</small>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="collapsible-section">
+                      <button
+                        aria-expanded={provenanceExpanded}
+                        className="section-toggle"
+                        onClick={() => setProvenanceExpanded((current) => !current)}
+                        type="button"
+                      >
+                        <strong>Provenance</strong>
+                        {provenanceExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
+                      </button>
+                      {provenanceExpanded ? (
+                        <div className="review-table">
+                          {activePractice.provenance.map((source) => (
+                            <div className="guidance-row" key={`${source.sourceType}:${source.sourceLabel}`}>
+                              <span>{source.sourceLabel}</span>
+                              <small>{source.sourceType}: {source.redactedExcerpt}</small>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="feedback-placeholder">
                       <strong>Feedback</strong>
@@ -1046,6 +1059,7 @@ export function App() {
       setActivePractice(problem);
       setActivePracticePath(problem.files[0]?.path ?? null);
       setRevealedHintIds(loadRevealedHintIds({ userId: session.user.id, problemId: problem.id }));
+      setProvenanceExpanded(true);
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
@@ -1054,6 +1068,7 @@ export function App() {
       setActivePractice(null);
       setActivePracticePath(null);
       setRevealedHintIds([]);
+      setProvenanceExpanded(true);
       editorSnapshotRef.current = null;
       closeWorkbenchOverlay();
       setDiffVisible(false);
@@ -1073,6 +1088,7 @@ export function App() {
     setActivePractice(null);
     setActivePracticePath(null);
     setRevealedHintIds([]);
+    setProvenanceExpanded(true);
     editorSnapshotRef.current = null;
     closeWorkbenchOverlay();
     setDiffVisible(false);

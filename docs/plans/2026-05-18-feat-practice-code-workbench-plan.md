@@ -838,14 +838,21 @@ Phase 29 notes:
 
 ### Phase 30: Provenance Panel
 
-- [ ] Add collapsible provenance panel.
-- [ ] Show redacted snippets and source/evidence labels.
-- [ ] Keep raw evidence out of learner responses.
+- [x] Add collapsible provenance panel.
+- [x] Show redacted snippets and source/evidence labels.
+- [x] Keep raw evidence out of learner responses.
 
 Verification:
 
-- [ ] Learner sees provenance context but not raw evidence.
-- [ ] Panel can collapse so the editor remains primary.
+- [x] Learner sees provenance context but not raw evidence.
+- [x] Panel can collapse so the editor remains primary.
+
+Phase 30 notes:
+
+- Added a collapsible provenance section in the guidance panel.
+- Rendered only `sourceLabel`, `sourceType`, and `redactedExcerpt`.
+- `./scripts/frontend-build.sh`: passed.
+- Browser smoke confirmed redacted provenance is visible, raw evidence is not visible, and collapsing the panel removes provenance snippets from the page.
 
 ### Phase 31: Feedback Panel Skeleton
 

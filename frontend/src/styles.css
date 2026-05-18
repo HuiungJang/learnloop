@@ -927,6 +927,29 @@ h1 {
   color: var(--charcoal);
 }
 
+.collapsible-section {
+  display: grid;
+  gap: 8px;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--charcoal);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.section-toggle svg {
+  flex-shrink: 0;
+}
+
 .hint-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
