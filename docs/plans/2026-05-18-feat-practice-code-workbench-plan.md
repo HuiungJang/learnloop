@@ -596,16 +596,25 @@ Phase 17 notes:
 
 ### Phase 18: Sync State UI and Offline Queue
 
-- [ ] Add local-only, syncing, synced, conflict, and failed states.
-- [ ] Queue sync while offline.
-- [ ] Retry after network recovery with bounded backoff.
-- [ ] Show conflict state for stale asset revisions.
+- [x] Add local-only, syncing, synced, conflict, and failed states.
+- [x] Queue sync while offline.
+- [x] Retry after network recovery with bounded backoff.
+- [x] Show conflict state for stale asset revisions.
 
 Verification:
 
-- [ ] Frontend typecheck passes.
-- [ ] Manual or E2E check confirms offline save does not lose edits.
-- [ ] Local AI API keys are absent from sync requests.
+- [x] Frontend typecheck passes.
+- [x] Manual or E2E check confirms offline save does not lose edits.
+- [x] Local AI API keys are absent from sync requests.
+
+Phase 18 notes:
+
+- Added `practiceSyncQueue.ts` with `local_only`, `syncing`, `synced`, `conflict`, and `failed` queue states.
+- Queue items are persisted locally, bounded at 50 items, and retried with capped exponential backoff.
+- Added API conflict error typing for stale-revision handling.
+- Sync queue payloads are built from practice drafts and do not include local AI credentials.
+- `./scripts/frontend-typecheck.sh`: passed.
+- Temporary compiled-module smoke test verified queue due selection, failed retry timing, and conflict suppression.
 
 ### Phase 19: Practice Library API Filters
 

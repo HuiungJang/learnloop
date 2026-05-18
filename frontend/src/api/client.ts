@@ -180,6 +180,21 @@ export type PracticeSubmissionResponse = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+export function isConflictError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.status === 409;
+}
+
 export async function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/api/health");
 }
@@ -358,9 +373,9 @@ async function request<T>(
 
   const payload = (await response.json()) as unknown;
   if (!response.ok) {
-    const errorPayload = payload as { error?: { message?: string } };
+    const errorPayload = payload as { error?: { message?: string; code?: string } };
     const message = errorPayload.error?.message ?? `Request failed with ${response.status}`;
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status, errorPayload.error?.code ?? null);
   }
 
   return payload as T;
