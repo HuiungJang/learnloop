@@ -6,6 +6,8 @@ import com.aicodelearning.platform.NotFoundException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 
 @Service
@@ -23,16 +25,17 @@ class PatternReadService(
         currentUser: CurrentUser,
         organizationId: String,
         limit: Int? = null,
+        filters: LibraryFilters = LibraryFilters(),
     ): List<PatternCardResponse> {
         if (!currentUser.hasOrganizationMemberRole("learner", organizationId)) {
             authorizationService.requireOrganizationMember(currentUser, organizationId, "learner")
         }
         val cards =
-            findPublishedCards(organizationId, limit)
+            findPublishedCards(organizationId, limit, filters)
                 .filter { currentUser.hasRole("learner", it.organizationId, it.teamId, it.projectId) }
                 .let { if (limit == null) it else it.take(limit) }
 
-        return toResponses(cards, includeAnswers = false)
+        return toResponses(cards, includeAnswers = false, filters = filters)
     }
 
     @Transactional(readOnly = true)
@@ -85,21 +88,19 @@ class PatternReadService(
     private fun findPublishedCards(
         organizationId: String,
         limit: Int?,
+        filters: LibraryFilters,
     ): List<PatternCardEntity> =
-        if (limit == null) {
-            patternCardRepository.findByOrganizationIdAndPublicationStatusAndVisibility(organizationId, "published", "organization")
-        } else {
-            patternCardRepository.findByOrganizationIdAndPublicationStatusAndVisibilityOrderByPublishedAtDescCreatedAtDesc(
-                organizationId,
-                "published",
-                "organization",
-                PageRequest.of(0, limit),
-            )
-        }
+        patternCardRepository.findByOrganizationIdAndPublicationStatusAndVisibilityOrderByPublishedAtDescCreatedAtDesc(
+            organizationId,
+            "published",
+            "organization",
+            PageRequest.of(filters.normalizedPage, limit ?: filters.normalizedPageSize),
+        )
 
     private fun toResponses(
         cards: List<PatternCardEntity>,
         includeAnswers: Boolean,
+        filters: LibraryFilters = LibraryFilters(),
     ): List<PatternCardResponse> {
         if (cards.isEmpty()) {
             return emptyList()
@@ -128,7 +129,7 @@ class PatternReadService(
                     }
 
             toResponse(card, tags, problems)
-        }
+        }.filter { it.matches(filters) }
     }
 
     private fun loadTagsByCard(cardIds: List<String>): Map<String, List<PatternTagResponse>> =
@@ -239,7 +240,44 @@ class PatternReadService(
     }
 }
 
+data class LibraryFilters(
+    val language: String? = null,
+    val tag: String? = null,
+    val difficulty: String? = null,
+    val page: Int = 0,
+    val pageSize: Int = 50,
+) {
+    val normalizedPage: Int = page.coerceAtLeast(0)
+    val normalizedPageSize: Int = pageSize.coerceIn(1, 100)
+}
+
 private data class PracticeContent(
     val tags: List<PatternTagResponse>,
     val problems: List<ProblemResponse>,
 )
+
+private fun PatternCardResponse.matches(filters: LibraryFilters): Boolean {
+    val language = filters.language.normalizedFilter()
+    val tag = filters.tag.normalizedFilter()
+    val difficulty = filters.difficulty.normalizedFilter()
+
+    if (language != null && tags.none { it.tagType.equals("language", ignoreCase = true) && it.name.normalizedContains(language) }) {
+        return false
+    }
+    if (tag != null && tags.none { it.name.normalizedContains(tag) || it.tagType.normalizedContains(tag) }) {
+        return false
+    }
+    if (difficulty != null && problems.none { it.difficulty.normalizedContains(difficulty) }) {
+        return false
+    }
+    return true
+}
+
+private fun String?.normalizedFilter(): String? =
+    this
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { runCatching { URLDecoder.decode(it, StandardCharsets.UTF_8) }.getOrDefault(it) }
+        ?.lowercase()
+
+private fun String.normalizedContains(filter: String): Boolean = lowercase().contains(filter)

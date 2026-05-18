@@ -15,7 +15,27 @@ class LibraryController(
     fun library(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @RequestParam organizationId: String,
-    ): LibraryResponse = LibraryResponse(cards = patternReadService.listPublished(currentUser, organizationId))
+        @RequestParam(required = false) language: String?,
+        @RequestParam(required = false) tag: String?,
+        @RequestParam(required = false) difficulty: String?,
+        @RequestParam(required = false) page: Int?,
+        @RequestParam(required = false) pageSize: Int?,
+    ): LibraryResponse =
+        LibraryResponse(
+            cards =
+                patternReadService.listPublished(
+                    currentUser,
+                    organizationId,
+                    filters =
+                        LibraryFilters(
+                            language = language,
+                            tag = tag,
+                            difficulty = difficulty,
+                            page = page ?: 0,
+                            pageSize = pageSize ?: 50,
+                        ),
+                ),
+        )
 
     @GetMapping("/api/pattern-cards/{id}")
     fun detail(

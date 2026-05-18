@@ -618,14 +618,22 @@ Phase 18 notes:
 
 ### Phase 19: Practice Library API Filters
 
-- [ ] Extend `GET /api/library` with language, tag/library/API, difficulty, and pagination inputs.
-- [ ] Keep queries bounded.
-- [ ] Keep authorization behavior unchanged.
+- [x] Extend `GET /api/library` with language, tag/library/API, difficulty, and pagination inputs.
+- [x] Keep queries bounded.
+- [x] Keep authorization behavior unchanged.
 
 Verification:
 
-- [ ] Backend tests cover filter combinations.
-- [ ] Library endpoint remains bounded and does not expose drafts to learners.
+- [x] Backend tests cover filter combinations.
+- [x] Library endpoint remains bounded and does not expose drafts to learners.
+
+Phase 19 notes:
+
+- Added `language`, `tag`, `difficulty`, `page`, and `pageSize` inputs to `GET /api/library`.
+- Library queries use bounded page requests with `pageSize` capped at 100.
+- Existing learner authorization and draft hiding behavior remains unchanged.
+- Backend integration tests cover combined filters and bounded page size.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 20: Practice Library UI
 

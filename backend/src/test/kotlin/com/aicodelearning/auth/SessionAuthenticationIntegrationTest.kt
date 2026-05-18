@@ -962,6 +962,25 @@ class SessionAuthenticationIntegrationTest {
         assertFalse(library.body.orEmpty().contains(cardId))
     }
 
+    @Test
+    fun `library filters by language tag difficulty and page size`() {
+        val learner = login("learner@example.com")
+
+        val filtered =
+            getJson(
+                "/api/library?organizationId=org-demo&language=TypeScript&tag=Pure%20Function&difficulty=easy&page=0&pageSize=100",
+                learner.token,
+            )
+        val unfiltered = getJson("/api/library?organizationId=org-demo&page=0&pageSize=100", learner.token)
+        val bounded = getJson("/api/library?organizationId=org-demo&page=0&pageSize=1", learner.token)
+
+        assertTrue(json(unfiltered)["cards"].any { it["id"].asText() == "card-demo-practice-workbench" }, unfiltered.body)
+        assertEquals(HttpStatus.OK, filtered.statusCode)
+        assertTrue(json(filtered)["cards"].any { it["id"].asText() == "card-demo-practice-workbench" }, filtered.body)
+        assertEquals(HttpStatus.OK, bounded.statusCode)
+        assertTrue(json(bounded)["cards"].size() <= 1)
+    }
+
     private fun login(email: String): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest(email = email, password = "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
