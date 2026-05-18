@@ -637,16 +637,24 @@ Phase 19 notes:
 
 ### Phase 20: Practice Library UI
 
-- [ ] Replace or extend `Latest Card` with pattern-centered practice library.
-- [ ] Add filters for language, tag/library/API, difficulty, and publication state.
-- [ ] Add loading, empty, and error states.
-- [ ] Preserve the warm cream shell and dense workspace layout.
+- [x] Replace or extend `Latest Card` with pattern-centered practice library.
+- [x] Add filters for language, tag/library/API, difficulty, and publication state.
+- [x] Add loading, empty, and error states.
+- [x] Preserve the warm cream shell and dense workspace layout.
 
 Verification:
 
-- [ ] Frontend build passes.
-- [ ] Desktop and mobile layouts do not overflow.
-- [ ] First authenticated screen remains a usable workspace, not a marketing page.
+- [x] Frontend build passes.
+- [x] Desktop and mobile layouts do not overflow.
+- [x] First authenticated screen remains a usable workspace, not a marketing page.
+
+Phase 20 notes:
+
+- Replaced the latest-card panel with a filtered practice library list.
+- Added language, tag/API, difficulty, and published-state controls with loading, empty, and error states.
+- Preserved the warm cream workspace and dense authenticated dashboard structure.
+- `./scripts/frontend-build.sh`: passed.
+- Playwright smoke via system Chrome verified authenticated desktop and mobile layouts without horizontal overflow.
 
 ### Phase 21: Practice Workbench Shell
 

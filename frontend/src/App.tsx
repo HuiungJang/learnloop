@@ -22,6 +22,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createSession,
   fetchHealth,
+  getLibrary,
   type HealthResponse,
   listProviders,
   registerUser,
@@ -39,6 +40,12 @@ type HealthState =
   | { status: "pending" }
   | { status: "success"; data: HealthResponse }
   | { status: "error" };
+type LibraryFilters = {
+  language: string;
+  tag: string;
+  difficulty: string;
+  publicationStatus: "published";
+};
 
 type LocalAiSettings = {
   provider: LocalAiProvider;
@@ -125,6 +132,15 @@ export function App() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
+  const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
+  const [libraryFilters, setLibraryFilters] = useState<LibraryFilters>({
+    language: "",
+    tag: "",
+    difficulty: "",
+    publicationStatus: "published"
+  });
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
   const [activity, setActivity] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
@@ -167,6 +183,11 @@ export function App() {
       setSelectedAuthMethod("api_key");
     }
   }, [selectedAuthMethod, selectedProvider.oauth]);
+
+  useEffect(() => {
+    if (session === null || membership === null || showOnboarding) return;
+    void refreshLibrary(session);
+  }, [libraryFilters, membership, session, showOnboarding]);
 
   if (session === null) {
     return (
@@ -417,26 +438,75 @@ export function App() {
               <div className="panel" id="review">
                 <div className="panel-title">
                   <BookOpen aria-hidden="true" size={20} />
-                  <h2>Latest Card</h2>
+                  <h2>Practice Library</h2>
                 </div>
-                {latestCard ? (
-                  <div className="card-detail">
-                    <strong>{latestCard.title}</strong>
-                    <p>{latestCard.summary}</p>
-                    <div className="tag-row">
-                      {latestCard.tags.map((tag) => (
-                        <span key={`${tag.tagType}:${tag.name}`}>{tag.name}</span>
-                      ))}
-                    </div>
-                    <div className="problem-list">
-                      {latestCard.problems.map((problem) => (
-                        <span key={problem.id}>{problem.referenceAnswer ? "Answered" : problem.difficulty}</span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="muted-copy">No generated card yet.</p>
-                )}
+                <div className="library-filters" aria-label="Practice filters">
+                  <label>
+                    <span>Language</span>
+                    <select value={libraryFilters.language} onChange={(event) => updateLibraryFilter("language", event.target.value)}>
+                      <option value="">Any</option>
+                      <option value="TypeScript">TypeScript</option>
+                      <option value="Kotlin">Kotlin</option>
+                      <option value="Java">Java</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Pattern/API</span>
+                    <input
+                      onChange={(event) => updateLibraryFilter("tag", event.target.value)}
+                      placeholder="Pure Function"
+                      type="search"
+                      value={libraryFilters.tag}
+                    />
+                  </label>
+                  <label>
+                    <span>Difficulty</span>
+                    <select value={libraryFilters.difficulty} onChange={(event) => updateLibraryFilter("difficulty", event.target.value)}>
+                      <option value="">Any</option>
+                      <option value="easy">Easy</option>
+                      <option value="medium">Medium</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select
+                      value={libraryFilters.publicationStatus}
+                      onChange={(event) => updateLibraryFilter("publicationStatus", event.target.value as LibraryFilters["publicationStatus"])}
+                    >
+                      <option value="published">Published</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="practice-card-list" aria-live="polite">
+                  {libraryLoading ? <p className="muted-copy">Loading practice cards.</p> : null}
+                  {libraryError.length > 0 ? <p className="form-error">{libraryError}</p> : null}
+                  {!libraryLoading && libraryError.length === 0 && libraryCards.length === 0 ? (
+                    <p className="muted-copy">No practice cards match these filters.</p>
+                  ) : null}
+                  {!libraryLoading && libraryError.length === 0
+                    ? libraryCards.map((card) => (
+                        <article className="practice-card" key={card.id}>
+                          <div className="practice-card-header">
+                            <strong>{card.title}</strong>
+                            <span>{card.problems[0]?.difficulty ?? "practice"}</span>
+                          </div>
+                          <p>{card.summary}</p>
+                          <div className="tag-row">
+                            {card.tags.slice(0, 4).map((tag) => (
+                              <span key={`${card.id}:${tag.tagType}:${tag.name}`}>{tag.name}</span>
+                            ))}
+                          </div>
+                          <div className="problem-list">
+                            {card.problems.map((problem) => (
+                              <span key={problem.id}>{problem.type}</span>
+                            ))}
+                          </div>
+                        </article>
+                      ))
+                    : null}
+                </div>
               </div>
             </section>
 
@@ -503,10 +573,42 @@ export function App() {
     setProviders(await listProviders(currentSession.token, currentMembership.organizationId));
   }
 
+  async function refreshLibrary(currentSession: SessionResponse) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setLibraryCards([]);
+      return;
+    }
+
+    setLibraryLoading(true);
+    setLibraryError("");
+    try {
+      const cards = await getLibrary(currentSession.token, currentMembership.organizationId, {
+        language: libraryFilters.language,
+        tag: libraryFilters.tag,
+        difficulty: libraryFilters.difficulty,
+        page: 0,
+        pageSize: 24
+      });
+      setLibraryCards(cards.filter((card) => card.publicationStatus === libraryFilters.publicationStatus));
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Library failed to load");
+      setLibraryCards([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  function updateLibraryFilter<Key extends keyof LibraryFilters>(key: Key, value: LibraryFilters[Key]) {
+    setLibraryFilters((current) => ({ ...current, [key]: value }));
+  }
+
   function logout() {
     setSession(null);
     setProviders([]);
     setLatestCard(null);
+    setLibraryCards([]);
+    setLibraryError("");
     setActivity([]);
     setShowOnboarding(false);
   }

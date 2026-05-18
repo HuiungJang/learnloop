@@ -322,6 +322,21 @@ export async function runLearningDemo(token: string, membership: Membership): Pr
   };
 }
 
+export async function getLibrary(
+  token: string,
+  organizationId: string,
+  filters: { language?: string; tag?: string; difficulty?: string; page?: number; pageSize?: number } = {}
+): Promise<PatternCardResponse[]> {
+  const params = new URLSearchParams({ organizationId });
+  if (filters.language !== undefined && filters.language.trim().length > 0) params.set("language", filters.language.trim());
+  if (filters.tag !== undefined && filters.tag.trim().length > 0) params.set("tag", filters.tag.trim());
+  if (filters.difficulty !== undefined && filters.difficulty.trim().length > 0) params.set("difficulty", filters.difficulty.trim());
+  if (filters.page !== undefined) params.set("page", String(filters.page));
+  if (filters.pageSize !== undefined) params.set("pageSize", String(filters.pageSize));
+  const response = await request<{ cards: PatternCardResponse[] }>(`/api/library?${params.toString()}`, { token });
+  return response.cards;
+}
+
 export async function getPracticeProblem(token: string, problemId: string): Promise<PracticeProblemResponse> {
   const response = await request<{ problem: PracticeProblemResponse }>(`/api/problems/${encodeURIComponent(problemId)}/practice`, { token });
   return response.problem;

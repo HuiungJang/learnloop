@@ -558,12 +558,79 @@ h1 {
   gap: 12px;
 }
 
+.library-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.library-filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.library-filters input,
+.library-filters select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: var(--cream);
+}
+
+.library-filters input:focus-visible,
+.library-filters select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+.practice-card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.practice-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.practice-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.practice-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.practice-card-header span {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--muted);
+  background: var(--surface-tint);
+  font-size: 12px;
+}
+
 .card-detail strong {
   color: var(--charcoal);
   font-size: 18px;
 }
 
 .card-detail p,
+.practice-card p,
 .muted-copy {
   margin: 0;
   color: var(--muted);
@@ -724,7 +791,8 @@ h1 {
   .summary-grid,
   .workbench,
   .split-grid,
-  .bundle-list {
+  .bundle-list,
+  .library-filters {
     grid-template-columns: 1fr;
   }
 
