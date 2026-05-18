@@ -1226,16 +1226,24 @@ Phase 48 notes:
 
 ### Phase 49: Security Scan and Fixes
 
-- [ ] Run Codex Security scan after implementation.
-- [ ] Validate candidate findings.
-- [ ] Fix every validated finding.
-- [ ] Re-run targeted tests after fixes.
-- [ ] Review Docker socket exposure, path traversal, raw evidence leakage, stdout/stderr leakage, local AI credential non-transmission, and attempt authorization.
+- [x] Run Codex Security scan after implementation.
+- [x] Validate candidate findings.
+- [x] Fix every validated finding.
+- [x] Re-run targeted tests after fixes.
+- [x] Review Docker socket exposure, path traversal, raw evidence leakage, stdout/stderr leakage, local AI credential non-transmission, and attempt authorization.
 
 Verification:
 
-- [ ] Security scan has no unresolved validated findings.
-- [ ] Targeted regression tests pass after fixes.
+- [x] Security scan has no unresolved validated findings.
+- [x] Targeted regression tests pass after fixes.
+
+Phase 49 notes:
+
+- Ran Codex Security's diff-scoped scan flow for `main...HEAD` at `/tmp/codex-security-scans/spring-react-platform-split/723979b_20260518T112732Z/report.md`.
+- Discovery reviewed Docker runner boundaries, file path normalization, evidence/provenance/answer visibility, stdout/stderr truncation, local AI credential storage, and per-user attempt authorization.
+- Discovery produced no technically plausible reportable candidates, so validation and attack-path analysis were skipped per the Codex Security no-candidates path.
+- No validated finding required a code fix.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 50: Automated Secret and Asset Exposure Checks
 
