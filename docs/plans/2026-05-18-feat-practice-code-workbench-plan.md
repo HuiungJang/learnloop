@@ -258,17 +258,26 @@ Phase 0 notes:
 
 ### Phase 1: Current Test and Build Baseline
 
-- [ ] Run backend tests.
-- [ ] Run frontend typecheck.
-- [ ] Run frontend production build.
-- [ ] Run installed app status or smoke test if the environment is already running.
-- [ ] Capture current production frontend asset sizes.
-- [ ] Capture current library/practice API response shapes.
+- [x] Run backend tests.
+- [x] Run frontend typecheck.
+- [x] Run frontend production build.
+- [x] Run installed app status or smoke test if the environment is already running.
+- [x] Capture current production frontend asset sizes.
+- [x] Capture current library/practice API response shapes.
 
 Verification:
 
-- [ ] Baseline command results are recorded before production code changes.
-- [ ] Any existing failure is documented separately from this feature.
+- [x] Baseline command results are recorded before production code changes.
+- [x] Any existing failure is documented separately from this feature.
+
+Phase 1 notes:
+
+- `./scripts/backend-test.sh`: passed.
+- `./scripts/frontend-typecheck.sh`: passed.
+- `./scripts/frontend-build.sh`: passed.
+- `./scripts/status.sh`: reported `Ready: http://localhost:8080`.
+- Baseline frontend assets: CSS 10,400 bytes, JS 211,837 bytes, total 222,237 bytes.
+- Current API client has card/problem responses but no dedicated practice detail, attempt sync, run result, or Monaco workbench contracts yet.
 
 ### Phase 2: Backend Practice DTO Skeleton
 
