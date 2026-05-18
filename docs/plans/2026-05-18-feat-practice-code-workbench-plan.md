@@ -952,16 +952,23 @@ Phase 35 notes:
 
 ### Phase 36: Docker Execution Constraints
 
-- [ ] Apply network-disabled execution.
-- [ ] Apply CPU, memory, process, output, and wall-clock limits.
-- [ ] Apply `no-new-privileges`.
-- [ ] Drop capabilities where supported.
-- [ ] Use read-only root filesystem with tmpfs work directory where practical.
+- [x] Apply network-disabled execution.
+- [x] Apply CPU, memory, process, output, and wall-clock limits.
+- [x] Apply `no-new-privileges`.
+- [x] Drop capabilities where supported.
+- [x] Use read-only root filesystem with tmpfs work directory where practical.
 
 Verification:
 
-- [ ] Runner smoke test reports effective constraints or unsupported-limit warnings.
-- [ ] Timeout and resource-limit cases return normalized results.
+- [x] Runner smoke test reports effective constraints or unsupported-limit warnings.
+- [x] Timeout and resource-limit cases return normalized results.
+
+Phase 36 notes:
+
+- Added Docker run plan builder with network disabled, CPU/memory/pids limits, `no-new-privileges`, `--cap-drop ALL`, read-only root, tmpfs scratch, workspace mount, output limit reporting, and wall-clock timeout reporting.
+- Added normalized result mapping for passed, failed, timeout, and resource-limited cases.
+- Added constraint-report smoke tests and timeout/resource-limit normalization tests.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 37: TypeScript Runner Image
 
