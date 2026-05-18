@@ -1,0 +1,12 @@
+<svg width="760" height="200" viewBox="0 0 760 200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">LearnLoop logo</title>
+  <desc id="desc">A charcoal LearnLoop wordmark with an interlocking double L loop monogram on a warm cream background.</desc>
+  <rect width="760" height="200" rx="28" fill="#F7F4ED"/>
+  <rect x="32" y="32" width="136" height="136" rx="32" fill="#FCFBF8" stroke="#ECEAE4" stroke-width="2"/>
+  <path d="M78 57V113C78 120.18 83.8203 126 91 126H128" stroke="#1C1C1C" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M122 143V87C122 79.8203 116.18 74 109 74H72" stroke="#1C1C1C" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" opacity="0.82"/>
+  <path d="M78 57C97 57 122 55 122 87" stroke="#1C1C1C" stroke-width="6" stroke-linecap="round" opacity="0.24"/>
+  <path d="M122 143C103 143 78 145 78 113" stroke="#1C1C1C" stroke-width="6" stroke-linecap="round" opacity="0.24"/>
+  <text x="204" y="105" fill="#1C1C1C" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="58" font-weight="600" letter-spacing="-1.2">LearnLoop</text>
+  <text x="208" y="138" fill="#5F5F5D" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="400">Turn AI-generated code into reviewed developer practice.</text>
+</svg>

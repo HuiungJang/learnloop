@@ -1,30 +1,53 @@
-# LearnLoop MVP
+<p align="center">
+  <img src="assets/learnloop-logo.svg" alt="LearnLoop" width="560">
+</p>
 
-Local MVP for turning AI-assisted coding evidence into reviewed learning assets.
+# LearnLoop
 
-## Install
+LearnLoop는 개발자가 Codex, Gemini, Claude 같은 AI 도구를 사용하며 생성한 코드 조각과 PR, commit, diff 근거를 모아 학습 가능한 개발 지식으로 바꾸는 플랫폼입니다.
 
-The easiest way to run the platform is the Docker Compose installer. It builds the Spring Boot API, builds the React app, starts PostgreSQL, keeps data in a Docker volume, and exposes one browser URL.
+## 목적
 
-Requirements:
+AI로 생성한 코드는 당장의 생산성을 높이지만, 팀과 개인에게 어떤 패턴이 반복되고 무엇을 배워야 하는지 남기지 못하는 경우가 많습니다. LearnLoop는 이 흐름을 학습 루프로 바꿉니다.
 
-- Docker Desktop or Docker Engine with Compose v2
+- AI 사용으로 생성된 코드 조각, 대화 로그, PR, commit, diff를 수집합니다.
+- 디자인 패턴, 라이브러리, 알고리즘, API 사용법, 설정 방법을 분석합니다.
+- 분석 결과를 구현 문제, Q&A, 실습 카드로 변환합니다.
+- 사람 검수를 거쳐 조직 안에서 재사용 가능한 학습 자산으로 축적합니다.
+- 사용자의 AI API key와 OAuth 설정은 로컬 브라우저에만 저장하고 서버로 전송하지 않습니다.
 
-Install and start:
+## 추천 사용자
+
+- AI 코딩 도구를 자주 사용하지만 생성된 코드를 제대로 학습 자산으로 남기고 싶은 개발자
+- 팀원이 반복적으로 사용하는 라이브러리, API, 패턴을 교육 콘텐츠로 만들고 싶은 테크 리드
+- 온보딩, 코드 리뷰, 사내 개발자 교육을 운영하는 플랫폼 관리자
+- PR과 commit 기반으로 실제 코드 변경에서 학습 문제를 만들고 싶은 조직
+
+## 사용 방법
+
+### 설치형 실행
+
+가장 쉬운 실행 방법은 Docker Compose 설치 스크립트입니다. Spring Boot API, React 앱, PostgreSQL을 빌드하고 하나의 브라우저 URL로 노출합니다.
+
+필수 환경:
+
+- Docker Desktop 또는 Docker Engine with Compose v2
+
+설치 및 시작:
 
 ```sh
 ./scripts/install.sh
 ```
 
-Open:
+브라우저에서 엽니다:
 
 ```text
 http://localhost:8080
 ```
 
-The installer creates `.env` with generated local credentials. It also prints the generated demo password after startup; enter that password in the UI to use the seeded demo roles.
+설치 스크립트는 `.env`를 만들고 로컬 자격 증명을 생성합니다. 시작 후 출력되는 demo password를 UI에 입력하면 seeded demo role을 사용할 수 있습니다.
 
-Installed app commands:
+설치 후 자주 쓰는 명령:
 
 ```sh
 ./scripts/start.sh
@@ -32,30 +55,39 @@ Installed app commands:
 ./scripts/stop.sh
 ```
 
-To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then run:
+브라우저 포트를 바꾸려면 `.env`의 `AI_CODE_WEB_PORT`를 수정한 뒤 다시 시작합니다.
 
 ```sh
 ./scripts/start.sh
 ```
 
-Data is stored in the `learnloop_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
+데이터는 `learnloop_install-postgres-data` Docker volume에 저장됩니다. `./scripts/stop.sh`는 컨테이너만 중지하고 데이터를 삭제하지 않습니다.
 
-## Release Bundle
+### 첫 사용자 플로우
 
-Build a distributable `.tar.gz` package for the current machine architecture:
+1. 회원가입 또는 로그인합니다.
+2. 첫 로그인 시 사용할 AI provider를 선택합니다.
+3. Codex/Gemini는 OAuth 또는 API key 방식을 선택할 수 있고, Claude는 API key 방식을 사용합니다.
+4. 로컬 AI 설정을 저장한 뒤 학습 플로우를 실행합니다.
+5. 생성된 패턴 카드와 실습 문제를 검수하고 재사용 가능한 학습 자산으로 축적합니다.
+
+## 릴리즈 번들
+
+현재 머신 아키텍처용 배포 패키지를 만듭니다.
 
 ```sh
 ./scripts/package-release.sh
 ```
 
-The archive is written to `dist/release/` and contains:
+산출물은 `dist/release/`에 생성되며 다음을 포함합니다.
 
 - runtime `docker-compose.yml`
 - `install.sh`, `start.sh`, `status.sh`, `stop.sh`
-- generated release metadata
-- backend, web, and PostgreSQL Docker image archives
+- release metadata
+- backend, web, PostgreSQL Docker image archive
+- macOS용 `LearnLoop.app`
 
-Install from the release bundle:
+릴리즈 번들에서 설치:
 
 ```sh
 tar -xzf dist/release/learnloop-0.1.0-*.tar.gz
@@ -63,11 +95,11 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-Release-bundle installation does not build from source. It loads the packaged Docker images, starts the stack, and prints the generated demo password.
+릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 Docker image를 로드하고 stack을 시작한 뒤 demo password를 출력합니다.
 
-## Runtime
+## 개발 실행
 
-The system Node installation on this machine may be broken. The scripts use the bundled Codex Node runtime automatically:
+이 저장소의 스크립트는 Codex 번들 Node runtime을 자동으로 사용합니다.
 
 ```sh
 ./scripts/test.sh
@@ -75,15 +107,13 @@ The system Node installation on this machine may be broken. The scripts use the 
 ./scripts/smoke.sh
 ```
 
-Default dev URL:
+기본 개발 URL:
 
 ```text
 http://localhost:4173
 ```
 
-## Split Stack Preview
-
-For development, run the Spring Boot and React services directly:
+Spring Boot와 React를 분리해서 실행하려면 다음 명령을 사용합니다.
 
 ```sh
 ./scripts/db-up.sh
@@ -91,7 +121,7 @@ For development, run the Spring Boot and React services directly:
 ./scripts/frontend-dev.sh
 ```
 
-Default split-stack URLs:
+기본 split-stack URL:
 
 ```text
 Backend API: http://localhost:8080
@@ -99,15 +129,7 @@ Frontend: http://127.0.0.1:5173
 Health: http://localhost:8080/api/health
 ```
 
-Create a local demo session:
-
-```sh
-curl -X POST http://localhost:8080/api/session \
-  -H 'content-type: application/json' \
-  -d '{"email":"admin@example.com","password":"demo-password"}'
-```
-
-Run the current split-stack verification:
+현재 split-stack 검증:
 
 ```sh
 ./scripts/check-split.sh
@@ -116,18 +138,18 @@ Run the current split-stack verification:
 
 ## Demo Users
 
-Use the UI role selector or create a session with `POST /api/session`:
+UI role selector를 사용하거나 `POST /api/session`으로 session을 생성할 수 있습니다.
 
 - `u-admin`
 - `u-contributor`
 - `u-reviewer`
 - `u-learner`
 
-Default local development password: `demo-password`. The Docker installer generates `APP_DEMO_PASSWORD` in `.env`; the installed UI asks for that password instead of embedding it in the static frontend bundle.
+로컬 개발 기본 password는 `demo-password`입니다. Docker installer는 `.env`에 `APP_DEMO_PASSWORD`를 생성하며, 설치형 UI는 정적 frontend bundle에 password를 넣지 않고 이 값을 입력받습니다.
 
 ## Scope
 
-The Node MVP remains as a parity oracle. The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and deterministic local pattern generation. Provider credentials are represented by non-reversible references only.
+Node MVP는 parity oracle로 유지됩니다. 설치형 앱은 Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, deterministic local pattern generation을 사용합니다. Provider credential은 non-reversible reference로만 서버에 저장됩니다.
 
 ## License
 
