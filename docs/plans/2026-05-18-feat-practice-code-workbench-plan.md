@@ -1015,14 +1015,23 @@ Phase 38 notes:
 
 ### Phase 39: Java Runner Image
 
-- [ ] Add Java runner image with JDK.
-- [ ] Add Java compile/run harness.
-- [ ] Normalize compiler, test, runtime, timeout, and resource-limit results.
+- [x] Add Java runner image with JDK.
+- [x] Add Java compile/run harness.
+- [x] Normalize compiler, test, runtime, timeout, and resource-limit results.
 
 Verification:
 
-- [ ] Java runner image builds.
-- [ ] Tiny Java passing and failing exercises return normalized results.
+- [x] Java runner image builds.
+- [x] Tiny Java passing and failing exercises return normalized results.
+
+Phase 39 notes:
+
+- Added `runner/java` image with Eclipse Temurin JDK 21 and JUnit Platform Console Standalone baked into the image.
+- Added a no-network runtime harness that compiles workspace `*.java` files with `javac` and runs JUnit tests from the compiled classpath.
+- Updated the Java runner registry command to use the baked harness instead of Gradle.
+- Added `./scripts/runner-java-smoke.sh` and `npm run runner:java:smoke` for image build plus passing/failing Java exercises.
+- `./scripts/runner-java-smoke.sh`: passed.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 40: Java Run API Integration
 

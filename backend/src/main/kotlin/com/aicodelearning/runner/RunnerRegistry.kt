@@ -41,7 +41,7 @@ class RunnerRegistry {
                 id = "java-junit",
                 language = PracticeContract.LANGUAGE_JAVA,
                 image = "learnloop-runner-java:latest",
-                command = listOf("./gradlew", "test"),
+                command = listOf("/opt/learnloop-runner/run-tests.sh"),
                 maxTimeoutMs = MAX_TIMEOUT_MS,
                 files = harnessFiles("java-junit"),
             ),
