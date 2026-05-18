@@ -374,16 +374,22 @@ Phase 6 notes:
 
 ### Phase 7: Migration for Hints and Provenance
 
-- [ ] Add `problem_hints`.
-- [ ] Add unique index on `(problem_id, reveal_order)`.
-- [ ] Add `problem_provenance_links`.
-- [ ] Store only redacted, bounded provenance excerpts.
-- [ ] Add foreign keys to problem/evidence tables where available.
+- [x] Add `problem_hints`.
+- [x] Add unique index on `(problem_id, reveal_order)`.
+- [x] Add `problem_provenance_links`.
+- [x] Store only redacted, bounded provenance excerpts.
+- [x] Add foreign keys to problem/evidence tables where available.
 
 Verification:
 
-- [ ] Flyway migration applies from a clean database.
-- [ ] Integration test can persist hints and redacted provenance.
+- [x] Flyway migration applies from a clean database.
+- [x] Integration test can persist hints and redacted provenance.
+
+Phase 7 notes:
+
+- Added `V6__practice_hints_provenance.sql`.
+- The provenance table stores bounded `redacted_excerpt` values and optional links to evidence/source-link rows.
+- `./scripts/backend-test.sh`: passed.
 
 ### Phase 8: Migration for Per-User Attempts
 
