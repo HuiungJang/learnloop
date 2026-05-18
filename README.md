@@ -208,9 +208,31 @@ Use the UI role selector or create a session with `POST /api/session`:
 
 Default local development password: `demo-password`. The Docker installer generates `APP_DEMO_PASSWORD` in `.env`; the installed UI asks for that password instead of embedding it in the static frontend bundle.
 
-## Scope
+## AI Provider Setup
 
-The Node MVP remains as a parity oracle. The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and deterministic local pattern generation. Provider credentials are stored on the server only as non-reversible references.
+The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and local-first AI setup surfaces. The Node MVP remains as a parity oracle and now supports both deterministic local generation and real OpenAI-compatible provider calls.
+
+Node MVP provider modes:
+
+- `provider-local-mock` keeps deterministic generation for demos, stable tests, and parity checks.
+- Non-mock providers call an OpenAI-compatible Responses API endpoint at `POST /v1/responses` with structured JSON schema output.
+
+Register an OpenAI-compatible provider with `POST /api/providers`:
+
+```json
+{
+  "organizationId": "org-demo",
+  "provider": "openai",
+  "model": "gpt-4.1-mini",
+  "scope": "organization",
+  "credential": "YOUR_API_KEY",
+  "orgApproved": true
+}
+```
+
+For `provider: "openai"`, `baseUrl` defaults to `https://api.openai.com`. Custom `baseUrl` values must use HTTPS. Loopback HTTP is allowed only for local fake-provider tests when `APP_ALLOW_INSECURE_PROVIDER_BASE_URL=1`.
+
+Node MVP provider credentials are encrypted in the local JSON store and redacted from API responses. Set `APP_CREDENTIAL_ENCRYPTION_KEY` outside local development; production mode requires it.
 
 ## License
 

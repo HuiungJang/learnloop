@@ -1,6 +1,34 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import http from "node:http";
 import test from "node:test";
-import { createPublishedPattern, request, withServer } from "./helpers.js";
+import { openCredential } from "../src/security.js";
+import { createConfirmedSourceLink, createPublishedPattern, request, withServer } from "./helpers.js";
+
+async function withFakeProvider(responseBody, testFn) {
+  const requests = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks).toString("utf8");
+    requests.push({
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      body: rawBody ? JSON.parse(rawBody) : null
+    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(`${JSON.stringify(responseBody)}\n`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  try {
+    return await testFn({ providerBaseUrl: `http://127.0.0.1:${address.port}`, requests });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
 
 test("core workflow publishes a generated pattern and accepts learner submissions", async () => {
   await withServer(async ({ baseUrl }) => {
@@ -95,8 +123,8 @@ test("provider credentials are stored as references and redacted from API respon
       method: "POST",
       body: {
         organizationId: "org-demo",
-        provider: "openai",
-        model: "example-model",
+        provider: " OpenAI ",
+        model: " example-model ",
         scope: "personal",
         credential: secret,
         retentionMode: "standard"
@@ -106,9 +134,206 @@ test("provider credentials are stored as references and redacted from API respon
     assert.equal(JSON.stringify(result.json).includes(secret), false);
 
     const rawProvider = store.db.aiProviders.find((provider) => provider.provider === "openai");
+    assert.equal(rawProvider.model, "example-model");
+    assert.equal(rawProvider.baseUrl, "https://api.openai.com");
     assert.ok(rawProvider.credentialRef.startsWith("vault://"));
+    assert.equal(rawProvider.credentialAlgorithm, "aes-256-gcm");
+    assert.ok(rawProvider.credentialCiphertext);
+    assert.equal(openCredential(rawProvider), secret);
     assert.equal(JSON.stringify(rawProvider).includes(secret), false);
+    assert.equal(JSON.stringify(result.json).includes(rawProvider.credentialCiphertext), false);
   });
+});
+
+test("provider registration validates custom base URLs", async () => {
+  await withServer(async ({ baseUrl }) => {
+    const unsafe = await request(baseUrl, "/api/providers", {
+      userId: "u-admin",
+      method: "POST",
+      body: {
+        organizationId: "org-demo",
+        provider: "openai",
+        model: "example-model",
+        scope: "organization",
+        credential: "organization-provider-secret",
+        orgApproved: true,
+        baseUrl: "http://example.com"
+      }
+    });
+    assert.equal(unsafe.response.status, 400);
+    assert.match(unsafe.json.error.message, /https/);
+
+    const previous = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+    process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
+    try {
+      const loopback = await request(baseUrl, "/api/providers", {
+        userId: "u-admin",
+        method: "POST",
+        body: {
+          organizationId: "org-demo",
+          provider: "openai",
+          model: "example-model",
+          scope: "organization",
+          credential: "organization-provider-secret",
+          orgApproved: true,
+          baseUrl: "http://127.0.0.1:8080/v1?blocked=true"
+        }
+      });
+      assert.equal(loopback.response.status, 400);
+
+      const allowed = await request(baseUrl, "/api/providers", {
+        userId: "u-admin",
+        method: "POST",
+        body: {
+          organizationId: "org-demo",
+          provider: "openai",
+          model: "example-model",
+          scope: "organization",
+          credential: "organization-provider-secret",
+          orgApproved: true,
+          baseUrl: "http://127.0.0.1:8080"
+        }
+      });
+      assert.equal(allowed.response.status, 201);
+      assert.equal(allowed.json.provider.baseUrl, "http://127.0.0.1:8080");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+      } else {
+        process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previous;
+      }
+    }
+  });
+});
+
+test("generation calls an OpenAI-compatible provider and stores returned pattern data", async () => {
+  const providerOutput = {
+    title: "Provider Generated Retry Pattern",
+    summary: "A reusable pattern for applying bounded retries and timeouts around service calls while keeping domain data generic.",
+    tags: [
+      { tagType: "language", name: "TypeScript" },
+      { tagType: "pattern", name: "Retry/Timeout" },
+      { tagType: "api", name: "HTTP API" }
+    ],
+    problems: [
+      {
+        type: "qa",
+        prompt: "When should this retry and timeout pattern be applied?",
+        referenceAnswer: "Apply it when a service boundary can fail transiently and callers need bounded waiting plus clear failure behavior.",
+        difficulty: "beginner"
+      },
+      {
+        type: "short_implementation",
+        prompt: "Implement a neutral order-service client with bounded retry and timeout behavior.",
+        referenceAnswer: "A strong implementation keeps retry limits explicit, avoids infinite waiting, and separates transport errors from domain logic.",
+        difficulty: "intermediate"
+      }
+    ]
+  };
+  const previous = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+  process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
+  try {
+    await withFakeProvider({ output_text: JSON.stringify(providerOutput), usage: { input_tokens: 123, output_tokens: 456 } }, async ({ providerBaseUrl, requests }) => {
+      await withServer(async ({ baseUrl, store }) => {
+        const provider = await request(baseUrl, "/api/providers", {
+          userId: "u-admin",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            provider: "openai",
+            model: "fake-responses-model",
+            scope: "organization",
+            credential: "organization-provider-secret",
+            orgApproved: true,
+            baseUrl: providerBaseUrl
+          }
+        });
+        assert.equal(provider.response.status, 201);
+
+        const { linkId } = await createConfirmedSourceLink(baseUrl);
+        const generated = await request(baseUrl, "/api/generation/run", {
+          userId: "u-contributor",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            providerConfigId: provider.json.provider.id,
+            sourceLinkIds: [linkId],
+            visibility: "organization"
+          }
+        });
+
+        assert.equal(generated.response.status, 201);
+        assert.equal(generated.json.patternCard.title, providerOutput.title);
+        assert.equal(generated.json.generationRun.outputTokens, 456);
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].method, "POST");
+        assert.equal(requests[0].url, "/v1/responses");
+        assert.equal(requests[0].headers.authorization, "Bearer organization-provider-secret");
+        assert.equal(requests[0].body.model, "fake-responses-model");
+        assert.equal(requests[0].body.text.format.type, "json_schema");
+        assert.equal(requests[0].body.text.format.name, "learnloop_pattern_generation");
+        assert.equal(JSON.stringify(store.db).includes("organization-provider-secret"), false);
+      });
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+    } else {
+      process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previous;
+    }
+  }
+});
+
+test("invalid provider output fails the generation run without partial assets", async () => {
+  const previous = process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+  process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = "1";
+  try {
+    await withFakeProvider({ output_text: "not-json" }, async ({ providerBaseUrl }) => {
+      await withServer(async ({ baseUrl, store }) => {
+        const provider = await request(baseUrl, "/api/providers", {
+          userId: "u-admin",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            provider: "openai",
+            model: "fake-responses-model",
+            scope: "organization",
+            credential: "organization-provider-secret",
+            orgApproved: true,
+            baseUrl: providerBaseUrl
+          }
+        });
+        const { linkId } = await createConfirmedSourceLink(baseUrl);
+        const generated = await request(baseUrl, "/api/generation/run", {
+          userId: "u-contributor",
+          method: "POST",
+          body: {
+            organizationId: "org-demo",
+            providerConfigId: provider.json.provider.id,
+            sourceLinkIds: [linkId],
+            visibility: "organization"
+          }
+        });
+
+        assert.equal(generated.response.status, 502);
+        assert.equal(generated.json.error.message, "Provider generation failed");
+        assert.equal(store.db.generationRuns.length, 1);
+        assert.equal(store.db.generationRuns[0].status, "failed");
+        assert.equal(store.db.generationRuns[0].failureReason, "provider_output_invalid_json");
+        assert.equal(store.db.patternCards.length, 0);
+        assert.equal(store.db.problems.length, 0);
+        assert.equal(store.db.reviewTasks.length, 0);
+        assert.ok(store.db.auditLogs.some((entry) => entry.eventType === "generation.failed"));
+        assert.ok(store.db.metrics.some((entry) => entry.name === "generation.failed"));
+      });
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL;
+    } else {
+      process.env.APP_ALLOW_INSECURE_PROVIDER_BASE_URL = previous;
+    }
+  }
 });
 
 test("personal providers cannot publish organization assets by default", async () => {

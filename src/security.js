@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 
+const CREDENTIAL_ALGORITHM = "aes-256-gcm";
 const SECRET_PATTERNS = [
   { type: "openai_key", pattern: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
   { type: "github_token", pattern: /\bghp_[A-Za-z0-9_]{20,}\b/g },
@@ -37,11 +38,45 @@ export function scanSecrets(content) {
 
 export function sealCredential(secret) {
   const digest = sha256(secret);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(CREDENTIAL_ALGORITHM, credentialKey(), iv);
+  const credentialCiphertext = Buffer.concat([cipher.update(String(secret), "utf8"), cipher.final()]);
   return {
     credentialRef: `vault://${digest.slice(0, 24)}`,
     credentialFingerprint: digest.slice(0, 16),
-    secretPreview: secret.length >= 4 ? `***${secret.slice(-4)}` : "***"
+    secretPreview: secret.length >= 4 ? `***${secret.slice(-4)}` : "***",
+    credentialAlgorithm: CREDENTIAL_ALGORITHM,
+    credentialIv: iv.toString("base64url"),
+    credentialTag: cipher.getAuthTag().toString("base64url"),
+    credentialCiphertext: credentialCiphertext.toString("base64url")
   };
+}
+
+function credentialKey() {
+  const configuredKey = process.env.APP_CREDENTIAL_ENCRYPTION_KEY;
+  if (!configuredKey && process.env.NODE_ENV === "production") {
+    throw new Error("APP_CREDENTIAL_ENCRYPTION_KEY is required in production");
+  }
+  return crypto.createHash("sha256").update(configuredKey ?? "learnloop-local-development-credential-key").digest();
+}
+
+export function openCredential(sealed) {
+  if (!sealed?.credentialCiphertext || !sealed?.credentialIv || !sealed?.credentialTag) {
+    throw new Error("Credential material is unavailable");
+  }
+  if (sealed.credentialAlgorithm !== CREDENTIAL_ALGORITHM) {
+    throw new Error("Unsupported credential algorithm");
+  }
+  const decipher = crypto.createDecipheriv(
+    CREDENTIAL_ALGORITHM,
+    credentialKey(),
+    Buffer.from(sealed.credentialIv, "base64url")
+  );
+  decipher.setAuthTag(Buffer.from(sealed.credentialTag, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(sealed.credentialCiphertext, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
 }
 
 export function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -64,13 +99,17 @@ export function redactForApi(value) {
   if (!value || typeof value !== "object") return value;
   const output = {};
   for (const [key, item] of Object.entries(value)) {
-    if (/credential|secret|token|password|apiKey|keyMaterial/i.test(key)) {
+    if (isSensitiveField(key)) {
       output[key] = item ? "[redacted]" : item;
     } else {
       output[key] = redactForApi(item);
     }
   }
   return output;
+}
+
+function isSensitiveField(key) {
+  return /credential|secret|password|apiKey|keyMaterial|accessToken|refreshToken|idToken|sessionToken|tokenHash/i.test(key);
 }
 
 export function escapeHtml(text) {
