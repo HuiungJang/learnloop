@@ -100,3 +100,20 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Documentation must avoid implying multi-adapter MVP parity while the plan intentionally keeps the first automatic path narrow.
+
+### 2026-05-19 - Phase 2 Local Owner Mode
+
+**By:** Codex
+
+**Actions:**
+- Changed local/install seed defaults to create `u-local-owner` and not seed demo role users unless `app.seed-demo-roles=true`.
+- Preserved legacy role-heavy integration tests by enabling demo role seeding only in that test context.
+- Added `LocalOwnerModeIntegrationTest` for the default local owner seed and login path.
+- Updated frontend visible copy from organization/review language to local owner/curation language.
+- Checked off Phase 2 in the plan document.
+- Ran targeted backend and frontend verification.
+- Addressed Phase 2 review findings by disabling default local self-registration, separating local-owner seed from demo-role mode, binding local profile to loopback by default, and updating installed E2E to log in as the seeded owner.
+
+**Learnings:**
+- Current authorization still depends on existing membership roles, so the local owner keeps an internal admin membership until a later authorization cleanup collapses local owner checks.
+- Existing demo-role integration coverage can stay intact as an explicit compatibility mode while installed/local defaults move to one owner.

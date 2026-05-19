@@ -415,18 +415,20 @@ Verification:
 
 ### Phase 2: Convert Primary App Path To Local Owner Mode
 
-- [ ] Seed one local owner and one local workspace.
-- [ ] Stop seeding role-demo users in the installed/local path.
-- [ ] Remove or hide role selector UI in the primary app path.
-- [ ] Rename review labels to local curation labels.
-- [ ] Simplify local auth to answer only: is this request from the local owner session?
-- [ ] Keep existing organization/team/project fields internally if removing them would create migration churn.
+- [x] Seed one local owner and one local workspace.
+- [x] Stop seeding role-demo users in the installed/local path.
+- [x] Disable open self-registration in the default local owner path.
+- [x] Remove or hide role selector UI in the primary app path.
+- [x] Rename review labels to local curation labels.
+- [x] Map local auth to one seeded owner session while preserving an internal admin membership for compatibility.
+- [x] Keep existing organization/team/project fields internally if removing them would create migration churn.
 
 Verification:
 
-- [ ] Backend test proves fresh local mode creates exactly one owner profile and no admin/reviewer/learner demo set.
-- [ ] Integration test proves a fresh install reaches an authenticated local owner session without choosing a role.
-- [ ] UI smoke path has no visible `admin@example.com`, `reviewer`, or `learner` chooser.
+- [x] Backend test proves fresh local mode creates exactly one owner profile and no admin/reviewer/learner demo set.
+- [x] Integration test proves a fresh install reaches an authenticated local owner session without choosing a role.
+- [x] Backend test proves default local owner mode rejects self-registration.
+- [x] UI smoke path has no visible `admin@example.com`, `reviewer`, or `learner` chooser.
 
 ### Phase 3: Remove Raw Evidence From Audit And Log Surfaces
 

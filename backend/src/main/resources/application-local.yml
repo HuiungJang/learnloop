@@ -1,3 +1,6 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
 spring:
   datasource:
     url: ${APP_DATABASE_URL:jdbc:postgresql://localhost:5432/learnloop}
@@ -12,3 +15,9 @@ logging:
 
 app:
   demo-password: ${APP_DEMO_PASSWORD:demo-password}
+  registration:
+    enabled: ${APP_REGISTRATION_ENABLED:false}
+  seed-demo-roles: ${APP_SEED_DEMO_ROLES:false}
+  local-owner:
+    email: ${APP_LOCAL_OWNER_EMAIL:owner@local.learnloop}
+    display-name: ${APP_LOCAL_OWNER_DISPLAY_NAME:Local Owner}

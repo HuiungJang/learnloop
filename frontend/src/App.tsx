@@ -20,7 +20,6 @@ import {
   Sparkles,
   Sun,
   UploadCloud,
-  UserPlus,
   X,
   type LucideIcon
 } from "lucide-react";
@@ -37,7 +36,6 @@ import {
   isConflictError,
   listProviders,
   type PracticeAttemptFileRequest,
-  registerUser,
   runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
@@ -63,7 +61,6 @@ import {
 } from "./practice/practiceSyncQueue";
 import { loadRevealedHintIds, logHintReveal, saveRevealedHintId } from "./practice/hintProgress";
 
-type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
 type EditorTheme = "vs" | "vs-dark";
@@ -111,9 +108,9 @@ type CompanionOAuthResponse = {
 const workflowCards = [
   {
     title: "Evidence Intake",
-    description: "Collect Codex, Gemini, Claude, PR, commit, and diff evidence into one reviewable source bundle.",
+    description: "Collect Codex CLI and local-session evidence from approved repositories into one curation-ready bundle.",
     icon: UploadCloud,
-    metric: "6 sources"
+    metric: "local inputs"
   },
   {
     title: "Pattern Generation",
@@ -122,16 +119,16 @@ const workflowCards = [
     metric: "AI assisted"
   },
   {
-    title: "Human Review",
-    description: "Require reviewer approval before generated cards become reusable organization learning assets.",
+    title: "Local Curation",
+    description: "Let the local owner keep, edit, delete, or generate practice from collected evidence.",
     icon: ListChecks,
-    metric: "default gate"
+    metric: "owner gate"
   },
   {
     title: "Practice Library",
-    description: "Turn reviewed cards into implementation prompts, Q&A, and problem-solving exercises for learners.",
+    description: "Turn curated cards into implementation prompts, Q&A, and problem-solving exercises.",
     icon: Library,
-    metric: "reusable"
+    metric: "personal"
   }
 ];
 
@@ -256,9 +253,7 @@ function primaryMembership(session: SessionResponse | null): Membership | null {
 
 export function App() {
   const editorSnapshotRef = useRef<(() => PracticeAttemptFileRequest[]) | null>(null);
-  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [session, setSession] = useState<SessionResponse | null>(() => readStoredSession());
@@ -400,27 +395,10 @@ export function App() {
 
           <div>
             <p className="eyebrow">Local learning workspace</p>
-            <h1>Sign in to your reviewed code practice.</h1>
-          </div>
-
-          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-            <button className={authMode === "login" ? "nav-active" : ""} onClick={() => setAuthMode("login")} type="button">
-              <LogIn aria-hidden="true" size={16} />
-              <span>Login</span>
-            </button>
-            <button className={authMode === "register" ? "nav-active" : ""} onClick={() => setAuthMode("register")} type="button">
-              <UserPlus aria-hidden="true" size={16} />
-              <span>Sign up</span>
-            </button>
+            <h1>Open your local learning workspace.</h1>
           </div>
 
           <form className="auth-form" onSubmit={handleAuthSubmit}>
-            {authMode === "register" ? (
-              <label>
-                <span>Display name</span>
-                <input autoComplete="name" onChange={(event) => setDisplayName(event.target.value)} required type="text" value={displayName} />
-              </label>
-            ) : null}
             <label>
               <span>Email</span>
               <input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
@@ -428,8 +406,7 @@ export function App() {
             <label>
               <span>Password</span>
               <input
-                autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                minLength={authMode === "register" ? 8 : undefined}
+                autoComplete="current-password"
                 onChange={(event) => setPassword(event.target.value)}
                 required
                 type="password"
@@ -438,13 +415,13 @@ export function App() {
             </label>
             {authError.length > 0 ? <p className="form-error">{authError}</p> : null}
             <button className="primary-button" type="submit">
-              {authMode === "register" ? <UserPlus aria-hidden="true" size={16} /> : <LogIn aria-hidden="true" size={16} />}
-              {authMode === "register" ? "Create account" : "Login"}
+              <LogIn aria-hidden="true" size={16} />
+              Login
             </button>
           </form>
         </section>
 
-        <section className="auth-preview" aria-label="Platform workflow">
+        <section className="auth-preview" aria-label="Local learning workflow">
           {workflowCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -476,7 +453,7 @@ export function App() {
         <div className="account-card">
           <strong>{session.user.displayName}</strong>
           <span>{session.user.email}</span>
-          <small>{membership?.role ?? "member"}</small>
+          <small>{membership?.role === "admin" ? "Local owner" : membership?.role ?? "member"}</small>
         </div>
 
         <button className="local-ai-card" onClick={openLocalAiSetup} type="button">
@@ -496,7 +473,7 @@ export function App() {
 
         <div className="sidebar-status">
           <ShieldCheck aria-hidden="true" size={18} />
-          <span>Internal org mode</span>
+          <span>Local personal mode</span>
         </div>
       </aside>
 
@@ -607,7 +584,7 @@ export function App() {
             <header className="topbar">
               <div>
                 <p className="eyebrow">AI-assisted code learning workspace</p>
-                <h1>Generated code becomes reviewed practice.</h1>
+                <h1>Generated code becomes curated practice.</h1>
               </div>
               <div className={`health-pill ${health.status}`}>
                 <CheckCircle2 aria-hidden="true" size={16} />
@@ -615,7 +592,7 @@ export function App() {
               </div>
             </header>
 
-            <section className="summary-grid" aria-label="Platform workflow">
+            <section className="summary-grid" aria-label="Local learning workflow">
               {workflowCards.map((card) => {
                 const Icon = card.icon;
 
@@ -990,10 +967,7 @@ export function App() {
     setAuthError("");
 
     try {
-      const nextSession =
-        authMode === "register"
-          ? await registerUser(email, displayName, password)
-          : await createSession(email, password);
+      const nextSession = await createSession(email, password);
 
       setSession(nextSession);
       setPassword("");
@@ -1385,12 +1359,12 @@ export function App() {
         </div>
         <div className="feedback-section">
           <span>Pattern feedback</span>
-          <small>Pattern feedback will appear after review.</small>
+          <small>Pattern feedback will appear after curation.</small>
         </div>
         <div className="feedback-section">
           <span>Recommendations</span>
           {status === "failed" || status === "compile_error" ? (
-            <small>Review the runner output and try again.</small>
+            <small>Inspect the runner output and try again.</small>
           ) : nextRecommendations.length > 0 ? (
             nextRecommendations.map((card) => <small key={card.id}>{card.title}</small>)
           ) : (
@@ -1408,7 +1382,7 @@ export function App() {
   }
 
   function reviewStatusLabel(status: string | null): string {
-    if (status === "open") return "Review open";
+    if (status === "open") return "Curation open";
     if (status === "approved") return "Approved";
     if (status === "changes_requested") return "Changes requested";
     if (status === "rejected") return "Rejected";
@@ -1674,7 +1648,7 @@ export function App() {
         `Code ${result.codeBundle.status}`,
         `Conversation ${result.conversationBundle.status}`,
         `Link ${result.sourceLink.status}`,
-        `Review ${result.reviewTask.status}`,
+        `Curation ${result.reviewTask.status}`,
         `Card ${result.patternCard.publicationStatus}`
       ]);
       void refreshConversionTraces(session);

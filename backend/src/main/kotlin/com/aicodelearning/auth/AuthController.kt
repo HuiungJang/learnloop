@@ -1,5 +1,6 @@
 package com.aicodelearning.auth
 
+import com.aicodelearning.platform.ForbiddenException
 import com.aicodelearning.platform.RateLimitedException
 import com.aicodelearning.platform.UnauthorizedException
 import jakarta.servlet.http.HttpServletRequest
@@ -7,6 +8,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
@@ -22,6 +24,8 @@ import java.time.Instant
 class AuthController(
     private val sessionService: SessionService,
     private val loginRateLimiter: LoginRateLimiter,
+    @param:Value("\${app.registration.enabled:false}")
+    private val registrationEnabled: Boolean,
 ) {
     @PostMapping("/session")
     @ResponseStatus(HttpStatus.CREATED)
@@ -47,6 +51,10 @@ class AuthController(
     fun register(
         @Valid @RequestBody request: RegisterRequest,
     ): SessionResponse {
+        if (!registrationEnabled) {
+            throw ForbiddenException("Registration is disabled in local owner mode")
+        }
+
         val session =
             sessionService.register(
                 email = request.email,
