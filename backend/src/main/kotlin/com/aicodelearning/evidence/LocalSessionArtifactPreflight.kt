@@ -83,7 +83,12 @@ class LocalSessionArtifactPreflight(
             val resultPath = normalizedPath.takeIf { pathFindings.isEmpty() }
             val ignoreReason = normalizedPath?.let { ignoreReason(it) ?: resolvedPath?.realRepoRelativePath?.let(::ignoreReason) }
             if (ignoreReason != null) {
-                findings += pathFindings.map { LocalSessionSecretFinding(index, artifact.itemType, resultPath, it) }
+                val ignoredContentFindings = artifact.content?.let(secretScanner::scan).orEmpty()
+                val ignoredMetadataFindings = metadataFindingsByKey.values.flatten()
+                findings +=
+                    (pathFindings + ignoredContentFindings + ignoredMetadataFindings).map {
+                        LocalSessionSecretFinding(index, artifact.itemType, resultPath, it)
+                    }
                 ignored +=
                     IgnoredLocalSessionArtifact(
                         itemType = artifact.itemType,

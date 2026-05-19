@@ -46,6 +46,7 @@ class EvidenceSchemaMigrationIntegrationTest {
         assertNull(oldBundle["user_attribution"])
         assertNull(oldBundle["attribution_confidence"])
         assertEquals("[]", oldBundle.getValue("attribution_reasons_json"))
+        assertNull(oldBundle["dedupe_key"])
 
         val oldItem = jdbcTemplate.queryForMap("SELECT * FROM evidence_items WHERE id = 'evidence_old_code'")
         assertEquals("code", oldItem.getValue("item_type"))
@@ -64,6 +65,26 @@ class EvidenceSchemaMigrationIntegrationTest {
 
         insertLocalSessionBundle(jdbcTemplate)
         assertEquals(1, count(jdbcTemplate, "source_bundle_attribution_events"))
+        assertEquals(
+            "generation_eligible",
+            jdbcTemplate.queryForMap("SELECT status FROM source_bundles WHERE id = 'bundle_local_session'").getValue("status"),
+        )
+        assertThrows(DataIntegrityViolationException::class.java) {
+            jdbcTemplate.update(
+                """
+                INSERT INTO source_bundles (
+                    id, organization_id, created_by_user_id, title, source_kind, status,
+                    file_paths_json, provenance_json, content_hash, secret_findings_json,
+                    dedupe_key
+                )
+                VALUES (
+                    'bundle_local_session_duplicate', 'org-test', 'u-test', 'Duplicate local session', 'local_ai_session', 'generation_eligible',
+                    '[]', '{}', '${"9".repeat(64)}', '[]',
+                    '${"7".repeat(64)}'
+                )
+                """.trimIndent(),
+            )
+        }
         jdbcTemplate.update(
             """
             UPDATE evidence_items
@@ -157,12 +178,12 @@ class EvidenceSchemaMigrationIntegrationTest {
             INSERT INTO source_bundles (
                 id, organization_id, created_by_user_id, title, source_kind, status,
                 file_paths_json, provenance_json, content_hash, secret_findings_json,
-                auto_attribution, attribution_confidence, attribution_reasons_json
+                auto_attribution, attribution_confidence, attribution_reasons_json, dedupe_key
             )
             VALUES (
-                'bundle_local_session', 'org-test', 'u-test', 'Local session', 'local_ai_session', 'ready',
+                'bundle_local_session', 'org-test', 'u-test', 'Local session', 'local_ai_session', 'generation_eligible',
                 '["src/App.tsx"]', '{"tool":"codex"}', '${"b".repeat(64)}', '[]',
-                'ai_assisted', 0.93000, '["tool_session"]'
+                'ai_assisted', 0.93000, '["tool_session"]', '${"7".repeat(64)}'
             )
             """.trimIndent(),
         )

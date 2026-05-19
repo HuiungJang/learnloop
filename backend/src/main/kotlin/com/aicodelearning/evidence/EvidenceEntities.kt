@@ -81,6 +81,9 @@ class SourceBundleEntity(
 
     @Column(name = "attribution_reasons_json", nullable = false)
     var attributionReasonsJson: String = "[]",
+
+    @Column(name = "dedupe_key")
+    var dedupeKey: String? = null,
 )
 
 @Entity

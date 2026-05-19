@@ -22,6 +22,12 @@ interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String> {
         organizationId: String,
         repositoryUrl: String,
     ): List<SourceBundleEntity>
+
+    fun findFirstByOrganizationIdAndSourceKindAndDedupeKeyAndDeletedAtIsNullOrderByCreatedAtDesc(
+        organizationId: String,
+        sourceKind: String,
+        dedupeKey: String,
+    ): SourceBundleEntity?
 }
 
 interface EvidenceItemRepository : JpaRepository<EvidenceItemEntity, String> {

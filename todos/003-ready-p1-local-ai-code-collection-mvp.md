@@ -290,3 +290,32 @@ Initial Phase 1 files:
 - Allowlisted metadata keys still need per-key value contracts; key allowlisting alone does not prevent raw output smuggling.
 - Metadata key normalization must be shared by scanning and preservation; otherwise whitespace variants can split the decision.
 - Size limits must apply to raw request fields, not only the fields selected for persistence.
+
+### 2026-05-20 - Phase 7 Local Session Ingestion
+
+**By:** Codex
+
+**Actions:**
+- Added `POST /api/ingest/local-ai-session` for local-owner structured session ingestion.
+- Added `source_bundles.dedupe_key`, local-session status values, and a partial unique index for active bundle idempotency.
+- Persisted one source bundle with multiple local-session evidence items after Phase 6 preflight.
+- Computed server-owned artifact hashes and bundle dedupe keys; sequential and concurrent duplicates reuse one durable bundle.
+- Stored only safe local repository references, safe provenance hashes, normalized metadata, and bounded item fields.
+- Added integration tests for multi-artifact ingest, sequential duplicate reuse, concurrent duplicate reuse, and secret quarantine.
+- Cleared local-session dedupe keys during raw purge so recollection creates a fresh readable bundle.
+- Canonicalized artifact descriptors in the dedupe key so upload order does not affect duplicate detection.
+- Included preflight security state, ignored artifacts, and secret finding fingerprints in the dedupe key so secret-tainted retries remain quarantined.
+- Added duplicate conflict recovery so a database unique-index race can re-query and return the existing bundle.
+- Scanned ignored artifact content and metadata before deciding generation eligibility.
+- Removed artifact index from secret-finding dedupe identity and added stable response ordering for local-session items.
+- Secret-scanned request metadata tokens before persisting tool provider, timestamp bucket, or attribution reasons.
+- Checked off Phase 7 in the plan document.
+
+**Learnings:**
+- The service must not store the `file://` repository URL it uses for local root validation because that can expose an absolute local path.
+- Transaction-level idempotency needs the lock to cover the commit boundary, so the local lock wraps a `TransactionTemplate` transaction.
+- Local-session status values require a new constraint migration before the endpoint can persist quarantined or generation-eligible bundles.
+- Local-session dedupe must follow raw purge semantics; otherwise recollection can keep pointing at a raw-purged bundle.
+- Idempotency keys must include safety state, not only accepted artifacts, because ignored artifacts can still carry secret findings.
+- Ignored artifacts do not persist raw content, but their submitted content still affects quarantine decisions.
+- Request-level metadata can carry secrets too; token-shaped fields still need scanner checks before persistence.

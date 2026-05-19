@@ -30,6 +30,21 @@ class EvidenceController(
         return ManualIngestResponse(bundle = result.bundle.toResponse(), evidenceItem = result.item.toResponse(includeContent = false))
     }
 
+    @PostMapping("/api/ingest/local-ai-session")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun ingestLocalAiSession(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @Valid @RequestBody request: LocalAiSessionIngestRequest,
+    ): LocalAiSessionIngestResponse {
+        val result = evidenceService.ingestLocalAiSession(currentUser, request)
+        return LocalAiSessionIngestResponse(
+            bundle = result.bundle.toResponse(),
+            evidenceItems = result.items.map { it.toResponse(includeContent = false) },
+            ignoredArtifacts = result.ignoredArtifacts.map { it.toResponse() },
+            duplicate = result.duplicate,
+        )
+    }
+
     @GetMapping("/api/evidence/{bundleId}")
     fun readEvidence(
         @AuthenticationPrincipal currentUser: CurrentUser,
@@ -135,6 +150,20 @@ data class LocalAiSessionArtifactRequest(
 data class ManualIngestResponse(
     val bundle: SourceBundleResponse,
     val evidenceItem: EvidenceItemResponse,
+)
+
+data class LocalAiSessionIngestResponse(
+    val bundle: SourceBundleResponse,
+    val evidenceItems: List<EvidenceItemResponse>,
+    val ignoredArtifacts: List<IgnoredLocalSessionArtifactResponse>,
+    val duplicate: Boolean,
+)
+
+data class IgnoredLocalSessionArtifactResponse(
+    val itemType: String,
+    val repoRelativePath: String?,
+    val contentHash: String,
+    val reason: String,
 )
 
 data class EvidenceDetailResponse(
@@ -251,3 +280,11 @@ private fun String.bounded(limit: Int?): String =
     }
 
 private const val LOCAL_SESSION_DETAIL_EXCERPT_LIMIT = 2_000
+
+private fun IgnoredLocalSessionArtifact.toResponse(): IgnoredLocalSessionArtifactResponse =
+    IgnoredLocalSessionArtifactResponse(
+        itemType = itemType,
+        repoRelativePath = repoRelativePath,
+        contentHash = contentHash,
+        reason = reason,
+    )

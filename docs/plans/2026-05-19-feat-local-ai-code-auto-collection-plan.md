@@ -498,21 +498,21 @@ Verification:
 
 ### Phase 7: Implement Local Session Ingestion With Idempotency
 
-- [ ] Add `POST /api/ingest/local-ai-session`.
-- [ ] Persist one source bundle with multiple evidence items.
-- [ ] Compute content hashes per artifact and a bundle-level dedupe key.
-- [ ] Add `source_bundles.dedupe_key`.
-- [ ] Add a unique index on `(organization_id, source_kind, dedupe_key)` where `dedupe_key IS NOT NULL AND deleted_at IS NULL`.
-- [ ] Define dedupe key from repo identity hash, normalized relative paths, artifact hashes, tool event id or timestamp bucket, and source kind.
-- [ ] Reject or quarantine the whole bundle if any artifact contains likely secrets unless safe redaction can preserve useful context.
-- [ ] Do not return raw full content from broad list/detail APIs.
+- [x] Add `POST /api/ingest/local-ai-session`.
+- [x] Persist one source bundle with multiple evidence items.
+- [x] Compute content hashes per artifact and a bundle-level dedupe key.
+- [x] Add `source_bundles.dedupe_key`.
+- [x] Add a unique index on `(organization_id, source_kind, dedupe_key)` where `dedupe_key IS NOT NULL AND deleted_at IS NULL`.
+- [x] Define dedupe key from repo identity hash, normalized relative paths, artifact hashes, tool event id or timestamp bucket, and source kind.
+- [x] Reject or quarantine the whole bundle if any artifact contains likely secrets unless safe redaction can preserve useful context.
+- [x] Do not return raw full content from broad list/detail APIs.
 
 Verification:
 
-- [ ] Integration test ingests prompt, AI response, before, after, and diff artifacts in one request.
-- [ ] Sequential duplicate upload returns or reuses the existing bundle.
-- [ ] Concurrent duplicate uploads produce one durable bundle.
-- [ ] Secret-containing bundle is quarantined or redacted before generation eligibility.
+- [x] Integration test ingests prompt, AI response, before, after, and diff artifacts in one request.
+- [x] Sequential duplicate upload returns or reuses the existing bundle.
+- [x] Concurrent duplicate uploads produce one durable bundle.
+- [x] Secret-containing bundle is quarantined or redacted before generation eligibility.
 
 ### Phase 8: Add Simple Attribution And User Override
 

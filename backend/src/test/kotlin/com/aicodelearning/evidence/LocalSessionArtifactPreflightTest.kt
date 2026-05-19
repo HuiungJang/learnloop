@@ -311,6 +311,25 @@ class LocalSessionArtifactPreflightTest {
     }
 
     @Test
+    fun `ignored artifact content and metadata are scanned before generation eligibility`() {
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo"))
+
+        val result =
+            preflight.validate(
+                request(
+                    artifact("file_before", path = ".env.local", content = "SLACK_BOT_TOKEN=xoxb-abcdefghijklmnop"),
+                    artifact("file_before", path = "node_modules/pkg/index.js", content = "ignored", metadata = mapOf("provider" to "ANTHROPIC_API_KEY=abcdefghijklmnop")),
+                    artifact("prompt", content = "safe prompt"),
+                ),
+                repoRoot,
+            )
+
+        assertEquals("quarantined_secret", result.status)
+        assertFalse(result.generationEligible)
+        assertEquals(2, result.secretFindings.count { it.finding.type == "assigned_secret" })
+    }
+
+    @Test
     fun `allows one hundred file paths plus prompt response and tool events`() {
         val repoRoot = Files.createDirectories(tempDir.resolve("repo"))
         val fileArtifacts =
