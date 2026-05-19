@@ -222,3 +222,71 @@ Initial Phase 1 files:
 
 **Learnings:**
 - A `NOT VALID` PostgreSQL check still applies to updated legacy rows, so it can break retention workflows even if migration itself succeeds.
+
+### 2026-05-19 - Phase 6 Local Session Artifact Preflight
+
+**By:** Codex
+
+**Actions:**
+- Added `LocalSessionArtifactPreflight` to validate local-session artifact paths, approved repo-root containment, symlink escapes, ignore rules, size limits, and secret findings before durable storage.
+- Normalized artifact paths to repo-relative NFC paths and rejected absolute, traversal, null-byte, home, Windows separator, and URL-encoded traversal paths.
+- Added ignore handling for hidden paths, `.env*`, key/cert files, dependency/build directories, binary/media/archive artifacts.
+- Enforced 200KB text artifact, 1MB diff, 100 artifact, and 5MB session limits in preflight.
+- Added tests for valid paths, Unicode normalization, symlink escape, hidden/sensitive ignored paths, invalid path forms, oversized artifacts, oversized sessions, too many files, and secret quarantine.
+- Checked off Phase 6 in the plan document.
+
+**Learnings:**
+- This phase should remain preflight-only; endpoint persistence and idempotency stay in Phase 7.
+- The preflight result can preserve hash/path/metadata while dropping raw content for oversized or secret-bearing artifacts.
+
+### 2026-05-19 - Phase 6 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Added secret scanning over normalized artifact paths and allowlisted metadata values.
+- Added metadata allowlisting, absolute-path filtering, and a 16KB metadata byte budget.
+- Enforced the 1MB diff limit across the whole session, not only per diff artifact.
+- Moved symlink containment before ignore classification so ignored escaped paths are rejected.
+- Clarified the plan wording to describe backend preflight before durable storage/generation, not before local file reads.
+
+**Learnings:**
+- Safe metadata still needs the same raw-evidence treatment as content because tool events can carry paths, stdout/stderr-like values, or credentials.
+
+### 2026-05-19 - Phase 6 Final Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Scanned ignored artifact paths before returning ignored artifact metadata.
+- Required `contentHash` to be a SHA-256 hex digest before copying it into preflight results.
+- Dropped untrusted `tool_event.content` from safe preflight artifacts.
+- Normalized `limitReason` to server-owned values only.
+- Strengthened metadata filtering against embedded absolute paths and UNC paths.
+- Expanded embedded path filtering to cover colon-delimited paths such as `cwd:/Users/...`.
+- Removed secret-bearing artifact paths, metadata values, and content from safe preflight results.
+- Applied ignore rules to contained symlink targets, not only the submitted lexical path.
+- Split the 100-file limit from the total artifact envelope so prompt/response/tool events do not consume file capacity.
+- Changed metadata secret scanning to inspect full normalized values before truncating clean result metadata.
+- Broadened metadata absolute-path filtering to catch comma/semicolon-delimited local paths.
+- Validated `sizeBytes` range and avoided byte-counter overflow during session and diff limit checks.
+- Replaced caller-supplied content hashes in preflight output with server-computed or server-derived safe digests.
+- Removed free-form `limitReason` from preserved metadata; only the top-level normalized limit reason remains.
+- Dropped content text that contains absolute local paths before generation eligibility.
+- Expanded assigned-secret detection for prefixed variable names such as `AWS_SECRET_ACCESS_KEY`, `SLACK_BOT_TOKEN`, and `ANTHROPIC_API_KEY`.
+- Normalized preserved metadata by key to tight slug, numeric, or boolean formats instead of copying allowlisted free-form strings.
+- Applied the same trimmed metadata key normalization to secret finding correlation and safe value preservation.
+- Counted all raw metadata keys and values toward per-artifact metadata and session byte limits before scanning or filtering.
+- Rejected repo-relative paths on non-file artifacts so prompt/response/tool events cannot bypass the 100-file cap.
+
+**Learnings:**
+- Ignored artifacts still produce metadata, so ignored paths need the same path containment and secret-scan treatment as accepted artifacts.
+- Even scalar fields like hash and reason need contract validation because they can otherwise become unexpected raw-data carriers.
+- In-repo symlinks can hide ignored target names, so containment checks and ignore checks must use both submitted and resolved paths.
+- Truncation is a storage/display boundary, not a security boundary; scanning must happen first.
+- Byte counters must reject untrusted sizes before arithmetic, otherwise overflow can bypass hard caps.
+- Client-provided hashes are still user input; preflight output should use server-owned digest values.
+- Secret variable names often have provider prefixes, so scanner rules need to match tokenized key names rather than exact bare words only.
+- Allowlisted metadata keys still need per-key value contracts; key allowlisting alone does not prevent raw output smuggling.
+- Metadata key normalization must be shared by scanning and preservation; otherwise whitespace variants can split the decision.
+- Size limits must apply to raw request fields, not only the fields selected for persistence.

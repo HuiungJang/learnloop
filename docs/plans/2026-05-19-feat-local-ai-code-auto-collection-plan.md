@@ -480,21 +480,21 @@ Verification:
 
 ### Phase 6: Validate Paths, Limits, Ignore Rules, And Secret Scan Staging
 
-- [ ] Add path normalization helper for artifact paths.
-- [ ] Resolve artifacts against the approved repo root and reject symlink escapes.
-- [ ] Reject absolute paths, `..`, null bytes, home expansion, URL-encoded traversal, and platform separator escapes.
-- [ ] Store repo-relative paths by default; avoid absolute home paths in backend evidence and audit metadata.
-- [ ] Normalize Unicode paths before comparison.
-- [ ] Treat hidden files as deny-by-default unless explicitly allowed and not matched by sensitive rules.
-- [ ] Enforce 200KB per text artifact, 1MB diff, 100 files, and 5MB per session.
-- [ ] Ignore `.env*`, key/cert files, binary/media/archive files, dependency folders, and build output before reads, previews, uploads, and generation.
-- [ ] Run secret scanning before durable raw persistence or generation eligibility; use memory or short-lived staging only.
+- [x] Add path normalization helper for artifact paths.
+- [x] Resolve artifacts against the approved repo root and reject symlink escapes.
+- [x] Reject absolute paths, `..`, null bytes, home expansion, URL-encoded traversal, and platform separator escapes.
+- [x] Store repo-relative paths by default; avoid absolute home paths in backend evidence and audit metadata.
+- [x] Normalize Unicode paths before comparison.
+- [x] Treat hidden files as deny-by-default unless explicitly allowed and not matched by sensitive rules.
+- [x] Enforce 200KB per text artifact, 1MB diff, 100 files, and 5MB per session.
+- [x] Ignore `.env*`, key/cert files, binary/media/archive files, dependency folders, and build output in backend preflight before durable storage and generation.
+- [x] Run secret scanning before durable raw persistence or generation eligibility; use memory or short-lived staging only.
 
 Verification:
 
-- [ ] Backend tests cover valid relative paths, symlink escape, Unicode normalization, hidden files, Windows separators, URL-encoded traversal, oversized files, too many files, and oversized sessions.
-- [ ] Secret findings quarantine evidence and block generation.
-- [ ] Oversized artifacts preserve metadata, hash, truncation flag, and limit reason without raw content.
+- [x] Backend tests cover valid relative paths, symlink escape, Unicode normalization, hidden files, Windows separators, URL-encoded traversal, oversized files, too many files, and oversized sessions.
+- [x] Secret findings quarantine evidence and block generation.
+- [x] Oversized artifacts preserve metadata, hash, truncation flag, and limit reason without raw content.
 
 ### Phase 7: Implement Local Session Ingestion With Idempotency
 
