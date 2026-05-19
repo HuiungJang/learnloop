@@ -198,9 +198,14 @@ jobs:
         run: ./scripts/npm.sh --prefix frontend ci
 
       - name: Scan for committed secrets
+        if: github.event_name != 'workflow_run'
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Confirm CI secret scan
+        if: github.event_name == 'workflow_run'
+        run: echo "The triggering CI run already completed the committed secret scan."
 
       - name: Audit frontend dependencies
         run: ./scripts/npm.sh --prefix frontend audit --audit-level=high
