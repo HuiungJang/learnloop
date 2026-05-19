@@ -11,6 +11,8 @@ plugins {
 group = "com.aicodelearning"
 version = "0.1.0-SNAPSHOT"
 
+extra["tomcat.version"] = "10.1.55"
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
