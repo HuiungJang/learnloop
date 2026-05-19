@@ -128,8 +128,8 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
         assertEquals(HttpStatus.OK, detail.statusCode)
         assertFalse(detail.body.orEmpty().contains(sentinel))
         assertEquals(true, json(detail)["evidenceItems"][0]["contentText"].isNull)
-        assertEquals("[]", json(detail)["bundle"]["filePathsJson"].asText())
-        assertEquals("{}", json(detail)["bundle"]["provenanceJson"].asText())
+        assertFalse(json(detail)["bundle"].has("filePathsJson"))
+        assertFalse(json(detail)["bundle"].has("provenanceJson"))
 
         val repeated =
             postJson(

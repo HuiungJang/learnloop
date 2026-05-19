@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.math.BigDecimal
@@ -46,18 +47,55 @@ class EvidenceController(
         )
     }
 
+    @GetMapping("/api/evidence")
+    fun listEvidence(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestParam organizationId: String,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "50") pageSize: Int,
+    ): EvidenceListResponse {
+        val result = evidenceService.listBundles(currentUser, organizationId, page, pageSize)
+        return EvidenceListResponse(
+            bundles = result.bundles.map { it.toSummaryResponse() },
+            page = result.page,
+            pageSize = result.pageSize,
+            total = result.total,
+        )
+    }
+
     @GetMapping("/api/evidence/{bundleId}")
     fun readEvidence(
         @AuthenticationPrincipal currentUser: CurrentUser,
         @PathVariable bundleId: String,
     ): EvidenceDetailResponse {
         val detail = evidenceService.readBundle(currentUser, bundleId)
-        val contentLimit = if (detail.bundle.sourceKind == LocalAiSessionPolicy.SOURCE_KIND) LOCAL_SESSION_DETAIL_EXCERPT_LIMIT else null
         return EvidenceDetailResponse(
-            bundle = detail.bundle.toResponse(),
-            evidenceItems = detail.items.map { it.toResponse(includeContent = true, contentLimit = contentLimit) },
+            bundle = detail.bundle.toSummaryResponse(),
+            evidenceItems = detail.items.map { it.toResponse(includeContent = true, contentLimit = EVIDENCE_DETAIL_EXCERPT_LIMIT) },
         )
     }
+
+    @GetMapping("/api/local-repositories")
+    fun listLocalRepositories(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestParam organizationId: String,
+    ): LocalRepositoryConsentListResponse =
+        LocalRepositoryConsentListResponse(
+            repositories =
+                evidenceService
+                    .listLocalRepositoryConsents(currentUser, organizationId)
+                    .map { it.toResponse() },
+        )
+
+    @PatchMapping("/api/local-repositories/{repoIdentityHash}")
+    fun updateLocalRepository(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable repoIdentityHash: String,
+        @Valid @RequestBody request: LocalRepositoryConsentRequest,
+    ): LocalRepositoryConsentResponse =
+        evidenceService
+            .updateLocalRepositoryConsent(currentUser, repoIdentityHash, request)
+            .toResponse()
 
     @DeleteMapping("/api/evidence/{bundleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -175,8 +213,54 @@ data class IgnoredLocalSessionArtifactResponse(
 )
 
 data class EvidenceDetailResponse(
-    val bundle: SourceBundleResponse,
+    val bundle: SourceBundleSummaryResponse,
     val evidenceItems: List<EvidenceItemResponse>,
+)
+
+data class LocalRepositoryConsentListResponse(
+    val repositories: List<LocalRepositoryConsentResponse>,
+)
+
+data class LocalRepositoryConsentResponse(
+    val repoIdentityHash: String,
+    val organizationId: String,
+    val displayLabel: String,
+    val status: String,
+    val updatedAt: Instant,
+)
+
+data class LocalRepositoryConsentRequest(
+    @field:NotBlank
+    val organizationId: String = "",
+    @field:NotBlank
+    val displayLabel: String = "",
+    @field:NotBlank
+    val status: String = "",
+)
+
+data class EvidenceListResponse(
+    val bundles: List<SourceBundleSummaryResponse>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
+)
+
+data class SourceBundleSummaryResponse(
+    val id: String,
+    val organizationId: String,
+    val teamId: String?,
+    val projectId: String?,
+    val title: String,
+    val sourceKind: String,
+    val status: String,
+    val repositoryUrl: String?,
+    val commitSha: String?,
+    val branchName: String?,
+    val createdAt: Instant,
+    val autoAttribution: String,
+    val userAttribution: String?,
+    val attributionConfidence: BigDecimal?,
+    val attributionReasonsJson: String,
 )
 
 data class ScopedRawPurgeRequest(
@@ -268,6 +352,34 @@ fun SourceBundleEntity.toResponse(): SourceBundleResponse =
         attributionReasonsJson = attributionReasonsJson,
     )
 
+fun SourceBundleEntity.toSummaryResponse(): SourceBundleSummaryResponse =
+    SourceBundleSummaryResponse(
+        id = id,
+        organizationId = organizationId,
+        teamId = teamId,
+        projectId = projectId,
+        title = title,
+        sourceKind = sourceKind,
+        status = status,
+        repositoryUrl = repositoryUrl,
+        commitSha = commitSha,
+        branchName = branchName,
+        createdAt = createdAt,
+        autoAttribution = autoAttribution,
+        userAttribution = userAttribution,
+        attributionConfidence = attributionConfidence,
+        attributionReasonsJson = attributionReasonsJson,
+    )
+
+fun LocalRepositoryConsentEntity.toResponse(): LocalRepositoryConsentResponse =
+    LocalRepositoryConsentResponse(
+        repoIdentityHash = repoIdentityHash,
+        organizationId = organizationId,
+        displayLabel = displayLabel,
+        status = status,
+        updatedAt = updatedAt,
+    )
+
 fun EvidenceItemEntity.toResponse(
     includeContent: Boolean,
     contentLimit: Int? = null,
@@ -295,7 +407,7 @@ private fun String.bounded(limit: Int?): String =
         take(limit)
     }
 
-private const val LOCAL_SESSION_DETAIL_EXCERPT_LIMIT = 2_000
+private const val EVIDENCE_DETAIL_EXCERPT_LIMIT = 2_000
 
 private fun IgnoredLocalSessionArtifact.toResponse(): IgnoredLocalSessionArtifactResponse =
     IgnoredLocalSessionArtifactResponse(

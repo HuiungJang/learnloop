@@ -4,12 +4,20 @@ import com.aicodelearning.audit.AuditService
 import com.aicodelearning.auth.CurrentUser
 import com.aicodelearning.auth.sha256Hex
 import com.aicodelearning.organization.AuthorizationService
+import com.aicodelearning.organization.MembershipSummary
 import com.aicodelearning.platform.BadRequestException
+import com.aicodelearning.platform.ForbiddenException
 import com.aicodelearning.platform.LocalOwnerAccess
 import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
 import com.fasterxml.jackson.databind.ObjectMapper
+import jakarta.persistence.criteria.CriteriaBuilder
+import jakarta.persistence.criteria.Predicate
+import jakarta.persistence.criteria.Root
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
@@ -25,6 +33,7 @@ class EvidenceService(
     private val sourceBundleRepository: SourceBundleRepository,
     private val evidenceItemRepository: EvidenceItemRepository,
     private val sourceBundleAttributionEventRepository: SourceBundleAttributionEventRepository,
+    private val localRepositoryConsentRepository: LocalRepositoryConsentRepository,
     private val authorizationService: AuthorizationService,
     private val localOwnerAccess: LocalOwnerAccess,
     private val secretScanner: SecretScanner,
@@ -125,6 +134,7 @@ class EvidenceService(
         }
         localOwnerAccess.requireLocalOwner(currentUser)
         authorizationService.requireRole(currentUser, request.organizationId, "contributor", request.teamId, request.projectId)
+        requireApprovedLocalRepository(request)
 
         val repoRoot = approvedRepoRoot(request)
         val preflight = localSessionArtifactPreflight.validate(request, repoRoot)
@@ -146,6 +156,73 @@ class EvidenceService(
         } finally {
             localSessionIngestLocks.remove(dedupeKey, lock)
         }
+    }
+
+    @Transactional(readOnly = true)
+    fun listBundles(
+        currentUser: CurrentUser,
+        organizationId: String,
+        page: Int,
+        pageSize: Int,
+    ): EvidenceList {
+        val visibleScope = visibleBundleSpecification(currentUser, organizationId, "contributor")
+        val normalizedPage = page.coerceAtLeast(0)
+        val normalizedPageSize = pageSize.coerceIn(1, MAX_EVIDENCE_LIST_PAGE_SIZE)
+        val result =
+            sourceBundleRepository.findAll(
+                visibleScope,
+                PageRequest.of(
+                    normalizedPage,
+                    normalizedPageSize,
+                    Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")),
+                ),
+            )
+        return EvidenceList(
+            bundles = result.content,
+            page = normalizedPage,
+            pageSize = normalizedPageSize,
+            total = result.totalElements,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun listLocalRepositoryConsents(
+        currentUser: CurrentUser,
+        organizationId: String,
+    ): List<LocalRepositoryConsentEntity> {
+        localOwnerAccess.requireLocalOwner(currentUser)
+        authorizationService.requireOrganizationMember(currentUser, organizationId, "contributor")
+        return localRepositoryConsentRepository.findByOrganizationIdOrderByUpdatedAtDesc(organizationId)
+    }
+
+    @Transactional
+    fun updateLocalRepositoryConsent(
+        currentUser: CurrentUser,
+        repoIdentityHash: String,
+        request: LocalRepositoryConsentRequest,
+    ): LocalRepositoryConsentEntity {
+        localOwnerAccess.requireLocalOwner(currentUser)
+        authorizationService.requireOrganizationMember(currentUser, request.organizationId, "contributor")
+        val normalizedHash = normalizeRepoIdentityHash(repoIdentityHash)
+        val normalizedLabel = request.displayLabel.trim().takeIf { it.isNotBlank() } ?: throw BadRequestException("displayLabel is required")
+        if (normalizedLabel.length > MAX_REPOSITORY_DISPLAY_LABEL_LENGTH) {
+            throw BadRequestException("displayLabel is too long")
+        }
+        val normalizedStatus = normalizeRepositoryConsentStatus(request.status)
+        val now = Instant.now()
+        val consent =
+            localRepositoryConsentRepository.findByOrganizationIdAndRepoIdentityHash(request.organizationId, normalizedHash)
+                ?: LocalRepositoryConsentEntity(
+                    id = prefixedId("repo_consent"),
+                    organizationId = request.organizationId,
+                    repoIdentityHash = normalizedHash,
+                    createdByUserId = currentUser.id,
+                    createdAt = now,
+                )
+        consent.displayLabel = normalizedLabel
+        consent.status = normalizedStatus
+        consent.updatedAt = now
+        return localRepositoryConsentRepository.save(consent)
     }
 
     @Transactional(readOnly = true)
@@ -473,6 +550,87 @@ class EvidenceService(
         }
     }
 
+    private fun requireApprovedLocalRepository(request: LocalAiSessionIngestRequest) {
+        val normalizedHash = normalizeRepoIdentityHash(request.repoIdentityHash)
+        val consent = localRepositoryConsentRepository.findByOrganizationIdAndRepoIdentityHash(request.organizationId, normalizedHash)
+        if (consent?.status != REPOSITORY_CONSENT_APPROVED) {
+            throw BadRequestException("local repository must be approved before ingestion")
+        }
+    }
+
+    private fun visibleBundleSpecification(
+        currentUser: CurrentUser,
+        organizationId: String,
+        role: String,
+    ): Specification<SourceBundleEntity> {
+        val memberships =
+            currentUser.memberships.filter {
+                it.organizationId == organizationId && roleMeetsRequired(it.role, role)
+            }
+        if (memberships.isEmpty()) {
+            throw ForbiddenException("Not allowed for this organization scope")
+        }
+        val hasOrganizationWideAccess = memberships.any { it.role == "admin" || (it.teamId == null && it.projectId == null) }
+
+        return Specification { root, _, criteriaBuilder ->
+            val base =
+                criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get<String>("organizationId"), organizationId),
+                    criteriaBuilder.isNull(root.get<Instant>("deletedAt")),
+                )
+            if (hasOrganizationWideAccess) {
+                base
+            } else {
+                val scopePredicates = memberships.map { scopedBundlePredicate(it, root, criteriaBuilder) }
+                criteriaBuilder.and(base, criteriaBuilder.or(*scopePredicates.toTypedArray()))
+            }
+        }
+    }
+
+    private fun scopedBundlePredicate(
+        membership: MembershipSummary,
+        root: Root<SourceBundleEntity>,
+        criteriaBuilder: CriteriaBuilder,
+    ): Predicate =
+        when {
+            membership.teamId != null && membership.projectId != null ->
+                criteriaBuilder.and(
+                    criteriaBuilder.equal(root.get<String>("teamId"), membership.teamId),
+                    criteriaBuilder.equal(root.get<String>("projectId"), membership.projectId),
+                )
+            membership.teamId != null ->
+                criteriaBuilder.equal(root.get<String>("teamId"), membership.teamId)
+            membership.projectId != null ->
+                criteriaBuilder.equal(root.get<String>("projectId"), membership.projectId)
+            else ->
+                criteriaBuilder.disjunction()
+        }
+
+    private fun roleMeetsRequired(
+        actualRole: String,
+        requiredRole: String,
+    ): Boolean {
+        val actual = ROLE_ORDER.indexOf(actualRole)
+        val required = ROLE_ORDER.indexOf(requiredRole)
+        return actual >= 0 && required >= 0 && actual >= required
+    }
+
+    private fun normalizeRepoIdentityHash(value: String): String {
+        val normalized = value.trim()
+        if (!REPO_IDENTITY_HASH_PATTERN.matches(normalized)) {
+            throw BadRequestException("repoIdentityHash is invalid")
+        }
+        return normalized
+    }
+
+    private fun normalizeRepositoryConsentStatus(value: String): String {
+        val normalized = value.trim()
+        if (normalized !in REPOSITORY_CONSENT_STATUSES) {
+            throw BadRequestException("repository consent status is invalid")
+        }
+        return normalized
+    }
+
     private fun localSessionDedupeKey(
         request: LocalAiSessionIngestRequest,
         preflight: LocalSessionPreflightResult,
@@ -610,9 +768,15 @@ class EvidenceService(
         const val MAX_LOCAL_SESSION_TITLE_CHARS = 180
         const val MAX_ATTRIBUTION_REASONS = 20
         const val MAX_BRANCH_CHARS = 120
+        const val MAX_EVIDENCE_LIST_PAGE_SIZE = 100
+        const val MAX_REPOSITORY_DISPLAY_LABEL_LENGTH = 240
+        const val REPOSITORY_CONSENT_APPROVED = "approved"
         val allowedLocalAutoAttributions = setOf("ai_assisted", "manual_or_unknown")
         val allowedLocalUserAttributions = LocalAiSessionPolicy.userAttributions
         val allowedAttributionReasons = setOf("tool_session", "changed_files", "human_review", "curation_approved", "user_deleted")
+        val REPOSITORY_CONSENT_STATUSES = setOf("approved", "revoked", "always_ignored", "missing")
+        val REPO_IDENTITY_HASH_PATTERN = Regex("[A-Za-z0-9._:-]{3,128}")
+        val ROLE_ORDER = listOf("learner", "contributor", "reviewer", "admin")
         val safeTokenPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.:#@+-]{0,119}$")
         val commitShaPattern = Regex("^[a-fA-F0-9]{7,64}$")
         val safeBranchPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_./#@+-]{0,119}$")
@@ -635,4 +799,11 @@ data class LocalAiSessionIngestResult(
 data class EvidenceDetail(
     val bundle: SourceBundleEntity,
     val items: List<EvidenceItemEntity>,
+)
+
+data class EvidenceList(
+    val bundles: List<SourceBundleEntity>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
 )

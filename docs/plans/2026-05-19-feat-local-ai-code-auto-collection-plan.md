@@ -545,22 +545,22 @@ Verification:
 
 ### Phase 10: Add Minimal Collection And Curation UI
 
-- [ ] Add collection status to Settings.
-- [ ] Show approved, revoked, ignored, and missing repositories.
-- [ ] Let the user approve, revoke, always ignore, delete evidence, and purge raw evidence.
-- [ ] Rename UI labels to Collected Evidence and curation language.
-- [ ] Show attribution, confidence, reason codes, files, and bounded excerpts.
-- [ ] Add actions: use for generation, mark manual, edit attribution, delete, purge raw.
-- [ ] Use pagination or virtualization for evidence lists.
-- [ ] Lazy-load bounded detail excerpts only when opened.
-- [ ] Do not put raw evidence in localStorage, sessionStorage, URL params, telemetry, console logs, or broad list responses.
+- [x] Add collection status to Settings.
+- [x] Show approved, revoked, ignored, and missing repositories.
+- [x] Let the user approve, revoke, always ignore, delete evidence, and purge raw evidence.
+- [x] Rename UI labels to Collected Evidence and curation language.
+- [x] Show attribution, confidence, reason codes, files, and bounded excerpts.
+- [x] Add actions: use for generation, mark manual, edit attribution, delete, purge raw.
+- [x] Use pagination or virtualization for evidence lists.
+- [x] Lazy-load bounded detail excerpts only when opened.
+- [x] Do not put raw evidence in localStorage, sessionStorage, URL params, telemetry, console logs, or broad list responses.
 
 Verification:
 
-- [ ] Frontend typecheck/build passes.
-- [ ] Mock/manual flow shows curation actions for a local session bundle.
-- [ ] Evidence list renders 1,000 bundles without long main-thread stalls.
-- [ ] Raw full file content is absent from list responses and browser storage.
+- [x] Frontend typecheck/build passes.
+- [x] Mock/manual flow shows curation actions for a local session bundle.
+- [x] Evidence list renders 1,000 bundles without long main-thread stalls.
+- [x] Raw full file content is absent from list responses and browser storage.
 
 ### Phase 11: Add Codex CLI Shim As First Automatic Collection Path
 

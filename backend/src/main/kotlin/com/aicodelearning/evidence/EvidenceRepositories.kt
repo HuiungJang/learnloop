@@ -1,12 +1,15 @@
 package com.aicodelearning.evidence
 
 import jakarta.persistence.LockModeType
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 
-interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String> {
+interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String>, JpaSpecificationExecutor<SourceBundleEntity> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select bundle from SourceBundleEntity bundle where bundle.id = :id")
     fun findForUpdateById(
@@ -20,6 +23,11 @@ interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String> {
     ): SourceBundleEntity?
 
     fun findByOrganizationIdAndDeletedAtIsNull(organizationId: String): List<SourceBundleEntity>
+
+    fun findByOrganizationIdAndDeletedAtIsNullOrderByCreatedAtDesc(
+        organizationId: String,
+        pageable: Pageable,
+    ): Page<SourceBundleEntity>
 
     fun findByOrganizationId(organizationId: String): List<SourceBundleEntity>
 
@@ -53,3 +61,12 @@ interface EvidenceItemRepository : JpaRepository<EvidenceItemEntity, String> {
 }
 
 interface SourceBundleAttributionEventRepository : JpaRepository<SourceBundleAttributionEventEntity, String>
+
+interface LocalRepositoryConsentRepository : JpaRepository<LocalRepositoryConsentEntity, String> {
+    fun findByOrganizationIdAndRepoIdentityHash(
+        organizationId: String,
+        repoIdentityHash: String,
+    ): LocalRepositoryConsentEntity?
+
+    fun findByOrganizationIdOrderByUpdatedAtDesc(organizationId: String): List<LocalRepositoryConsentEntity>
+}

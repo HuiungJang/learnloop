@@ -6,6 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Cloud,
+  Database,
+  Eye,
+  FolderGit2,
   GitPullRequest,
   KeyRound,
   Library,
@@ -19,27 +22,37 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
   UploadCloud,
   X,
   type LucideIcon
 } from "lucide-react";
 import { Suspense, lazy, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteEvidence,
+  generateFromEvidence,
   getConversionTraces,
   createSession,
   fetchHealth,
+  getEvidenceDetail,
   getLibrary,
   getPracticeProblem,
   getProgress,
   getRecommendations,
+  listEvidence,
+  listLocalRepositories,
   type HealthResponse,
   isConflictError,
   listProviders,
   type PracticeAttemptFileRequest,
+  purgeEvidenceRaw,
   runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
   syncLocalPracticeAttempt,
+  type EvidenceDetailResponse,
+  type EvidenceItemResponse,
+  type EvidenceListResponse,
   type ConversionTraceResponse,
   type Membership,
   type PatternCardResponse,
@@ -48,7 +61,11 @@ import {
   type PracticeRunResultResponse,
   type ProficiencyResponse,
   type ProviderResponse,
-  type SessionResponse
+  type SessionResponse,
+  type SourceBundleSummaryResponse,
+  updateEvidenceAttribution,
+  updateLocalRepository,
+  type LocalRepositoryConsentResponse
 } from "./api/client";
 import { ensurePracticeDraft } from "./practice/practiceStorage";
 import {
@@ -103,6 +120,13 @@ type CompanionOAuthResponse = {
   provider?: LocalAiProvider;
   credentialLabel?: string;
   message?: string;
+};
+type RepositoryConsentStatus = "approved" | "revoked" | "always_ignored" | "missing";
+type LocalRepositoryConsent = {
+  repoIdentityHash: string;
+  displayLabel: string;
+  status: RepositoryConsentStatus;
+  updatedAt: string;
 };
 
 const workflowCards = [
@@ -177,6 +201,86 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
     window.localStorage.removeItem(legacyKey);
     return null;
   }
+}
+
+function repositoryStatusCounts(repositories: LocalRepositoryConsent[]): Record<RepositoryConsentStatus, number> {
+  return repositories.reduce(
+    (counts, repository) => ({
+      ...counts,
+      [repository.status]: counts[repository.status] + 1
+    }),
+    { approved: 0, revoked: 0, always_ignored: 0, missing: 0 }
+  );
+}
+
+function repositoryStatusLabel(status: RepositoryConsentStatus): string {
+  if (status === "always_ignored") return "ignored";
+  return status;
+}
+
+function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
+  if (bundle.userAttribution === "use_for_generation") return "Use";
+  if (bundle.userAttribution === "manual") return "Manual";
+  if (bundle.status === "quarantined_secret") return "Quarantined";
+  if (bundle.status === "purged_raw") return "Purged";
+  return "Uncurated";
+}
+
+function bundleStatusClass(bundle: SourceBundleSummaryResponse): string {
+  if (bundle.status === "quarantined_secret") return "status-danger";
+  if (bundle.userAttribution === "use_for_generation") return "status-success";
+  return "status-neutral";
+}
+
+function attributionLabel(value: string): string {
+  if (value === "ai_assisted") return "AI assisted";
+  if (value === "manual_or_unknown") return "Manual or unknown";
+  if (value === "use_for_generation") return "Use for generation";
+  if (value === "manual") return "Manual";
+  if (value === "delete") return "Delete";
+  if (value === "uncurated") return "Uncurated";
+  return value.replaceAll("_", " ");
+}
+
+function reasonCodes(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null) return "size unknown";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function toLocalRepositoryConsent(repository: LocalRepositoryConsentResponse): LocalRepositoryConsent {
+  return {
+    repoIdentityHash: repository.repoIdentityHash,
+    displayLabel: repository.displayLabel,
+    status: repository.status,
+    updatedAt: repository.updatedAt
+  };
+}
+
+function repositoryDisplayLabel(value: string): string {
+  const normalized = value.trim();
+  const lastSegment = normalized.split(/[\\/]/).filter(Boolean).at(-1);
+  return (lastSegment ?? normalized).slice(0, 80);
+}
+
+async function repositoryIdentityHash(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value.trim());
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function readEditorTheme(): EditorTheme {
@@ -260,6 +364,13 @@ export function App() {
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
+  const [evidenceList, setEvidenceList] = useState<EvidenceListResponse>({ bundles: [], page: 0, pageSize: 50, total: 0 });
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState("");
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [selectedEvidenceDetail, setSelectedEvidenceDetail] = useState<EvidenceDetailResponse | null>(null);
+  const [evidenceDetailLoading, setEvidenceDetailLoading] = useState(false);
+  const [evidenceActionMessage, setEvidenceActionMessage] = useState("");
   const [progressScores, setProgressScores] = useState<ProficiencyResponse[]>([]);
   const [recommendationCards, setRecommendationCards] = useState<PatternCardResponse[]>([]);
   const [conversionTraces, setConversionTraces] = useState<ConversionTraceResponse[]>([]);
@@ -286,6 +397,8 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
+  const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
+  const [repositoryLabel, setRepositoryLabel] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<LocalAuthMethod>("api_key");
@@ -298,6 +411,7 @@ export function App() {
   const showOnboardingRef = useRef(showOnboarding);
   const sessionRef = useRef(session);
   const restoredSessionRef = useRef(session !== null);
+  const evidenceDetailRequestRef = useRef(0);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
@@ -342,6 +456,11 @@ export function App() {
   useEffect(() => {
     sessionRef.current = session;
     storeSession(session);
+    if (session === null) {
+      setLocalRepositories([]);
+    } else {
+      void refreshLocalRepositories(session);
+    }
   }, [session]);
 
   useEffect(() => {
@@ -382,6 +501,7 @@ export function App() {
     if (session === null || membership === null || showOnboarding) return;
     void refreshLearningSignals(session);
     void refreshConversionTraces(session);
+    void refreshEvidence(session);
   }, [membership, session, showOnboarding]);
 
   if (session === null) {
@@ -578,6 +698,7 @@ export function App() {
                 Save local setup
               </button>
             </form>
+            {renderRepositorySettings()}
           </section>
         ) : (
           <>
@@ -634,6 +755,8 @@ export function App() {
                   {activity.length === 0 ? <span>Ready</span> : null}
                 </div>
               </div>
+
+              {renderCollectedEvidencePanel()}
 
               <div className="panel panel-wide">
                 <div className="panel-title">
@@ -962,6 +1085,191 @@ export function App() {
     </div>
   );
 
+  function renderRepositorySettings() {
+    const counts = repositoryStatusCounts(localRepositories);
+
+    return (
+      <section className="settings-section" aria-label="Collection status">
+        <div className="panel-title">
+          <FolderGit2 aria-hidden="true" size={20} />
+          <h2>Collection Status</h2>
+        </div>
+        <div className="status-list">
+          <span>{counts.approved} approved</span>
+          <span>{counts.revoked} revoked</span>
+          <span>{counts.always_ignored} ignored</span>
+          <span>{counts.missing} missing</span>
+        </div>
+        <div className="repository-approval-row">
+          <input
+            onChange={(event) => setRepositoryLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void approveRepository();
+              }
+            }}
+            placeholder="Repository label or path"
+            type="text"
+            value={repositoryLabel}
+          />
+          <button className="primary-button" onClick={() => void approveRepository()} type="button">
+            <CheckCircle2 aria-hidden="true" size={16} />
+            Approve
+          </button>
+        </div>
+        <div className="repository-list" aria-live="polite">
+          {localRepositories.length === 0 ? <p className="muted-copy">No repositories configured.</p> : null}
+          {localRepositories.map((repository) => (
+            <div className="repository-row" key={repository.repoIdentityHash}>
+              <div>
+                <strong>{repository.displayLabel}</strong>
+                <small>{repositoryStatusLabel(repository.status)} · {formatShortDate(repository.updatedAt)}</small>
+              </div>
+              <div className="mini-action-row">
+                <button onClick={() => void updateRepositoryStatus(repository, "approved")} type="button">Approve</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "revoked")} type="button">Revoke</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "always_ignored")} type="button">Ignore</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "missing")} type="button">Missing</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function renderCollectedEvidencePanel() {
+    const selectedBundle = evidenceList.bundles.find((bundle) => bundle.id === selectedEvidenceId) ?? null;
+    const maxPage = Math.max(0, Math.ceil(evidenceList.total / evidenceList.pageSize) - 1);
+
+    return (
+      <div className="panel panel-wide evidence-panel">
+        <div className="panel-title">
+          <Database aria-hidden="true" size={20} />
+          <h2>Collected Evidence</h2>
+        </div>
+        <div className="action-row">
+          <button className="secondary-button" disabled={evidenceLoading} onClick={() => session !== null && void refreshEvidence(session)} type="button">
+            <RefreshCw aria-hidden="true" size={16} />
+            {evidenceLoading ? "Loading" : "Refresh"}
+          </button>
+          <button
+            className="secondary-button"
+            disabled={evidenceList.page === 0 || evidenceLoading || session === null}
+            onClick={() => session !== null && void refreshEvidence(session, evidenceList.page - 1)}
+            type="button"
+          >
+            <ChevronLeft aria-hidden="true" size={16} />
+            Previous
+          </button>
+          <button
+            className="secondary-button"
+            disabled={evidenceList.page >= maxPage || evidenceLoading || session === null}
+            onClick={() => session !== null && void refreshEvidence(session, evidenceList.page + 1)}
+            type="button"
+          >
+            Next
+            <ChevronRight aria-hidden="true" size={16} />
+          </button>
+          <span className="pagination-status">{evidenceList.total} bundles</span>
+        </div>
+        {evidenceError.length > 0 ? <p className="form-error">{evidenceError}</p> : null}
+        {evidenceActionMessage.length > 0 ? <p className="action-message">{evidenceActionMessage}</p> : null}
+        <div className="evidence-browser">
+          <div className="evidence-list" aria-label="Collected evidence list">
+            {evidenceList.bundles.length === 0 && !evidenceLoading ? <p className="muted-copy">No collected evidence yet.</p> : null}
+            {evidenceList.bundles.map((bundle) => (
+              <button
+                className={bundle.id === selectedEvidenceId ? "evidence-row evidence-row-active" : "evidence-row"}
+                key={bundle.id}
+                onClick={() => void selectEvidence(bundle.id)}
+                type="button"
+              >
+                <span>
+                  <strong>{bundle.title}</strong>
+                  <small>{bundle.sourceKind} · {formatShortDate(bundle.createdAt)}</small>
+                </span>
+                <span className={`status-badge ${bundleStatusClass(bundle)}`}>{bundleCurationLabel(bundle)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="evidence-detail" aria-live="polite">
+            {selectedBundle === null ? <p className="muted-copy">Select evidence to view bounded excerpts.</p> : null}
+            {selectedBundle !== null ? renderEvidenceSummary(selectedBundle) : null}
+            {evidenceDetailLoading ? <p className="muted-copy">Loading evidence excerpts.</p> : null}
+            {selectedBundle !== null && selectedEvidenceDetail?.bundle.id === selectedBundle.id ? renderEvidenceItems(selectedEvidenceDetail.evidenceItems) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEvidenceSummary(bundle: SourceBundleSummaryResponse) {
+    const canUseForGeneration = bundle.sourceKind === "local_ai_session" && bundle.status === "generation_eligible";
+    const canGenerate = canUseForGeneration && bundle.userAttribution === "use_for_generation";
+
+    return (
+      <div className="evidence-summary">
+        <div>
+          <strong>{bundle.title}</strong>
+          <small>{bundle.repositoryUrl ?? "local evidence"} · {bundle.branchName ?? "branch unknown"}</small>
+        </div>
+        <div className="evidence-meta-grid">
+          <span>Auto: {attributionLabel(bundle.autoAttribution)}</span>
+          <span>User: {attributionLabel(bundle.userAttribution ?? "uncurated")}</span>
+          <span>Confidence: {bundle.attributionConfidence === null ? "unknown" : bundle.attributionConfidence.toFixed(2)}</span>
+          <span>{reasonCodes(bundle.attributionReasonsJson).join(", ") || "no reason codes"}</span>
+        </div>
+        <div className="mini-action-row">
+          <button disabled={!canUseForGeneration} onClick={() => void applyEvidenceAttribution(bundle, "use_for_generation")} type="button">
+            <CheckCircle2 aria-hidden="true" size={14} />
+            Use
+          </button>
+          <button onClick={() => void applyEvidenceAttribution(bundle, "manual")} type="button">
+            Manual
+          </button>
+          <button disabled={!canGenerate} onClick={() => void generatePracticeFromEvidence(bundle)} type="button">
+            <Sparkles aria-hidden="true" size={14} />
+            Generate
+          </button>
+          <button onClick={() => void purgeEvidence(bundle)} type="button">
+            <Eye aria-hidden="true" size={14} />
+            Purge raw
+          </button>
+          <button onClick={() => void removeEvidence(bundle)} type="button">
+            <Trash2 aria-hidden="true" size={14} />
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEvidenceItems(items: EvidenceItemResponse[]) {
+    if (items.length === 0) {
+      return <p className="muted-copy">No evidence items available.</p>;
+    }
+
+    return (
+      <div className="evidence-items">
+        {items.map((item) => (
+          <div className="evidence-item" key={item.id}>
+            <div>
+              <strong>{item.itemType}</strong>
+              <small>{item.repoRelativePath ?? "session artifact"} · {formatBytes(item.sizeBytes)}</small>
+            </div>
+            {item.contentText === null ? (
+              <small className="muted-copy">Raw content unavailable.</small>
+            ) : (
+              <pre>{item.contentText}</pre>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
@@ -1054,6 +1362,173 @@ export function App() {
     } catch (error) {
       setConversionTraces([]);
       setConversionTraceError(error instanceof Error ? error.message : "Conversion traces failed to load");
+    }
+  }
+
+  async function refreshEvidence(currentSession: SessionResponse, page = evidenceList.page) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+      setSelectedEvidenceId(null);
+      setSelectedEvidenceDetail(null);
+      return;
+    }
+
+    setEvidenceLoading(true);
+    setEvidenceError("");
+    try {
+      const list = await listEvidence(currentSession.token, currentMembership.organizationId, page, evidenceList.pageSize);
+      setEvidenceList(list);
+      if (selectedEvidenceId !== null && !list.bundles.some((bundle) => bundle.id === selectedEvidenceId)) {
+        evidenceDetailRequestRef.current += 1;
+        setSelectedEvidenceId(null);
+        setSelectedEvidenceDetail(null);
+      }
+    } catch (error) {
+      setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+      setEvidenceError(error instanceof Error ? error.message : "Collected evidence failed to load");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }
+
+  async function selectEvidence(bundleId: string) {
+    if (session === null) return;
+    const requestId = evidenceDetailRequestRef.current + 1;
+    evidenceDetailRequestRef.current = requestId;
+    setSelectedEvidenceId(bundleId);
+    setSelectedEvidenceDetail(null);
+    setEvidenceDetailLoading(true);
+    setOnboardingError("");
+    try {
+      const detail = await getEvidenceDetail(session.token, bundleId);
+      if (evidenceDetailRequestRef.current === requestId) {
+        setSelectedEvidenceDetail(detail);
+      }
+    } catch (error) {
+      if (evidenceDetailRequestRef.current === requestId) {
+        setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence detail failed to load");
+      }
+    } finally {
+      if (evidenceDetailRequestRef.current === requestId) {
+        setEvidenceDetailLoading(false);
+      }
+    }
+  }
+
+  async function refreshLocalRepositories(currentSession: SessionResponse) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setLocalRepositories([]);
+      return;
+    }
+
+    try {
+      const repositories = await listLocalRepositories(currentSession.token, currentMembership.organizationId);
+      setLocalRepositories(repositories.map(toLocalRepositoryConsent));
+    } catch {
+      setLocalRepositories([]);
+    }
+  }
+
+  async function approveRepository() {
+    if (session === null || membership === null) return;
+    const label = repositoryLabel.trim();
+    if (label.length === 0) return;
+    setEvidenceActionMessage("");
+    try {
+      const repoIdentityHash = await repositoryIdentityHash(label);
+      await updateLocalRepository(session.token, repoIdentityHash, {
+        organizationId: membership.organizationId,
+        displayLabel: repositoryDisplayLabel(label),
+        status: "approved"
+      });
+      await refreshLocalRepositories(session);
+      setRepositoryLabel("");
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? error.message : "Repository approval failed");
+    }
+  }
+
+  async function updateRepositoryStatus(repository: LocalRepositoryConsent, status: RepositoryConsentStatus) {
+    if (session === null || membership === null) return;
+    setOnboardingError("");
+    try {
+      await updateLocalRepository(session.token, repository.repoIdentityHash, {
+        organizationId: membership.organizationId,
+        displayLabel: repository.displayLabel,
+        status
+      });
+      await refreshLocalRepositories(session);
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? error.message : "Repository status update failed");
+    }
+  }
+
+  async function applyEvidenceAttribution(bundle: SourceBundleSummaryResponse, userAttribution: "use_for_generation" | "manual") {
+    if (session === null) return;
+    setEvidenceActionMessage("");
+    try {
+      await updateEvidenceAttribution(session.token, bundle.id, {
+        userAttribution,
+        attributionConfidence: userAttribution === "use_for_generation" ? 0.9 : undefined,
+        attributionReasons: [userAttribution === "use_for_generation" ? "curation_approved" : "human_review"]
+      });
+      setEvidenceActionMessage("Evidence curation updated.");
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence curation failed");
+    }
+  }
+
+  async function removeEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    if (!window.confirm(`Delete "${bundle.title}" from collected evidence?`)) return;
+    setEvidenceActionMessage("");
+    try {
+      await deleteEvidence(session.token, bundle.id);
+      setEvidenceActionMessage("Evidence deleted.");
+      setSelectedEvidenceId(null);
+      setSelectedEvidenceDetail(null);
+      await refreshEvidence(session);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence delete failed");
+    }
+  }
+
+  async function purgeEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    if (!window.confirm(`Purge raw evidence for "${bundle.title}"?`)) return;
+    setEvidenceActionMessage("");
+    try {
+      const result = await purgeEvidenceRaw(session.token, bundle.id);
+      setEvidenceActionMessage(`Purged ${result.purgedItems} raw items.`);
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Raw purge failed");
+    }
+  }
+
+  async function generatePracticeFromEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null || membership === null) return;
+    const providerId = providers.find((provider) => provider.status === "active")?.id ?? "provider-local-mock";
+    setEvidenceActionMessage("");
+    try {
+      const result = await generateFromEvidence(session.token, {
+        organizationId: membership.organizationId,
+        providerConfigId: providerId,
+        sourceBundleId: bundle.id,
+        visibility: "private"
+      });
+      setLatestCard(result.patternCard);
+      setActivity((items) => [`Generated ${result.patternCard.title}`, ...items].slice(0, 6));
+      setEvidenceActionMessage("Practice generated.");
+      await refreshLibrary(session);
+      await refreshConversionTraces(session);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Generation failed");
     }
   }
 
@@ -1508,6 +1983,12 @@ export function App() {
     setConversionTraces([]);
     setConversionTraceError("");
     setLibraryError("");
+    setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+    setEvidenceError("");
+    setSelectedEvidenceId(null);
+    setSelectedEvidenceDetail(null);
+    setEvidenceActionMessage("");
+    setLocalRepositories([]);
     setActivePractice(null);
     setActivePracticePath(null);
     setRevealedHintIds([]);
@@ -1520,6 +2001,7 @@ export function App() {
     setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);
+    evidenceDetailRequestRef.current += 1;
     replaceLocalAiSetupHistoryState();
   }
 
@@ -1652,6 +2134,7 @@ export function App() {
         `Card ${result.patternCard.publicationStatus}`
       ]);
       void refreshConversionTraces(session);
+      void refreshEvidence(session);
     } catch (error) {
       setActivity([error instanceof Error ? error.message : "Flow failed"]);
     } finally {

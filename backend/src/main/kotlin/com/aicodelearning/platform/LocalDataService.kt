@@ -49,6 +49,7 @@ class LocalDataService(
                 "source_bundle_attribution_events",
                 "source_links",
                 "evidence_items",
+                "local_repository_consents",
                 "source_bundles",
                 "ai_providers",
                 "audit_logs",

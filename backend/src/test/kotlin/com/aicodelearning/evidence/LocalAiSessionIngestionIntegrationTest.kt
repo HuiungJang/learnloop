@@ -30,6 +30,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -86,6 +87,81 @@ class LocalAiSessionIngestionIntegrationTest {
         assertEquals("src/service.ts", items.first { it.itemType == "file_after" }.repoRelativePath)
         assertNull(items.first { it.itemType == "tool_event" }.contentText)
         assertEquals("command_exit", objectMapper.readTree(items.first { it.itemType == "tool_event" }.metadataJson)["event"].asText())
+    }
+
+    @Test
+    fun `local session ingest requires approved repository consent`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+
+        val rejected = postJsonRaw("/api/ingest/local-ai-session", owner.token, localSessionRequest(repoRoot, "unapproved"))
+
+        assertEquals(HttpStatus.BAD_REQUEST, rejected.statusCode)
+    }
+
+    @Test
+    fun `evidence list returns local session summaries without raw artifact content`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val sentinel = "list-raw-sentinel-${System.nanoTime()}"
+        val created =
+            postJson(
+                "/api/ingest/local-ai-session",
+                owner.token,
+                localSessionRequest(repoRoot, "list-summary", promptContent = sentinel),
+            )
+        val bundleId = json(created)["bundle"]["id"].asText()
+
+        val listed = getJson("/api/evidence?organizationId=org-demo&page=0&pageSize=10", owner.token)
+
+        assertEquals(HttpStatus.OK, listed.statusCode)
+        val body = requireNotNull(listed.body)
+        assertTrue(body.contains(bundleId))
+        assertFalse(body.contains(sentinel))
+        val firstBundle = json(listed)["bundles"].first { it["id"].asText() == bundleId }
+        assertEquals("local_ai_session", firstBundle["sourceKind"].asText())
+        assertFalse(firstBundle.has("filePathsJson"))
+        assertFalse(firstBundle.has("provenanceJson"))
+        assertFalse(firstBundle.has("secretFindingsJson"))
+    }
+
+    @Test
+    fun `evidence list caps large local evidence pages`() {
+        val owner = login()
+        val now = Instant.now()
+        val suffix = System.nanoTime()
+        sourceBundleRepository.saveAll(
+            (1..1_000).map { index ->
+                SourceBundleEntity(
+                    id = "bundle_bulk_list_${suffix}_$index",
+                    organizationId = "org-demo",
+                    teamId = "team-platform",
+                    projectId = "project-learning",
+                    createdByUserId = owner.user.id,
+                    title = "Bulk local session $index",
+                    sourceKind = LocalAiSessionPolicy.SOURCE_KIND,
+                    status = LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE,
+                    repositoryUrl = "local-repo-$suffix",
+                    commitSha = index.toString(16).padStart(8, '0'),
+                    branchName = "bulk-list",
+                    contentHash = "bulk-list-$suffix-$index",
+                    createdAt = now.plusSeconds(index.toLong()),
+                    autoAttribution = "ai_assisted",
+                    userAttribution = LocalAiSessionPolicy.USER_ATTRIBUTION_USE_FOR_GENERATION,
+                    attributionReasonsJson = """["tool_session"]""",
+                    dedupeKey = "bulk-list-$suffix-$index",
+                )
+            },
+        )
+
+        val listed = getJson("/api/evidence?organizationId=org-demo&page=0&pageSize=1000", owner.token)
+
+        assertEquals(HttpStatus.OK, listed.statusCode)
+        val body = json(listed)
+        assertEquals(100, body["bundles"].size())
+        assertTrue(body["total"].asLong() >= 1_000L)
+        assertEquals(0, body["page"].asInt())
+        assertEquals(100, body["pageSize"].asInt())
     }
 
     @Test
@@ -183,6 +259,7 @@ class LocalAiSessionIngestionIntegrationTest {
         val owner = login()
         val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
         val request = localSessionRequest(repoRoot, "concurrent-duplicate")
+        approveLocalRepository(owner.token, request)
         val start = CountDownLatch(1)
         val pool = Executors.newFixedThreadPool(2)
 
@@ -191,7 +268,7 @@ class LocalAiSessionIngestionIntegrationTest {
                 (1..2).map {
                     pool.submit<org.springframework.http.ResponseEntity<String>> {
                         start.await(5, TimeUnit.SECONDS)
-                        postJson("/api/ingest/local-ai-session", owner.token, request)
+                        postJsonRaw("/api/ingest/local-ai-session", owner.token, request)
                     }
                 }
             start.countDown()
@@ -856,7 +933,41 @@ class LocalAiSessionIngestionIntegrationTest {
         path: String,
         token: String,
         body: Any,
+    ): org.springframework.http.ResponseEntity<String> {
+        if (path == "/api/ingest/local-ai-session" && body is Map<*, *>) {
+            approveLocalRepository(token, body)
+        }
+        return postJsonRaw(path, token, body)
+    }
+
+    private fun postJsonRaw(
+        path: String,
+        token: String,
+        body: Any,
     ) = restTemplate.exchange(path, HttpMethod.POST, HttpEntity(body, bearerHeaders(token)), String::class.java)
+
+    private fun approveLocalRepository(
+        token: String,
+        request: Map<*, *>,
+    ) {
+        val repoIdentityHash = request["repoIdentityHash"] as String
+        val displayLabel = request["repositoryDisplayLabel"] as String
+        val approved =
+            restTemplate.exchange(
+                "/api/local-repositories/$repoIdentityHash",
+                HttpMethod.PATCH,
+                HttpEntity(
+                    mapOf(
+                        "organizationId" to "org-demo",
+                        "displayLabel" to displayLabel,
+                        "status" to "approved",
+                    ),
+                    bearerHeaders(token),
+                ),
+                String::class.java,
+            )
+        assertEquals(HttpStatus.OK, approved.statusCode)
+    }
 
     private fun patchJson(
         path: String,

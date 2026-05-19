@@ -488,7 +488,8 @@ class SessionAuthenticationIntegrationTest {
         val detail = getJson("/api/evidence/$bundleId", contributor.token)
 
         assertEquals(HttpStatus.OK, detail.statusCode)
-        assertTrue(json(detail)["bundle"]["filePathsJson"].asText().contains("src/App.tsx"))
+        assertFalse(json(detail)["bundle"].has("filePathsJson"))
+        assertFalse(json(detail)["bundle"].has("provenanceJson"))
         assertEquals("function example() { return true; }", json(detail)["evidenceItems"][0]["contentText"].asText())
 
         val duplicate =
@@ -505,6 +506,35 @@ class SessionAuthenticationIntegrationTest {
                 ),
             )
         assertEquals(bundleId, json(duplicate)["bundle"]["id"].asText())
+    }
+
+    @Test
+    fun `evidence list hides bundles outside contributor scope`() {
+        ensureOtherScope()
+        val contributor = login("contributor@example.com")
+        val created =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Accessible evidence list item",
+                    "sourceKind" to "code",
+                    "content" to "const accessibleListItem = true;",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        val accessibleBundleId = json(created)["bundle"]["id"].asText()
+        val inaccessibleBundleId = saveScopedBundle("Foreign evidence list item", "code", "const foreignListItem = true")
+
+        val listed = getJson("/api/evidence?organizationId=org-demo&page=0&pageSize=50", contributor.token)
+
+        assertEquals(HttpStatus.OK, listed.statusCode)
+        assertTrue(listed.body.orEmpty().contains(accessibleBundleId))
+        assertFalse(listed.body.orEmpty().contains(inaccessibleBundleId))
+        assertFalse(listed.body.orEmpty().contains("Foreign evidence list item"))
     }
 
     @Test

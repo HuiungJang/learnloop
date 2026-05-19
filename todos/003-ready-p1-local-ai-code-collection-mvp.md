@@ -389,3 +389,35 @@ Initial Phase 1 files:
 **Learnings:**
 - Direct local generation should reject mixed `sourceLinkIds` and `sourceBundleIds`; otherwise lineage semantics become ambiguous.
 - The generation service can share the persistence flow once source resolution is separated from run/card creation.
+
+### 2026-05-20 - Phase 10 Collection And Curation UI
+
+**By:** Codex
+
+**Actions:**
+- Added a paginated `GET /api/evidence` summary endpoint that excludes raw content and raw-ish metadata from broad list responses.
+- Added frontend evidence API helpers for list/detail, attribution override, delete, raw purge, and direct generation from a curated bundle.
+- Added the Collected Evidence panel with lazy-loaded bounded excerpts, curation actions, generation trigger, delete, raw purge, and pagination controls.
+- Added Collection Status settings for approved, revoked, ignored, and missing local repositories with browser-local consent state only.
+- Added integration coverage for raw-free list summaries and a 1,000-bundle list page-size cap.
+- Verified backend tests, frontend typecheck/build, diff whitespace, and a mock browser flow for repository approval plus local-session evidence curation actions.
+- Checked off Phase 10 in the plan document.
+
+**Learnings:**
+- Evidence lists should stay summary-only; raw excerpts belong behind explicit detail selection.
+- The browser can keep local repository consent labels, but collected file content must stay out of broad responses and browser storage.
+
+### 2026-05-20 - Phase 10 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Restricted evidence list pagination to bundles visible through the current user's team/project scope.
+- Added stable evidence list ordering and database indexes for active bundle pagination.
+- Added backend repository consent storage and required approved consent before local-session ingestion.
+- Changed evidence detail responses to safe bundle summaries with bounded excerpts for all source kinds.
+- Cleared evidence UI state on logout, ignored stale detail responses, and added confirmation for destructive UI actions.
+- Removed raw repository labels from browser storage; repository approval state now round-trips through the backend consent API.
+
+**Learnings:**
+- A local personal app still needs API-side consent and scope checks because stale browser state and compatibility users can otherwise bypass UI-only controls.
