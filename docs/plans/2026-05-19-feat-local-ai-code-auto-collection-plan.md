@@ -432,15 +432,15 @@ Verification:
 
 ### Phase 3: Remove Raw Evidence From Audit And Log Surfaces
 
-- [ ] Update `EvidenceService.ingestManual` so audit metadata never includes `rawContent`.
-- [ ] Add a central audit metadata sanitizer used by manual ingest, local session ingest, attribution overrides, deletion, purge, shim events, and generation.
-- [ ] Use allowlisted audit metadata fields only.
-- [ ] Check logs, API audit responses, frontend console logs, and test snapshots for raw evidence leakage.
+- [x] Update `EvidenceService.ingestManual` so audit metadata never includes `rawContent`.
+- [x] Add a central audit metadata sanitizer used by manual ingest, local session ingest, attribution overrides, deletion, purge, shim events, and generation.
+- [x] Use allowlisted audit metadata fields only.
+- [x] Check logs, API audit responses, frontend console logs, and test snapshots for raw evidence leakage.
 
 Verification:
 
-- [ ] Backend test ingests unique sentinel text and proves it is absent from audit rows and `/api/audit` responses.
-- [ ] Test with a fake secret across prompt, response, diff, path, stdout, and stderr; assert it is absent from audit/log surfaces.
+- [x] Backend test ingests unique sentinel text and proves it is absent from audit rows and `/api/audit` responses.
+- [x] Test with a fake secret across prompt, response, diff, path, stdout, and stderr; assert it is absent from audit/log surfaces.
 
 ### Phase 4: Add Evidence Delete, Raw Purge, And Tombstones
 

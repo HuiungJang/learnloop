@@ -92,8 +92,6 @@ class EvidenceService(
                 mapOf(
                     "sourceKind" to sourceKind,
                     "status" to status,
-                    "title" to request.title,
-                    "rawContent" to request.content,
                     "secretFindingTypes" to findings.map { it.type },
                 ),
         )

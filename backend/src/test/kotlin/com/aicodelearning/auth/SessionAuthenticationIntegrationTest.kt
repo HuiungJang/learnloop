@@ -1,5 +1,7 @@
 package com.aicodelearning.auth
 
+import com.aicodelearning.audit.AuditLogEntity
+import com.aicodelearning.audit.AuditLogRepository
 import com.aicodelearning.evidence.EvidenceItemEntity
 import com.aicodelearning.evidence.EvidenceItemRepository
 import com.aicodelearning.evidence.SourceBundleEntity
@@ -86,6 +88,9 @@ class SessionAuthenticationIntegrationTest {
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
+
+    @Autowired
+    private lateinit var auditLogRepository: AuditLogRepository
 
     @Autowired
     private lateinit var teamRepository: TeamRepository
@@ -363,6 +368,94 @@ class SessionAuthenticationIntegrationTest {
         val contributorRead = getJson("/api/evidence/$bundleId", contributor.token)
         assertEquals(HttpStatus.OK, contributorRead.statusCode)
         assertEquals(true, json(contributorRead)["evidenceItems"][0]["contentText"].isNull)
+    }
+
+    @Test
+    fun `manual evidence audit omits raw evidence and secret markers`() {
+        val contributor = login("contributor@example.com")
+        val admin = login("admin@example.com")
+        val sentinel = "phase3-sentinel-${System.nanoTime()}"
+        val fakeSecret = "sk-phase3phase3phase3phase3phase3"
+        val created =
+            postJson(
+                "/api/ingest/manual",
+                contributor.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Audit metadata boundary",
+                    "sourceKind" to "diff",
+                    "content" to
+                        """
+                        prompt: $sentinel
+                        response: token=$fakeSecret
+                        diff: $sentinel
+                        path: /tmp/$sentinel
+                        stdout: $sentinel
+                        stderr: $sentinel
+                        """.trimIndent(),
+                ),
+            )
+
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        assertEquals("blocked_sensitive", json(created)["bundle"]["status"].asText())
+
+        val audit = getJson("/api/audit?organizationId=org-demo", admin.token)
+        assertEquals(HttpStatus.OK, audit.statusCode)
+        val auditBody = audit.body.orEmpty()
+        assertFalse(auditBody.contains(sentinel))
+        assertFalse(auditBody.contains(fakeSecret))
+        assertFalse(auditBody.contains("rawContent"))
+        assertFalse(auditBody.contains("content"))
+
+        val metadataJson = json(audit)["auditLogs"][0]["metadataJson"].asText()
+        assertTrue(metadataJson.contains("sourceKind"))
+        assertTrue(metadataJson.contains("status"))
+        assertTrue(metadataJson.contains("secretFindingTypes"))
+    }
+
+    @Test
+    fun `audit api sanitizes legacy raw metadata on read`() {
+        val admin = login("admin@example.com")
+        val sentinel = "legacy-audit-sentinel-${System.nanoTime()}"
+        auditLogRepository.save(
+            AuditLogEntity(
+                id = "audit_legacy_${System.nanoTime()}",
+                actorUserId = "u-admin",
+                organizationId = "org-demo",
+                eventType = "evidence.manual_ingested",
+                targetType = "source_bundle",
+                targetId = "bundle_legacy",
+                requestId = "req_legacy_${System.nanoTime()}",
+                metadataJson =
+                    """
+                    {
+                      "rawContent": "$sentinel",
+                      "model": "prompt: $sentinel",
+                      "provider": "stdout: $sentinel",
+                      "sourceKind": "diff",
+                      "status": "ready"
+                    }
+                    """.trimIndent(),
+                eventHash = "hash_legacy_${System.nanoTime()}",
+                createdAt = Instant.now(),
+            ),
+        )
+
+        val audit = getJson("/api/audit?organizationId=org-demo", admin.token)
+
+        assertEquals(HttpStatus.OK, audit.statusCode)
+        val auditBody = audit.body.orEmpty()
+        assertFalse(auditBody.contains(sentinel))
+        assertFalse(auditBody.contains("rawContent"))
+        assertFalse(auditBody.contains("prompt:"))
+        assertFalse(auditBody.contains("stdout:"))
+        val metadataJson =
+            json(audit)["auditLogs"]
+                .first { it["targetId"].asText() == "bundle_legacy" }["metadataJson"]
+                .asText()
+        assertEquals("""{"sourceKind":"diff","status":"ready"}""", metadataJson)
     }
 
     @Test

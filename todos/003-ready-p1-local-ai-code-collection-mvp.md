@@ -117,3 +117,17 @@ Initial Phase 1 files:
 **Learnings:**
 - Current authorization still depends on existing membership roles, so the local owner keeps an internal admin membership until a later authorization cleanup collapses local owner checks.
 - Existing demo-role integration coverage can stay intact as an explicit compatibility mode while installed/local defaults move to one owner.
+
+### 2026-05-19 - Phase 3 Audit Metadata Boundary
+
+**By:** Codex
+
+**Actions:**
+- Changed audit metadata handling to allowlisted keys with centralized key/value sanitization in `AuditService`.
+- Removed `rawContent` and free-form titles from manual evidence audit metadata.
+- Added an integration test that ingests sentinel text and a fake secret across prompt, response, diff, path, stdout, and stderr surfaces, then verifies `/api/audit` does not expose them.
+- Checked off Phase 3 in the plan document.
+- Ran targeted backend audit verification.
+
+**Learnings:**
+- Redacting sensitive values is not enough for local evidence: audit metadata should avoid storing sensitive field names like `rawContent` at all.
