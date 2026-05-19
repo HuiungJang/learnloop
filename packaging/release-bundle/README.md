@@ -1,6 +1,6 @@
 # LearnLoop Release Bundle
 
-This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run LearnLoop without building from source.
+This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run LearnLoop as a single-user local learning app without building from source.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ Open the printed URL after installation. The default is:
 http://localhost:8080
 ```
 
-The installer creates `.env` with generated local credentials and prints the generated demo password. Enter that password in the UI to use the seeded demo roles.
+The installer creates `.env` with generated local credentials. The installed product path is a single local owner workspace rather than a role-switching demo.
 
 ## Commands
 
@@ -42,6 +42,26 @@ The installer creates `.env` with generated local credentials and prints the gen
 `./stop.sh` stops containers without deleting the PostgreSQL Docker volume.
 
 The application stores learner attempts in PostgreSQL. Stopping and starting the bundle keeps that volume intact, so saved drafts and submitted attempts remain available after restart.
+
+## Local Product Boundary
+
+The MVP is a personal local app:
+
+- one local owner
+- approved local repositories
+- local AI provider setup
+- collected evidence
+- generated learning cards
+- practice exercises
+
+Non-goals for this MVP:
+
+- hosted multi-user deployment
+- admin dashboards
+- reviewer queues
+- organization membership
+- team permissions
+- remote collector pairing or sync
 
 ## Practice Workbench
 

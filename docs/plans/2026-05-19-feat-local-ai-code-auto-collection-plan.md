@@ -403,15 +403,15 @@ Post-MVP watcher targets:
 
 ### Phase 1: Lock The Local Product Boundary
 
-- [ ] Update `README.md`, `README.ko.md`, and `packaging/release-bundle/README.md` to describe LearnLoop as a single-user local installed app.
-- [ ] Move hosted/team/admin language into a clearly labeled future section or remove it from the MVP path.
-- [ ] Add explicit non-goals: browser-only hosted collection, remote collector pairing, admin dashboards, reviewer queues, and team permissions.
-- [ ] Avoid a broad `ProductMode` framework unless existing tests require runtime branching. If branching is required, keep it backend-only and minimal.
+- [x] Update `README.md`, `README.ko.md`, and `packaging/release-bundle/README.md` to describe LearnLoop as a single-user local installed app.
+- [x] Move hosted/team/admin language into a clearly labeled future section or remove it from the MVP path.
+- [x] Add explicit non-goals: browser-only hosted collection, remote collector pairing, admin dashboards, reviewer queues, and team permissions.
+- [x] Avoid a broad `ProductMode` framework unless existing tests require runtime branching. If branching is required, keep it backend-only and minimal.
 
 Verification:
 
-- [ ] `rg -n "admin|reviewer|organization|hosted|team" README.md README.ko.md packaging/release-bundle/README.md` only finds future-mode or internal-compatibility references.
-- [ ] Fresh local install docs describe owner -> collection -> curation -> practice.
+- [x] `rg -n "admin|reviewer|organization|hosted|team" README.md README.ko.md packaging/release-bundle/README.md` only finds future-mode or internal-compatibility references.
+- [x] Fresh local install docs describe owner -> collection -> curation -> practice.
 
 ### Phase 2: Convert Primary App Path To Local Owner Mode
 
