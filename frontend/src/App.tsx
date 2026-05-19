@@ -143,6 +143,7 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
 
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
+const SESSION_STORAGE_KEY = "learnloop:session";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
 const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
 const LOCAL_AI_SETUP_HISTORY_VIEW = "local-ai-setup";
@@ -183,6 +184,37 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
 
 function readEditorTheme(): EditorTheme {
   return window.localStorage.getItem(EDITOR_THEME_STORAGE_KEY) === "vs" ? "vs" : "vs-dark";
+}
+
+function readStoredSession(): SessionResponse | null {
+  const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+  if (raw === null) return null;
+
+  try {
+    const nextSession = JSON.parse(raw) as Partial<SessionResponse>;
+    if (
+      typeof nextSession.token !== "string" ||
+      typeof nextSession.expiresAt !== "string" ||
+      typeof nextSession.user?.id !== "string" ||
+      typeof nextSession.user.email !== "string" ||
+      typeof nextSession.user.displayName !== "string" ||
+      !Array.isArray(nextSession.user.memberships)
+    ) {
+      throw new Error("Invalid stored session");
+    }
+    return nextSession as SessionResponse;
+  } catch {
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+function storeSession(nextSession: SessionResponse | null) {
+  if (nextSession === null) {
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
 }
 
 function defaultOauthLabel(provider: LocalAiProvider) {
@@ -229,7 +261,7 @@ export function App() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [session, setSession] = useState<SessionResponse | null>(null);
+  const [session, setSession] = useState<SessionResponse | null>(() => readStoredSession());
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
@@ -269,6 +301,8 @@ export function App() {
   const [onboardingError, setOnboardingError] = useState("");
   const [health, setHealth] = useState<HealthState>({ status: "pending" });
   const showOnboardingRef = useRef(showOnboarding);
+  const sessionRef = useRef(session);
+  const restoredSessionRef = useRef(session !== null);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
@@ -311,8 +345,17 @@ export function App() {
   }, [showOnboarding]);
 
   useEffect(() => {
+    sessionRef.current = session;
+    storeSession(session);
+  }, [session]);
+
+  useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      if (showOnboardingRef.current && !isLocalAiSetupHistoryState(event.state)) {
+      if (sessionRef.current !== null && isLocalAiSetupHistoryState(event.state)) {
+        setShowOnboarding(true);
+        return;
+      }
+      if (showOnboardingRef.current) {
         setShowOnboarding(false);
       }
     };
@@ -320,6 +363,20 @@ export function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (!restoredSessionRef.current || session === null) return;
+    restoredSessionRef.current = false;
+
+    const storedSettings = readLocalAiSettings(session.user.id);
+    setLocalAiSettings(storedSettings);
+    if (storedSettings === null) {
+      openLocalAiSetup();
+    } else {
+      setShowOnboarding(false);
+    }
+    refreshProviders(session).catch(() => logout());
+  }, [session]);
 
   useEffect(() => {
     if (session === null || membership === null || showOnboarding) return;
@@ -1467,6 +1524,7 @@ export function App() {
   }
 
   function logout() {
+    storeSession(null);
     setSession(null);
     setProviders([]);
     setLatestCard(null);
@@ -1488,6 +1546,7 @@ export function App() {
     setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);
+    replaceLocalAiSetupHistoryState();
   }
 
   function saveLocalAiSettings(event: FormEvent<HTMLFormElement>) {
@@ -1530,9 +1589,14 @@ export function App() {
   function goToDashboard() {
     setOnboardingError("");
     setShowOnboarding(false);
-    if (isLocalAiSetupHistoryState(window.history.state)) {
-      window.history.back();
-    }
+    replaceLocalAiSetupHistoryState();
+  }
+
+  function replaceLocalAiSetupHistoryState() {
+    if (!isLocalAiSetupHistoryState(window.history.state)) return;
+    const currentState = typeof window.history.state === "object" && window.history.state !== null ? { ...window.history.state } : {};
+    delete currentState.learnloopView;
+    window.history.replaceState(Object.keys(currentState).length > 0 ? currentState : null, "", window.location.href);
   }
 
   async function startOAuthConnection() {

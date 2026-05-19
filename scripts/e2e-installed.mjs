@@ -94,6 +94,15 @@ try {
   ]);
 
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
+  await page.goBack();
+  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
+  await page.getByRole("button", { name: /AI setup/i }).click();
+  await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.getByRole("radio", { name: /Claude/i }).click();
   assert.equal(await page.getByRole("button", { name: /^OAuth$/i }).isDisabled(), true);
   await page.getByLabel("API key").fill(localAiKey);
@@ -122,6 +131,11 @@ try {
   await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
+  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.getByRole("button", { name: /claude/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.goBack();
