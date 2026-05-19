@@ -17,4 +17,5 @@ fi
 AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < .release-version)
 export AI_CODE_RELEASE_VERSION
 
+./local-ai-companion.sh stop || true
 docker compose --env-file .env -f docker-compose.yml down

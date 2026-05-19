@@ -94,12 +94,14 @@ cp packaging/release-bundle/install.sh "$STAGING_DIR/install.sh"
 cp packaging/release-bundle/start.sh "$STAGING_DIR/start.sh"
 cp packaging/release-bundle/status.sh "$STAGING_DIR/status.sh"
 cp packaging/release-bundle/stop.sh "$STAGING_DIR/stop.sh"
+cp packaging/release-bundle/local-ai-companion.sh "$STAGING_DIR/local-ai-companion.sh"
+cp scripts/local-ai-companion.mjs "$STAGING_DIR/local-ai-companion.mjs"
 cp .env.example "$STAGING_DIR/.env.example"
 cp LICENSE "$STAGING_DIR/LICENSE"
 cp NOTICE "$STAGING_DIR/NOTICE"
 printf '%s\n' "$VERSION" > "$STAGING_DIR/.release-version"
 
-chmod +x "$STAGING_DIR/install.sh" "$STAGING_DIR/start.sh" "$STAGING_DIR/status.sh" "$STAGING_DIR/stop.sh"
+chmod +x "$STAGING_DIR/install.sh" "$STAGING_DIR/start.sh" "$STAGING_DIR/status.sh" "$STAGING_DIR/stop.sh" "$STAGING_DIR/local-ai-companion.sh"
 
 if [ "$OS_NAME" = "macos" ] && [ -d "packaging/macos-app/LearnLoop.app" ]; then
   cp -R "packaging/macos-app/LearnLoop.app" "$STAGING_DIR/"

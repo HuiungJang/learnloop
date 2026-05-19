@@ -13,8 +13,8 @@ if [ ! -d "$FRONTEND_DIST" ]; then
   exit 1
 fi
 
-if ! rg -q "Content-Security-Policy.*worker-src 'self' blob:.*connect-src 'self'" frontend/nginx.conf; then
-  echo "frontend CSP must allow same-origin Monaco workers and same-origin API calls" >&2
+if ! rg -q "Content-Security-Policy.*worker-src 'self' blob:.*connect-src 'self' http://127\\.0\\.0\\.1:4317 http://localhost:4317" frontend/nginx.conf; then
+  echo "frontend CSP must allow same-origin Monaco workers, same-origin API calls, and the local OAuth companion" >&2
   exit 1
 fi
 

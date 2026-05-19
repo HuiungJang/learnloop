@@ -21,6 +21,7 @@
     "start:app": "./scripts/start.sh",
     "stop:app": "./scripts/stop.sh",
     "status:app": "./scripts/status.sh",
+    "local-ai:companion": "./scripts/local-ai-companion.sh",
     "package:release": "./scripts/package-release.sh",
     "assets:security": "./scripts/check-asset-exposure.sh",
     "e2e:installed": "./scripts/e2e-installed.sh",

@@ -10,5 +10,5 @@ if [ ! -f ".env" ]; then
 fi
 
 docker compose --env-file .env -f docker-compose.install.yml up -d
+./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh."
 ./scripts/status.sh --wait
-

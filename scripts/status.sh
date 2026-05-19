@@ -46,6 +46,13 @@ print_runner_status() {
   fi
 }
 
+print_companion_status() {
+  companion_status=$(./scripts/local-ai-companion.sh status 2>/dev/null || true)
+  if [ -n "$companion_status" ]; then
+    echo "$companion_status"
+  fi
+}
+
 if [ "$WAIT" = "--wait" ]; then
   i=0
   while [ "$i" -lt 90 ]; do
@@ -53,6 +60,7 @@ if [ "$WAIT" = "--wait" ]; then
       echo
       echo "Ready: $URL"
       print_runner_status
+      print_companion_status
       exit 0
     fi
     i=$((i + 1))
@@ -69,8 +77,10 @@ if check_health; then
   echo
   echo "Ready: $URL"
   print_runner_status
+  print_companion_status
 else
   echo
   echo "Not healthy yet: $URL"
   print_runner_status
+  print_companion_status
 fi

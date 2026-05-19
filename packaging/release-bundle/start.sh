@@ -18,4 +18,5 @@ AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < .release-version)
 export AI_CODE_RELEASE_VERSION
 
 docker compose --env-file .env -f docker-compose.yml up -d
+./local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./local-ai-companion.sh."
 ./status.sh --wait

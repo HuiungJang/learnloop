@@ -62,6 +62,7 @@ fi
 
 compose build
 compose up -d
+./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh."
 
 ./scripts/status.sh --wait
 
@@ -85,3 +86,4 @@ echo "Useful commands:"
 echo "- ./scripts/start.sh"
 echo "- ./scripts/stop.sh"
 echo "- ./scripts/status.sh"
+echo "- ./scripts/local-ai-companion.sh"

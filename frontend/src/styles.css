@@ -78,6 +78,14 @@ a {
   font-weight: 600;
 }
 
+.brand-button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .brand-mark,
 .icon-pill {
   display: inline-grid;
@@ -1152,6 +1160,13 @@ h1 {
   padding-top: 40px;
 }
 
+.onboarding-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
 .provider-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -1171,6 +1186,48 @@ h1 {
   color: var(--success-text);
   background: var(--success-fill);
   font-size: 14px;
+}
+
+.oauth-setup-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.oauth-connect-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.oauth-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--muted);
+  background: var(--surface-tint);
+  font-size: 13px;
+}
+
+.oauth-status-connected {
+  color: var(--success-text);
+  background: var(--success-fill);
+}
+
+.oauth-status-failed,
+.oauth-status-unavailable {
+  color: var(--error-text);
+  background: var(--error-fill);
+}
+
+.oauth-message {
+  margin: 0;
+  color: rgba(28, 28, 28, 0.82);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .oauth-command {
@@ -1252,6 +1309,10 @@ h1 {
   .topbar {
     flex-direction: column;
     margin-bottom: 24px;
+  }
+
+  .onboarding-header {
+    flex-direction: column;
   }
 
   h1 {

@@ -3,6 +3,7 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Cloud,
   GitPullRequest,
@@ -96,6 +97,16 @@ type LocalAiSettings = {
   apiKey?: string;
   configuredAt: string;
 };
+type LocalOAuthConnection = {
+  status: "idle" | "starting" | "running" | "connected" | "failed" | "unavailable";
+  message: string;
+};
+type CompanionOAuthResponse = {
+  status: "idle" | "starting" | "running" | "connected" | "failed" | "missing";
+  provider?: LocalAiProvider;
+  credentialLabel?: string;
+  message?: string;
+};
 
 const workflowCards = [
   {
@@ -133,6 +144,8 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
+const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
+const LOCAL_AI_SETUP_HISTORY_VIEW = "local-ai-setup";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
 );
@@ -170,6 +183,39 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
 
 function readEditorTheme(): EditorTheme {
   return window.localStorage.getItem(EDITOR_THEME_STORAGE_KEY) === "vs" ? "vs" : "vs-dark";
+}
+
+function defaultOauthLabel(provider: LocalAiProvider) {
+  return provider === "codex" ? "Codex CLI OAuth" : "Google OAuth";
+}
+
+function oauthCommand(provider: LocalAiProvider) {
+  return provider === "codex" ? "codex --login" : "gcloud auth application-default login";
+}
+
+function oauthStatusLabel(status: LocalOAuthConnection["status"]) {
+  if (status === "connected") return "Connected";
+  if (status === "starting" || status === "running") return "Connecting";
+  if (status === "failed" || status === "unavailable") return "Needs attention";
+  return "Not connected";
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isLocalAiSetupHistoryState(state: unknown) {
+  return typeof state === "object" && state !== null && "learnloopView" in state && state.learnloopView === LOCAL_AI_SETUP_HISTORY_VIEW;
+}
+
+async function readCompanionResponse(response: Response): Promise<CompanionOAuthResponse> {
+  const payload = (await response.json().catch(() => ({}))) as Partial<CompanionOAuthResponse>;
+  return {
+    status: payload.status ?? (response.ok ? "idle" : "failed"),
+    provider: payload.provider,
+    credentialLabel: payload.credentialLabel,
+    message: payload.message
+  };
 }
 
 function primaryMembership(session: SessionResponse | null): Membership | null {
@@ -219,8 +265,10 @@ export function App() {
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => readEditorTheme());
   const [localApiKey, setLocalApiKey] = useState("");
   const [oauthLabel, setOauthLabel] = useState("");
+  const [oauthConnection, setOauthConnection] = useState<LocalOAuthConnection>({ status: "idle", message: "" });
   const [onboardingError, setOnboardingError] = useState("");
   const [health, setHealth] = useState<HealthState>({ status: "pending" });
+  const showOnboardingRef = useRef(showOnboarding);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
@@ -253,6 +301,25 @@ export function App() {
       setSelectedAuthMethod("api_key");
     }
   }, [selectedAuthMethod, selectedProvider.oauth]);
+
+  useEffect(() => {
+    setOauthConnection({ status: "idle", message: "" });
+  }, [selectedAiProvider, selectedAuthMethod]);
+
+  useEffect(() => {
+    showOnboardingRef.current = showOnboarding;
+  }, [showOnboarding]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (showOnboardingRef.current && !isLocalAiSetupHistoryState(event.state)) {
+        setShowOnboarding(false);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     if (session === null || membership === null || showOnboarding) return;
@@ -344,10 +411,10 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary">
-        <a className="brand" href="/">
+        <button className="brand brand-button" onClick={goToDashboard} type="button">
           <span className="brand-mark">LL</span>
           <span>LearnLoop</span>
-        </a>
+        </button>
 
         <div className="account-card">
           <strong>{session.user.displayName}</strong>
@@ -355,7 +422,7 @@ export function App() {
           <small>{membership?.role ?? "member"}</small>
         </div>
 
-        <button className="local-ai-card" onClick={() => setShowOnboarding(true)} type="button">
+        <button className="local-ai-card" onClick={openLocalAiSetup} type="button">
           <span className="icon-pill">
             <KeyRound aria-hidden="true" size={16} />
           </span>
@@ -379,9 +446,15 @@ export function App() {
       <main className="workspace">
         {showOnboarding ? (
           <section className="onboarding-panel">
-            <div>
-              <p className="eyebrow">Local AI setup</p>
-              <h1>Choose your coding assistant.</h1>
+            <div className="onboarding-header">
+              <div>
+                <p className="eyebrow">Local AI setup</p>
+                <h1>Choose your coding assistant.</h1>
+              </div>
+              <button className="secondary-button" onClick={goToDashboard} type="button">
+                <ChevronLeft aria-hidden="true" size={16} />
+                Back to dashboard
+              </button>
             </div>
             <form className="onboarding-form" onSubmit={saveLocalAiSettings}>
               <div className="provider-grid" role="radiogroup" aria-label="AI provider">
@@ -425,16 +498,33 @@ export function App() {
                   <input autoComplete="off" onChange={(event) => setLocalApiKey(event.target.value)} type="password" value={localApiKey} />
                 </label>
               ) : (
-                <label>
-                  <span>Local OAuth profile</span>
-                  <input
-                    autoComplete="off"
-                    onChange={(event) => setOauthLabel(event.target.value)}
-                    placeholder={selectedAiProvider === "codex" ? "Codex CLI OAuth" : "Google OAuth"}
-                    type="text"
-                    value={oauthLabel}
-                  />
-                </label>
+                <div className="oauth-setup-stack">
+                  <div className="oauth-connect-row">
+                    <button
+                      className="secondary-button"
+                      disabled={oauthConnection.status === "starting" || oauthConnection.status === "running"}
+                      onClick={startOAuthConnection}
+                      type="button"
+                    >
+                      <Cloud aria-hidden="true" size={16} />
+                      {oauthConnection.status === "starting" || oauthConnection.status === "running" ? "Connecting" : `Connect ${selectedProvider.label}`}
+                    </button>
+                    <span aria-live="polite" className={`oauth-status oauth-status-${oauthConnection.status}`}>
+                      {oauthStatusLabel(oauthConnection.status)}
+                    </span>
+                  </div>
+                  <label>
+                    <span>Local OAuth profile</span>
+                    <input
+                      autoComplete="off"
+                      onChange={(event) => setOauthLabel(event.target.value)}
+                      placeholder={selectedAiProvider === "codex" ? "Codex CLI OAuth" : "Google OAuth"}
+                      type="text"
+                      value={oauthLabel}
+                    />
+                  </label>
+                  {oauthConnection.message.length > 0 ? <p className="oauth-message">{oauthConnection.message}</p> : null}
+                </div>
               )}
 
               <div className="local-only-note">
@@ -444,7 +534,7 @@ export function App() {
 
               {selectedAuthMethod === "oauth" ? (
                 <div className="oauth-command">
-                  <span>{selectedAiProvider === "codex" ? "codex --login" : "gcloud auth application-default login"}</span>
+                  <span>{oauthCommand(selectedAiProvider)}</span>
                 </div>
               ) : null}
 
@@ -852,7 +942,11 @@ export function App() {
       setPassword("");
       const storedSettings = readLocalAiSettings(nextSession.user.id);
       setLocalAiSettings(storedSettings);
-      setShowOnboarding(storedSettings === null);
+      if (storedSettings === null) {
+        openLocalAiSetup();
+      } else {
+        setShowOnboarding(false);
+      }
       await refreshProviders(nextSession);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Authentication failed");
@@ -1422,7 +1516,81 @@ export function App() {
     setLocalAiSettings(nextSettings);
     setLocalApiKey("");
     setOnboardingError("");
+    goToDashboard();
+  }
+
+  function openLocalAiSetup() {
+    if (!isLocalAiSetupHistoryState(window.history.state)) {
+      const currentState = typeof window.history.state === "object" && window.history.state !== null ? window.history.state : {};
+      window.history.pushState({ ...currentState, learnloopView: LOCAL_AI_SETUP_HISTORY_VIEW }, "", window.location.href);
+    }
+    setShowOnboarding(true);
+  }
+
+  function goToDashboard() {
+    setOnboardingError("");
     setShowOnboarding(false);
+    if (isLocalAiSetupHistoryState(window.history.state)) {
+      window.history.back();
+    }
+  }
+
+  async function startOAuthConnection() {
+    if (!selectedProvider.oauth) return;
+    setOnboardingError("");
+    setOauthConnection({ status: "starting", message: "Opening local OAuth connection." });
+
+    try {
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/oauth/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: selectedAiProvider })
+      });
+      const payload = await readCompanionResponse(response);
+      if (!response.ok && payload.status !== "running") {
+        throw new Error(payload.message || "Local OAuth companion failed to start");
+      }
+      applyOAuthConnectionPayload(payload, selectedAiProvider);
+      if (payload.status !== "connected" && payload.status !== "failed") {
+        await pollOAuthConnection(selectedAiProvider);
+      }
+    } catch (error) {
+      setOauthConnection({
+        status: "unavailable",
+        message:
+          error instanceof TypeError
+            ? "Local OAuth companion is not running. Start ./scripts/local-ai-companion.sh and try again."
+            : error instanceof Error
+              ? error.message
+              : "Local OAuth connection failed."
+      });
+    }
+  }
+
+  async function pollOAuthConnection(provider: LocalAiProvider) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      await delay(1500);
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/oauth/status?provider=${encodeURIComponent(provider)}`);
+      const payload = await readCompanionResponse(response);
+      applyOAuthConnectionPayload(payload, provider);
+      if (payload.status === "connected" || payload.status === "failed" || payload.status === "missing") return;
+    }
+    setOauthConnection({ status: "failed", message: "OAuth connection did not finish in time." });
+  }
+
+  function applyOAuthConnectionPayload(payload: CompanionOAuthResponse, provider: LocalAiProvider) {
+    const credentialLabel = payload.credentialLabel || defaultOauthLabel(provider);
+    if (payload.status === "connected") {
+      setOauthLabel(credentialLabel);
+      setOauthConnection({ status: "connected", message: payload.message || `${credentialLabel} connected.` });
+    } else if (payload.status === "running" || payload.status === "starting") {
+      setOauthLabel(credentialLabel);
+      setOauthConnection({ status: "running", message: payload.message || "Complete the OAuth prompt opened by the local companion." });
+    } else if (payload.status === "missing") {
+      setOauthConnection({ status: "failed", message: payload.message || `${oauthCommand(provider)} is not available on this machine.` });
+    } else if (payload.status === "failed") {
+      setOauthConnection({ status: "failed", message: payload.message || "OAuth connection failed." });
+    }
   }
 
   async function runDemo() {

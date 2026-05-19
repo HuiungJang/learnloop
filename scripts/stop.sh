@@ -9,5 +9,5 @@ if [ ! -f ".env" ]; then
   exit 0
 fi
 
+./scripts/local-ai-companion.sh stop || true
 docker compose --env-file .env -f docker-compose.install.yml down
-

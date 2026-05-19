@@ -63,6 +63,7 @@ Common installed-app commands:
 ./scripts/start.sh
 ./scripts/status.sh
 ./scripts/stop.sh
+./scripts/local-ai-companion.sh
 ```
 
 To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
@@ -109,8 +110,9 @@ Server sync is idempotent by `(user, problem, clientAttemptId)`, so retries upda
 1. Sign up or log in.
 2. Choose the AI provider you want to use on first login.
 3. Codex and Gemini support OAuth or API key setup; Claude uses API key setup.
-4. Save local AI settings, then run the learning flow.
-5. Review generated pattern cards and exercises, then turn them into reusable learning assets.
+4. For OAuth, click `Connect Codex` or `Connect Gemini` in the local AI setup screen. The local companion starts the provider's login command on this machine.
+5. Save local AI settings, then run the learning flow.
+6. Review generated pattern cards and exercises, then turn them into reusable learning assets.
 
 ## Release Bundle
 

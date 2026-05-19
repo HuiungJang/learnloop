@@ -119,6 +119,7 @@ fi
 validate_env_file
 load_images
 compose up -d
+./local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./local-ai-companion.sh."
 
 ./status.sh --wait
 
@@ -142,3 +143,4 @@ echo "Useful commands:"
 echo "- ./start.sh"
 echo "- ./stop.sh"
 echo "- ./status.sh"
+echo "- ./local-ai-companion.sh"

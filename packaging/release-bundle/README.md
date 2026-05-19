@@ -36,6 +36,7 @@ The installer creates `.env` with generated local credentials and prints the gen
 ./start.sh
 ./status.sh
 ./stop.sh
+./local-ai-companion.sh
 ```
 
 `./stop.sh` stops containers without deleting the PostgreSQL Docker volume.
@@ -68,6 +69,10 @@ APP_RUNNER_ENABLED=true
 
 Use a different `AI_CODE_PROJECT_NAME` when running multiple isolated installations on the same machine.
 Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments that do not provide Docker-backed sandbox execution.
+
+## Local AI OAuth
+
+The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on `127.0.0.1`, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
 
 ## License
 

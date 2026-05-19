@@ -18,6 +18,7 @@ const secondDisplayName = "E2E Second User";
 const localAiKey = `local-only-key-${Date.now()}`;
 const oauthLabel = `Gemini OAuth ${Date.now()}`;
 const postedRequests = [];
+const companionRequests = [];
 const demoProblemId = "problem-demo-practice-workbench";
 
 const browser = await chromium.launch({ headless: true, ...launchOptions });
@@ -28,6 +29,57 @@ page.on("request", (request) => {
   if (postData) {
     postedRequests.push({ url: request.url(), postData });
   }
+  if (request.url().startsWith("http://127.0.0.1:4317/")) {
+    companionRequests.push({ method: request.method(), url: request.url(), phase: "request" });
+  }
+});
+page.on("requestfailed", (request) => {
+  if (request.url().startsWith("http://127.0.0.1:4317/")) {
+    companionRequests.push({ method: request.method(), url: request.url(), phase: "failed", failure: request.failure()?.errorText ?? "unknown" });
+  }
+});
+await page.route("http://127.0.0.1:4317/**", async (route) => {
+  const url = new URL(route.request().url());
+  companionRequests.push({ method: route.request().method(), url: route.request().url(), phase: "route" });
+  const corsHeaders = {
+    "access-control-allow-origin": appUrl,
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "access-control-allow-private-network": "true"
+  };
+  if (route.request().method() === "OPTIONS") {
+    await route.fulfill({ status: 204, headers: corsHeaders });
+    return;
+  }
+  if (url.pathname === "/oauth/start") {
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({
+        status: "connected",
+        provider: "gemini",
+        credentialLabel: oauthLabel,
+        message: `${oauthLabel} connected.`
+      })
+    });
+    return;
+  }
+  if (url.pathname === "/oauth/status") {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({
+        status: "connected",
+        provider: "gemini",
+        credentialLabel: oauthLabel,
+        message: `${oauthLabel} connected.`
+      })
+    });
+    return;
+  }
+  await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
 });
 
 try {
@@ -71,9 +123,29 @@ try {
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
   await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  await page.goBack();
+  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
+
+  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  await page.getByRole("button", { name: /Back to dashboard/i }).click();
+  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
+
+  await page.getByRole("button", { name: /claude/i }).click();
   await page.getByRole("radio", { name: /Gemini/i }).click();
   await page.getByRole("button", { name: /^OAuth$/i }).click();
-  await page.getByLabel("Local OAuth profile").fill(oauthLabel);
+  await page.getByRole("button", { name: /Connect Gemini/i }).click();
+  try {
+    await page.getByText(/^Connected$/i).waitFor({ timeout: 10_000 });
+  } catch (error) {
+    const status = await page.locator(".oauth-status").innerText().catch(() => "missing");
+    const message = await page.locator(".oauth-message").innerText().catch(() => "missing");
+    throw new Error(`OAuth connection did not reach connected. status=${status}; message=${message}; companionRequests=${JSON.stringify(companionRequests)}`, { cause: error });
+  }
+  assert.equal(await page.getByLabel("Local OAuth profile").inputValue(), oauthLabel);
   await page.getByRole("button", { name: /Save local setup/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
 
