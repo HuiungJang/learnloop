@@ -546,14 +546,214 @@ class LocalAiSessionIngestionIntegrationTest {
                     "sourceLinkIds" to listOf(linkId),
                     "visibility" to "private",
                 ),
-            )
+        )
         assertEquals(HttpStatus.CREATED, generated.statusCode)
+    }
+
+    @Test
+    fun `curated local session generates directly without source link and preserves lineage after raw purge`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val localSession =
+            postJson(
+                "/api/ingest/local-ai-session",
+                owner.token,
+                localSessionGenerationRequest(repoRoot, "direct-generation"),
+            )
+        val bundleId = json(localSession)["bundle"]["id"].asText()
+
+        val uncurated = generateFromBundles(owner.token, listOf(bundleId))
+        assertEquals(HttpStatus.BAD_REQUEST, uncurated.statusCode)
+
+        patchJson(
+            "/api/evidence/$bundleId/attribution",
+            owner.token,
+            mapOf(
+                "userAttribution" to "use_for_generation",
+                "attributionConfidence" to 0.91,
+                "attributionReasons" to listOf("curation_approved"),
+            ),
+        )
+        val mixedRequest =
+            postJson(
+                "/api/generation/run",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf("link-does-not-matter"),
+                    "sourceBundleIds" to listOf(bundleId),
+                    "visibility" to "private",
+                ),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, mixedRequest.statusCode)
+
+        val generated = generateFromBundles(owner.token, listOf(bundleId))
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        val generatedBody = json(generated)
+        val generationRun = generatedBody["generationRun"]
+        assertEquals(listOf(bundleId), objectMapper.readValue(generationRun["sourceBundleIdsJson"].asText(), List::class.java))
+        val evidenceItemIds = objectMapper.readValue(generationRun["evidenceItemIdsJson"].asText(), List::class.java).map { it.toString() }
+        val items = evidenceItemRepository.findByBundleId(bundleId)
+        val toolEventId = items.single { it.itemType == "tool_event" }.id
+        val generationItemIds = items.filter { it.itemType in LocalAiSessionPolicy.generationItemTypes }.map { it.id }.toSet()
+        assertEquals(generationItemIds, evidenceItemIds.toSet())
+        assertFalse(evidenceItemIds.contains(toolEventId))
+        assertEquals(0, sourceLinkCountForBundle(bundleId))
+
+        val cardId = generatedBody["patternCard"]["id"].asText()
+        val purged = postJson("/api/evidence/$bundleId/purge-raw", owner.token, emptyMap<String, String>())
+        assertEquals(HttpStatus.OK, purged.statusCode)
+        val card = getJson("/api/pattern-cards/$cardId", owner.token)
+        assertEquals(HttpStatus.OK, card.statusCode)
+        assertEquals(cardId, json(card)["patternCard"]["id"].asText())
+    }
+
+    @Test
+    fun `direct local session generation rejects multiple bundles`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val firstId = createCuratedLocalSession(owner.token, repoRoot, "direct-multiple-first")
+        val secondId = createCuratedLocalSession(owner.token, repoRoot, "direct-multiple-second")
+
+        val generated = generateFromBundles(owner.token, listOf(firstId, secondId))
+
+        assertEquals(HttpStatus.BAD_REQUEST, generated.statusCode)
+    }
+
+    @Test
+    fun `direct local session generation canonicalizes duplicate bundle ids`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val bundleId = createCuratedLocalSession(owner.token, repoRoot, "direct-duplicate")
+
+        val generated = generateFromBundles(owner.token, listOf(bundleId, bundleId))
+
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        val generationRun = json(generated)["generationRun"]
+        assertEquals(listOf(bundleId), objectMapper.readValue(generationRun["sourceBundleIdsJson"].asText(), List::class.java))
+    }
+
+    @Test
+    fun `direct local session generation rejects manual evidence`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val manualId = createCuratedLocalSession(owner.token, repoRoot, "direct-manual")
+
+        patchJson(
+            "/api/evidence/$manualId/attribution",
+            owner.token,
+            mapOf(
+                "userAttribution" to "manual",
+                "attributionConfidence" to 0.41,
+                "attributionReasons" to listOf("human_review"),
+            ),
+        )
+        assertDirectGenerationRejected(owner.token, manualId)
+    }
+
+    @Test
+    fun `direct local session generation rejects raw purged evidence`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val purgedId = createCuratedLocalSession(owner.token, repoRoot, "direct-purged")
+        val purged = postJson("/api/evidence/$purgedId/purge-raw", owner.token, emptyMap<String, String>())
+
+        assertEquals(HttpStatus.OK, purged.statusCode)
+        assertDirectGenerationRejected(owner.token, purgedId)
+    }
+
+    @Test
+    fun `direct local session generation rejects deleted evidence`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val deletedId = createCuratedLocalSession(owner.token, repoRoot, "direct-deleted")
+        val deleted = restTemplate.exchange("/api/evidence/$deletedId", HttpMethod.DELETE, HttpEntity<Void>(bearerHeaders(owner.token)), String::class.java)
+
+        assertEquals(HttpStatus.NO_CONTENT, deleted.statusCode)
+        assertDirectGenerationRejected(owner.token, deletedId)
+    }
+
+    @Test
+    fun `direct local session generation rejects quarantined evidence`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val quarantined =
+            postJson(
+                "/api/ingest/local-ai-session",
+                owner.token,
+                localSessionRequest(repoRoot, "direct-quarantined", promptContent = "Use token sk-testtesttesttesttesttesttesttest"),
+            )
+        assertDirectGenerationRejected(owner.token, json(quarantined)["bundle"]["id"].asText())
+    }
+
+    @Test
+    fun `direct local session generation rejects non local evidence`() {
+        val owner = login()
+        val nonLocal =
+            postJson(
+                "/api/ingest/manual",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Manual direct generation code",
+                    "sourceKind" to "code",
+                    "content" to "class ManualDirectGeneration",
+                ),
+            )
+        assertDirectGenerationRejected(owner.token, json(nonLocal)["bundle"]["id"].asText())
     }
 
     private fun login(): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest("owner@local.learnloop", "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
         return requireNotNull(response.body)
+    }
+
+    private fun createCuratedLocalSession(
+        token: String,
+        repoRoot: Path,
+        suffix: String,
+    ): String {
+        val created = postJson("/api/ingest/local-ai-session", token, localSessionGenerationRequest(repoRoot, suffix))
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        val bundleId = json(created)["bundle"]["id"].asText()
+        val curated =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.9,
+                    "attributionReasons" to listOf("curation_approved"),
+                ),
+            )
+        assertEquals(HttpStatus.OK, curated.statusCode)
+        return bundleId
+    }
+
+    private fun generateFromBundles(
+        token: String,
+        bundleIds: List<String>,
+    ) = postJson(
+        "/api/generation/run",
+        token,
+        mapOf(
+            "organizationId" to "org-demo",
+            "providerConfigId" to "provider-local-mock",
+            "sourceBundleIds" to bundleIds,
+            "visibility" to "private",
+        ),
+    )
+
+    private fun assertDirectGenerationRejected(
+        token: String,
+        bundleId: String,
+    ) {
+        val generated = generateFromBundles(token, listOf(bundleId))
+        assertEquals(HttpStatus.BAD_REQUEST, generated.statusCode)
     }
 
     private fun localSessionRequest(
@@ -636,6 +836,18 @@ class LocalAiSessionIngestionIntegrationTest {
         ) ?: 0
     }
 
+    private fun sourceLinkCountForBundle(bundleId: String): Int =
+        jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM source_links
+            WHERE conversation_bundle_id = ? OR code_bundle_id = ?
+            """.trimIndent(),
+            Int::class.java,
+            bundleId,
+            bundleId,
+        ) ?: 0
+
     @Suppress("UNCHECKED_CAST")
     private fun artifactsFrom(request: Map<String, Any?>): List<Map<String, Any?>> =
         request.getValue("artifacts") as List<Map<String, Any?>>
@@ -651,6 +863,11 @@ class LocalAiSessionIngestionIntegrationTest {
         token: String,
         body: Any,
     ) = restTemplate.exchange(path, HttpMethod.PATCH, HttpEntity(body, bearerHeaders(token)), String::class.java)
+
+    private fun getJson(
+        path: String,
+        token: String,
+    ) = restTemplate.exchange(path, HttpMethod.GET, HttpEntity<Void>(bearerHeaders(token)), String::class.java)
 
     private fun json(response: org.springframework.http.ResponseEntity<String>): JsonNode = objectMapper.readTree(response.body)
 

@@ -530,18 +530,18 @@ Verification:
 
 ### Phase 9: Generate From Curated Local Evidence
 
-- [ ] Update generation service to accept a curated local AI session bundle directly, without requiring a conversation/code source link when the bundle already contains both.
-- [ ] Require secret scan pass, non-deleted bundle, non-purged required content, and user curation value `use_for_generation`.
-- [ ] Exclude manual, deleted, quarantined, and unknown evidence from generation by default.
-- [ ] Keep existing manual/source-link generation path untouched.
-- [ ] Store generated-card lineage to source bundle ids and evidence item ids.
+- [x] Update generation service to accept a curated local AI session bundle directly, without requiring a conversation/code source link when the bundle already contains both.
+- [x] Require secret scan pass, non-deleted bundle, non-purged required content, and user curation value `use_for_generation`.
+- [x] Exclude manual, deleted, quarantined, and unknown evidence from generation by default.
+- [x] Keep existing manual/source-link generation path untouched.
+- [x] Store generated-card lineage to source bundle ids and evidence item ids.
 
 Verification:
 
-- [ ] Backend tests cover usable, manual, deleted, raw-purged, quarantined, duplicate, and unknown evidence.
-- [ ] Existing manual/source-link smoke path still generates.
-- [ ] Local-session path generates without creating a source link.
-- [ ] Raw purge after generation does not break generated cards or practice.
+- [x] Backend tests cover usable, manual, deleted, raw-purged, quarantined, duplicate, and unknown evidence.
+- [x] Existing manual/source-link smoke path still generates.
+- [x] Local-session path generates without creating a source link.
+- [x] Raw purge after generation does not break generated cards or practice.
 
 ### Phase 10: Add Minimal Collection And Curation UI
 

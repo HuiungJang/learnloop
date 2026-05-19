@@ -370,3 +370,22 @@ Initial Phase 1 files:
 - `delete` needs to behave like the destructive evidence action; otherwise API naming would mislead the UI and user.
 - Local-session `tool_event` artifacts are useful lineage metadata, but they must not be treated as required raw generation content.
 - The preflight eligibility policy and generation input policy should share one definition so they do not drift.
+
+### 2026-05-20 - Phase 9 Direct Local Evidence Generation
+
+**By:** Codex
+
+**Actions:**
+- Added `sourceBundleIds` to generation requests so curated local AI session bundles can generate directly without source links.
+- Kept source-link and direct source-bundle generation as mutually exclusive request shapes.
+- Required direct generation bundles to be local sessions in the requested organization, non-deleted, marked `use_for_generation`, and backed by unpurged generation artifacts.
+- Stored direct generation lineage in `sourceBundleIdsJson` and `evidenceItemIdsJson` while leaving `sourceLinkIdsJson` empty.
+- Added integration tests for usable, duplicate, unknown, manual, deleted, raw-purged, quarantined, and non-local evidence.
+- Added coverage that direct generation does not create source links and that raw purge after generation leaves the generated card readable.
+- Limited direct generation to one distinct local-session bundle to avoid cross-scope evidence mixing.
+- Split direct-generation rejection tests so failures identify the specific gate that regressed.
+- Checked off Phase 9 in the plan document.
+
+**Learnings:**
+- Direct local generation should reject mixed `sourceLinkIds` and `sourceBundleIds`; otherwise lineage semantics become ambiguous.
+- The generation service can share the persistence flow once source resolution is separated from run/card creation.
