@@ -12,7 +12,9 @@ const allowedOrigins = new Set([
 const providers = {
   codex: {
     label: "Codex CLI OAuth",
-    command: commandFromEnv("LEARNLOOP_CODEX_LOGIN_COMMAND", ["codex", "--login"])
+    command: commandFromEnv("LEARNLOOP_CODEX_LOGIN_COMMAND", ["codex", "login"]),
+    statusCommand: commandFromEnv("LEARNLOOP_CODEX_STATUS_COMMAND", ["codex", "login", "status"]),
+    connectedPattern: /logged in/i
   },
   gemini: {
     label: "Google OAuth",
@@ -46,7 +48,7 @@ const server = http.createServer(async (req, res) => {
       assertAllowedOrigin(req);
       const body = await readJson(req);
       const provider = readProvider(body.provider);
-      startOAuth(provider);
+      await startOAuth(provider);
       sendJson(res, 202, stateFor(provider));
       return;
     }
@@ -117,11 +119,17 @@ function readProvider(value) {
   return value;
 }
 
-function startOAuth(provider) {
+async function startOAuth(provider) {
   const current = providerState.get(provider);
   if (current?.child && current.child.exitCode === null) return;
 
   const config = providers[provider];
+  const existingConnection = await readExistingConnection(provider, config);
+  if (existingConnection !== null) {
+    providerState.set(provider, existingConnection);
+    return;
+  }
+
   const [command, ...args] = config.command;
   const child = spawn(command, args, {
     env: process.env,
@@ -155,6 +163,66 @@ function startOAuth(provider) {
       nextState.status = "failed";
       nextState.message = trimmedMessage(nextState.output) || `${config.label} exited with code ${code}.`;
     }
+  });
+}
+
+async function readExistingConnection(provider, config) {
+  if (!config.statusCommand) return null;
+
+  const [command, ...args] = config.statusCommand;
+  const result = await runCommand(command, args, 5000);
+  if (result.errorCode === "ENOENT") {
+    return {
+      status: "missing",
+      provider,
+      credentialLabel: config.label,
+      message: `${command} is not installed or not available in PATH.`
+    };
+  }
+  if (result.timedOut || result.code !== 0 || !config.connectedPattern.test(result.output)) {
+    return null;
+  }
+
+  return {
+    status: "connected",
+    provider,
+    credentialLabel: config.label,
+    message: `${config.label} connected.`
+  };
+}
+
+function runCommand(command, args, timeoutMs) {
+  return new Promise((resolve) => {
+    let output = "";
+    let settled = false;
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const timer = setTimeout(() => {
+      child.kill();
+      finish({ code: null, errorCode: null, timedOut: true, output });
+    }, timeoutMs);
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    }
+
+    child.stdout?.on("data", (chunk) => {
+      output = `${output}${chunk.toString("utf8")}`.slice(-4000);
+    });
+    child.stderr?.on("data", (chunk) => {
+      output = `${output}${chunk.toString("utf8")}`.slice(-4000);
+    });
+    child.on("error", (error) => {
+      finish({ code: null, errorCode: error.code, timedOut: false, output: output || error.message });
+    });
+    child.on("close", (code) => {
+      finish({ code, errorCode: null, timedOut: false, output });
+    });
   });
 }
 

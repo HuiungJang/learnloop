@@ -103,6 +103,8 @@ try {
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  await page.getByRole("button", { name: /^OAuth$/i }).click();
+  await page.getByText(/^codex login$/i).waitFor();
   await page.getByRole("radio", { name: /Claude/i }).click();
   assert.equal(await page.getByRole("button", { name: /^OAuth$/i }).isDisabled(), true);
   await page.getByLabel("API key").fill(localAiKey);

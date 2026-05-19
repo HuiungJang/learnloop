@@ -222,7 +222,7 @@ function defaultOauthLabel(provider: LocalAiProvider) {
 }
 
 function oauthCommand(provider: LocalAiProvider) {
-  return provider === "codex" ? "codex --login" : "gcloud auth application-default login";
+  return provider === "codex" ? "codex login" : "gcloud auth application-default login";
 }
 
 function oauthStatusLabel(status: LocalOAuthConnection["status"]) {
