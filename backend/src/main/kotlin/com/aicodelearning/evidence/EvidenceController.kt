@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -39,6 +40,33 @@ class EvidenceController(
             evidenceItems = detail.items.map { it.toResponse(includeContent = true) },
         )
     }
+
+    @DeleteMapping("/api/evidence/{bundleId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteEvidence(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable bundleId: String,
+    ) {
+        evidenceService.deleteBundle(currentUser, bundleId)
+    }
+
+    @PostMapping("/api/evidence/{bundleId}/purge-raw")
+    fun purgeBundleRaw(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable bundleId: String,
+    ): RawPurgeResponse = evidenceService.purgeBundleRaw(currentUser, bundleId)
+
+    @PostMapping("/api/evidence/purge-raw")
+    fun purgeRaw(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @Valid @RequestBody request: ScopedRawPurgeRequest,
+    ): RawPurgeResponse =
+        evidenceService.purgeRaw(
+            currentUser = currentUser,
+            organizationId = request.organizationId,
+            repositoryUrl = request.repositoryUrl,
+            purgeAll = request.purgeAll,
+        )
 }
 
 data class ManualIngestRequest(
@@ -70,6 +98,18 @@ data class EvidenceDetailResponse(
     val evidenceItems: List<EvidenceItemResponse>,
 )
 
+data class ScopedRawPurgeRequest(
+    @field:NotBlank
+    val organizationId: String = "",
+    val repositoryUrl: String? = null,
+    val purgeAll: Boolean = false,
+)
+
+data class RawPurgeResponse(
+    val purgedBundles: Int,
+    val purgedItems: Int,
+)
+
 data class SourceBundleResponse(
     val id: String,
     val organizationId: String,
@@ -87,6 +127,9 @@ data class SourceBundleResponse(
     val contentHash: String,
     val secretFindingsJson: String,
     val createdAt: Instant,
+    val deletedAt: Instant?,
+    val deletedByUserId: String?,
+    val deletionReason: String?,
 )
 
 data class EvidenceItemResponse(
@@ -96,6 +139,8 @@ data class EvidenceItemResponse(
     val contentText: String?,
     val contentHash: String,
     val createdAt: Instant,
+    val rawPurgedAt: Instant?,
+    val rawPurgeReason: String?,
 )
 
 fun SourceBundleEntity.toResponse(): SourceBundleResponse =
@@ -116,6 +161,9 @@ fun SourceBundleEntity.toResponse(): SourceBundleResponse =
         contentHash = contentHash,
         secretFindingsJson = secretFindingsJson,
         createdAt = createdAt,
+        deletedAt = deletedAt,
+        deletedByUserId = deletedByUserId,
+        deletionReason = deletionReason,
     )
 
 fun EvidenceItemEntity.toResponse(includeContent: Boolean): EvidenceItemResponse =
@@ -126,4 +174,6 @@ fun EvidenceItemEntity.toResponse(includeContent: Boolean): EvidenceItemResponse
         contentText = if (includeContent) contentText else null,
         contentHash = contentHash,
         createdAt = createdAt,
+        rawPurgedAt = rawPurgedAt,
+        rawPurgeReason = rawPurgeReason,
     )

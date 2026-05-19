@@ -3,13 +3,29 @@ package com.aicodelearning.evidence
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String> {
-    fun findFirstByOrganizationIdAndSourceKindAndContentHashOrderByCreatedAtDesc(
+    fun findFirstByOrganizationIdAndSourceKindAndContentHashAndDeletedAtIsNullOrderByCreatedAtDesc(
         organizationId: String,
         sourceKind: String,
         contentHash: String,
     ): SourceBundleEntity?
+
+    fun findByOrganizationIdAndDeletedAtIsNull(organizationId: String): List<SourceBundleEntity>
+
+    fun findByOrganizationId(organizationId: String): List<SourceBundleEntity>
+
+    fun findByOrganizationIdAndRepositoryUrlAndDeletedAtIsNull(
+        organizationId: String,
+        repositoryUrl: String,
+    ): List<SourceBundleEntity>
+
+    fun findByOrganizationIdAndRepositoryUrl(
+        organizationId: String,
+        repositoryUrl: String,
+    ): List<SourceBundleEntity>
 }
 
 interface EvidenceItemRepository : JpaRepository<EvidenceItemEntity, String> {
     fun findByBundleId(bundleId: String): List<EvidenceItemEntity>
+
+    fun findByBundleIdIn(bundleIds: Collection<String>): List<EvidenceItemEntity>
 }

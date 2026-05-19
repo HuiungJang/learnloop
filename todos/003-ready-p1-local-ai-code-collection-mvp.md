@@ -131,3 +131,50 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Redacting sensitive values is not enough for local evidence: audit metadata should avoid storing sensitive field names like `rawContent` at all.
+
+### 2026-05-19 - Phase 4 Evidence Delete And Raw Purge
+
+**By:** Codex
+
+**Actions:**
+- Added tombstone columns for `source_bundles` and raw purge columns for `evidence_items`.
+- Added `DELETE /api/evidence/{bundleId}` plus raw purge endpoints for one bundle, one repository, or all active evidence in an organization.
+- Excluded deleted bundles from evidence reads, source-link decisions, generation, and conversion trace bundle lookups.
+- Added integration tests for soft delete, generation exclusion, single-bundle raw purge, generated-card readability after purge, and repository-scoped raw purge.
+- Added full app-data delete endpoint with owner-only access, explicit confirmation, FK-ordered database deletion, and post-delete session invalidation.
+- Added sentinel purge verification across current database text columns, audit metadata, and evidence API responses.
+- Checked off Phase 4 in the plan document, noting that durable filesystem artifact, staging, collector cache, and quarantine stores are not implemented yet in this phase.
+
+**Learnings:**
+- Raw purge can preserve generated learning assets because generated cards read their own persisted pattern/problem data, not evidence item `contentText`.
+- Hash dedupe must ignore raw-purged bundles so recollecting the same evidence creates a fresh readable bundle.
+
+### 2026-05-19 - Phase 4 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Added a shared local-owner access check for destructive evidence and app-data delete actions.
+- Made raw purge idempotent by updating and counting only rows that still contain raw content or lack purge metadata.
+- Stopped persisting caller-supplied raw purge reason text; purge reason fields now use fixed local-owner reason codes.
+- Moved destructive evidence success coverage into default local-owner mode and kept demo-role users/admins forbidden.
+- Clarified the plan so current full app-data delete claims only the backend database wipe implemented in this phase.
+
+**Learnings:**
+- In demo compatibility mode, an internal admin role must not imply the configured local owner identity.
+- Repeated purge calls should be operationally harmless and should not refresh timestamps or replace the original purge reason.
+
+### 2026-05-19 - Phase 4 Second Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Included tombstoned bundles in repository and all-evidence raw purge scopes so delete-then-purge still removes raw content.
+- Removed the unused caller-supplied raw purge reason from the API surface.
+- Cleared user-supplied file path and provenance metadata during raw purge.
+- Changed full app-data delete verification to compare the delete response against current public application tables instead of duplicating the service table list in the test.
+- Clarified that current backend delete-all does not clear existing browser storage.
+
+**Learnings:**
+- Soft delete and raw purge are separate user actions, so bulk purge must include already tombstoned evidence.
+- Full-delete tests should fail when a future migration adds an app table that the service does not delete.

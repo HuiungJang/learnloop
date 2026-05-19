@@ -31,6 +31,9 @@ class SourceLinkService(
     ): SourceLinkEntity {
         val conversation = sourceBundleRepository.findById(conversationBundleId).orElseThrow { NotFoundException("Conversation bundle not found") }
         val code = sourceBundleRepository.findById(codeBundleId).orElseThrow { NotFoundException("Code bundle not found") }
+        if (conversation.deletedAt != null || code.deletedAt != null) {
+            throw NotFoundException("Source bundle not found")
+        }
         if (conversation.organizationId != code.organizationId) {
             throw BadRequestException("Source bundles must belong to the same organization")
         }
@@ -64,6 +67,9 @@ class SourceLinkService(
         val link = sourceLinkRepository.findById(linkId).orElseThrow { NotFoundException("Source link not found") }
         val conversation = sourceBundleRepository.findById(link.conversationBundleId).orElseThrow { NotFoundException("Conversation bundle not found") }
         val code = sourceBundleRepository.findById(link.codeBundleId).orElseThrow { NotFoundException("Code bundle not found") }
+        if (conversation.deletedAt != null || code.deletedAt != null) {
+            throw NotFoundException("Source bundle not found")
+        }
         authorizationService.requireRole(currentUser, conversation.organizationId, "contributor", conversation.teamId, conversation.projectId)
         authorizationService.requireRole(currentUser, code.organizationId, "contributor", code.teamId, code.projectId)
         link.status = status

@@ -59,6 +59,15 @@ class SourceBundleEntity(
 
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
+
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null,
+
+    @Column(name = "deleted_by_user_id")
+    var deletedByUserId: String? = null,
+
+    @Column(name = "deletion_reason")
+    var deletionReason: String? = null,
 )
 
 @Entity
@@ -81,4 +90,10 @@ class EvidenceItemEntity(
 
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
+
+    @Column(name = "raw_purged_at")
+    var rawPurgedAt: Instant? = null,
+
+    @Column(name = "raw_purge_reason")
+    var rawPurgeReason: String? = null,
 )

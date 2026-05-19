@@ -80,11 +80,15 @@ class GenerationService(
                 .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
                 .distinct()
         val linkedBundles = sourceBundleRepository.findAllById(linkedBundleIds).associateBy { it.id }
-        if (linkedBundles.size != linkedBundleIds.size || linkedBundles.values.any { it.organizationId != request.organizationId }) {
+        if (linkedBundles.size != linkedBundleIds.size || linkedBundles.values.any { it.organizationId != request.organizationId || it.deletedAt != null }) {
             throw BadRequestException("Generation requires source bundles in the requested organization")
         }
         linkedBundles.values.forEach { bundle ->
             authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
+        }
+        val linkedEvidenceItems = linkedBundleIds.flatMap { evidenceItemRepository.findByBundleId(it) }
+        if (linkedEvidenceItems.isEmpty() || linkedEvidenceItems.any { it.contentText == null }) {
+            throw BadRequestException("Generation requires unpurged source evidence")
         }
 
         val now = Instant.now()
@@ -106,9 +110,8 @@ class GenerationService(
 
         val firstBundle = linkedBundles[links.first().codeBundleId] ?: throw BadRequestException("Generation requires a code bundle")
         val evidenceText =
-            linkedBundleIds
-                .flatMap { evidenceItemRepository.findByBundleId(it) }
-                .mapNotNull { it.contentText }
+            linkedEvidenceItems
+                .map { requireNotNull(it.contentText) }
                 .joinToString("\n")
 
         val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
@@ -191,7 +194,7 @@ class GenerationService(
             sourceLinks.values
                 .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
                 .distinct()
-        val bundlesById = sourceBundleRepository.findAllById(bundleIds).associateBy { it.id }
+        val bundlesById = sourceBundleRepository.findAllById(bundleIds).filter { it.deletedAt == null }.associateBy { it.id }
         val cardsByRunId =
             patternCardRepository
                 .findByGenerationRunIdIn(runs.map { it.id })

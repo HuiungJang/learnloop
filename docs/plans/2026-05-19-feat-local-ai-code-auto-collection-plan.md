@@ -330,8 +330,8 @@ Migration constraints:
 - First run can complete without AI provider setup. Collection/settings remain usable, while generation actions stay disabled until a provider is configured.
 - Repo approval is scoped to normalized repo root, Git common-dir/worktree identity, and sanitized remote fingerprint when available.
 - Revocation stops collection and queued uploads immediately.
-- Purging raw evidence preserves metadata, hashes, lineage, generated cards, and progress by default.
-- Deleting all app data removes database rows, raw artifacts, consent store, shim metadata, local caches, and retained logs where feasible.
+- Purging raw evidence preserves safe metadata, hashes, lineage, generated cards, and progress by default while clearing raw content and raw-ish user-supplied metadata.
+- Deleting all app data in the current backend phase removes app database rows; existing browser storage and future companion consent state, shim metadata, filesystem artifacts, and retained local logs need explicit installed-app cleanup outside this backend endpoint.
 - Attribution overrides are reversible and immediate, with append-only history.
 - Shim install is user-triggered from Settings or install scripts. The MVP does not silently modify PATH.
 - Practice generation is user-triggered in MVP.
@@ -375,9 +375,9 @@ Failure and recovery:
 Delete actions:
 
 - Delete evidence: soft-delete bundle from normal UI and generation queries.
-- Purge raw evidence: remove raw prompt/code/file content while preserving metadata and generated learning assets.
+- Purge raw evidence: remove raw prompt/code/file content and raw-ish user-supplied metadata while preserving generated learning assets.
 - Purge repository evidence: remove evidence and raw artifacts for one approved or revoked repo.
-- Delete all app data: destructive local wipe of database rows, raw artifacts, consent store, shim metadata, local caches, and retained logs where feasible.
+- Delete all app data: destructive local backend wipe of app database rows. Installed-app cleanup for existing browser storage plus companion consent state, shim metadata, filesystem artifacts, and retained local logs is a later UI/companion phase.
 
 All delete/purge audit records must contain no raw content.
 
@@ -444,20 +444,21 @@ Verification:
 
 ### Phase 4: Add Evidence Delete, Raw Purge, And Tombstones
 
-- [ ] Add `DELETE /api/evidence/{bundleId}` for local owner evidence deletion.
-- [ ] Add local-only raw purge endpoint for one bundle, one repo, or all collected evidence.
-- [ ] Add full local app-data delete as a separate destructive path.
-- [ ] Add `source_bundles.deleted_at`, `deleted_by_user_id`, and `deletion_reason`.
-- [ ] Add `evidence_items.raw_purged_at` and `raw_purge_reason`.
-- [ ] Soft-delete bundles from normal UI/generation queries; hard-delete only for full app-data deletion or unreferenced temporary artifacts.
-- [ ] Ensure purge removes raw content from DB fields, filesystem artifacts, staging directories, collector cache, quarantine raw payloads, and API-visible excerpts.
+- [x] Add `DELETE /api/evidence/{bundleId}` for local owner evidence deletion.
+- [x] Add local-only raw purge endpoint for one bundle, one repo, or all collected evidence.
+- [x] Add full local app-data delete as a separate destructive path.
+- [x] Add `source_bundles.deleted_at`, `deleted_by_user_id`, and `deletion_reason`.
+- [x] Add `evidence_items.raw_purged_at` and `raw_purge_reason`.
+- [x] Soft-delete bundles from normal UI/generation queries; hard-delete only for full app-data deletion or unreferenced temporary artifacts.
+- [x] Ensure purge removes raw content from current DB fields, audit metadata, and API-visible excerpts; no durable filesystem artifact, staging, collector cache, or quarantine raw payload store exists yet in this phase.
 
 Verification:
 
-- [ ] Backend tests cover delete evidence, purge raw evidence, purge repo evidence, and full app-data delete semantics.
-- [ ] Generated cards remain readable after raw purge.
-- [ ] Deleted bundles are excluded from generation queries.
-- [ ] Purged sentinel content cannot be found in DB tables, artifact directories, collector cache, audit metadata, or API responses.
+- [x] Backend tests cover delete evidence, single-bundle raw purge, and repo raw purge semantics.
+- [x] Backend tests cover full app-data delete semantics.
+- [x] Generated cards remain readable after raw purge.
+- [x] Deleted bundles are excluded from generation queries.
+- [x] Purged sentinel content cannot be found in current DB tables, audit metadata, or API responses; artifact directories and collector cache are not yet durable stores in this phase.
 
 ### Phase 5: Add Minimal Local Session Evidence Schema And API Contract
 
