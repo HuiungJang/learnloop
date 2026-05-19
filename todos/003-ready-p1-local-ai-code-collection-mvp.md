@@ -178,3 +178,47 @@ Initial Phase 1 files:
 **Learnings:**
 - Soft delete and raw purge are separate user actions, so bulk purge must include already tombstoned evidence.
 - Full-delete tests should fail when a future migration adds an app table that the service does not delete.
+
+### 2026-05-19 - Phase 5 Local Session Evidence Schema
+
+**By:** Codex
+
+**Actions:**
+- Added `V11__local_session_evidence_schema.sql` for `local_ai_session`, local-session artifact item types, attribution columns, attribution events, and generated-asset lineage JSON fields.
+- Extended evidence and generation entities/responses to expose attribution, artifact metadata, and source bundle/evidence item lineage.
+- Added a local AI session request DTO contract with prompt, AI response, before/after file, diff, and tool event artifacts.
+- Added a migration test that applies migrations through V10, inserts old evidence rows, migrates to V11, and verifies defaults plus new constraints.
+- Added a DTO serialization test for the full local session payload.
+- Checked off Phase 5 in the plan document.
+
+**Learnings:**
+- The Phase 4 full-delete test now forces new application tables to be added to `LocalDataService` delete order.
+- Running Flyway to a target version is a practical way to prove compatibility with rows that existed before a new migration.
+
+### 2026-05-19 - Phase 5 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Changed the `evidence_items.item_type` constraint to `NOT VALID` so V10-valid legacy rows with custom item types do not block migration, while new rows still follow the contract.
+- Added a V10 `generation_runs` row to the migration test and verified new lineage columns default to `[]`.
+- Removed `local_ai_session` from the manual ingest allowlist so Phase 7 remains responsible for structured local-session ingestion.
+- Aligned artifact item type names with the plan contract: `file_before` and `file_after`.
+- Added repo identity, display label, tool provider, event/timestamp bucket, idempotency key, and limit reason fields to the local-session DTO contract.
+- Added bounded content response coverage for local-session evidence excerpts.
+
+**Learnings:**
+- Schema contract migrations should not retroactively reject historical rows that were valid under earlier migrations.
+- Contract DTO tests need to mirror the plan terminology exactly because future collectors will use that shape as their integration target.
+
+### 2026-05-19 - Phase 5 Final Review Fix
+
+**By:** Codex
+
+**Actions:**
+- Removed the database-level `evidence_items.item_type` constraint so legacy custom item rows remain updateable for raw purge.
+- Added migration-test coverage that updates a legacy custom item after V11 migration.
+- Clarified the plan that item-type enforcement stays in the DTO/service contract layer.
+
+**Learnings:**
+- A `NOT VALID` PostgreSQL check still applies to updated legacy rows, so it can break retention workflows even if migration itself succeeds.

@@ -46,6 +46,7 @@ class LocalDataService(
                 "pattern_tags",
                 "pattern_cards",
                 "generation_runs",
+                "source_bundle_attribution_events",
                 "source_links",
                 "evidence_items",
                 "source_bundles",

@@ -103,6 +103,8 @@ class GenerationService(
                     visibility = request.visibility,
                     idempotencyKey = request.idempotencyKey,
                     sourceLinkIdsJson = objectMapper.writeValueAsString(request.sourceLinkIds.distinct()),
+                    sourceBundleIdsJson = objectMapper.writeValueAsString(linkedBundleIds),
+                    evidenceItemIdsJson = objectMapper.writeValueAsString(linkedEvidenceItems.map { it.id }),
                     createdAt = now,
                     completedAt = now,
                 ),

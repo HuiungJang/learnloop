@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
 import java.time.Instant
 
 @RestController
@@ -35,9 +36,10 @@ class EvidenceController(
         @PathVariable bundleId: String,
     ): EvidenceDetailResponse {
         val detail = evidenceService.readBundle(currentUser, bundleId)
+        val contentLimit = if (detail.bundle.sourceKind == "local_ai_session") LOCAL_SESSION_DETAIL_EXCERPT_LIMIT else null
         return EvidenceDetailResponse(
             bundle = detail.bundle.toResponse(),
-            evidenceItems = detail.items.map { it.toResponse(includeContent = true) },
+            evidenceItems = detail.items.map { it.toResponse(includeContent = true, contentLimit = contentLimit) },
         )
     }
 
@@ -88,6 +90,48 @@ data class ManualIngestRequest(
     val content: String = "",
 )
 
+data class LocalAiSessionIngestRequest(
+    @field:NotBlank
+    val organizationId: String = "",
+    val teamId: String? = null,
+    val projectId: String? = null,
+    @field:NotBlank
+    val title: String = "",
+    val sourceKind: String = "local_ai_session",
+    @field:NotBlank
+    val repoIdentityHash: String = "",
+    @field:NotBlank
+    val repositoryDisplayLabel: String = "",
+    val repositoryUrl: String? = null,
+    val commitSha: String? = null,
+    val branchName: String? = null,
+    @field:NotBlank
+    val toolProvider: String = "",
+    val toolSessionId: String? = null,
+    val toolEventId: String? = null,
+    val timestampBucket: String? = null,
+    @field:NotBlank
+    val idempotencyKey: String = "",
+    val autoAttribution: String = "ai_assisted",
+    val attributionConfidence: BigDecimal? = null,
+    val attributionReasons: List<String> = emptyList(),
+    @field:Size(min = 1)
+    val artifacts: List<LocalAiSessionArtifactRequest> = emptyList(),
+)
+
+data class LocalAiSessionArtifactRequest(
+    @field:NotBlank
+    val itemType: String = "",
+    val repoRelativePath: String? = null,
+    val sizeBytes: Long? = null,
+    val metadata: Map<String, String> = emptyMap(),
+    @field:NotBlank
+    val contentHash: String = "",
+    val contentTruncated: Boolean = false,
+    val limitReason: String? = null,
+    val content: String? = null,
+)
+
 data class ManualIngestResponse(
     val bundle: SourceBundleResponse,
     val evidenceItem: EvidenceItemResponse,
@@ -130,6 +174,10 @@ data class SourceBundleResponse(
     val deletedAt: Instant?,
     val deletedByUserId: String?,
     val deletionReason: String?,
+    val autoAttribution: String,
+    val userAttribution: String?,
+    val attributionConfidence: BigDecimal?,
+    val attributionReasonsJson: String,
 )
 
 data class EvidenceItemResponse(
@@ -141,6 +189,11 @@ data class EvidenceItemResponse(
     val createdAt: Instant,
     val rawPurgedAt: Instant?,
     val rawPurgeReason: String?,
+    val repoRelativePath: String?,
+    val sizeBytes: Long?,
+    val metadataJson: String,
+    val contentTruncated: Boolean,
+    val limitReason: String?,
 )
 
 fun SourceBundleEntity.toResponse(): SourceBundleResponse =
@@ -164,16 +217,37 @@ fun SourceBundleEntity.toResponse(): SourceBundleResponse =
         deletedAt = deletedAt,
         deletedByUserId = deletedByUserId,
         deletionReason = deletionReason,
+        autoAttribution = autoAttribution,
+        userAttribution = userAttribution,
+        attributionConfidence = attributionConfidence,
+        attributionReasonsJson = attributionReasonsJson,
     )
 
-fun EvidenceItemEntity.toResponse(includeContent: Boolean): EvidenceItemResponse =
+fun EvidenceItemEntity.toResponse(
+    includeContent: Boolean,
+    contentLimit: Int? = null,
+): EvidenceItemResponse =
     EvidenceItemResponse(
         id = id,
         bundleId = bundleId,
         itemType = itemType,
-        contentText = if (includeContent) contentText else null,
+        contentText = if (includeContent) contentText?.bounded(contentLimit) else null,
         contentHash = contentHash,
         createdAt = createdAt,
         rawPurgedAt = rawPurgedAt,
         rawPurgeReason = rawPurgeReason,
+        repoRelativePath = repoRelativePath,
+        sizeBytes = sizeBytes,
+        metadataJson = metadataJson,
+        contentTruncated = contentTruncated,
+        limitReason = limitReason,
     )
+
+private fun String.bounded(limit: Int?): String =
+    if (limit == null || length <= limit) {
+        this
+    } else {
+        take(limit)
+    }
+
+private const val LOCAL_SESSION_DETAIL_EXCERPT_LIMIT = 2_000

@@ -29,3 +29,5 @@ interface EvidenceItemRepository : JpaRepository<EvidenceItemEntity, String> {
 
     fun findByBundleIdIn(bundleIds: Collection<String>): List<EvidenceItemEntity>
 }
+
+interface SourceBundleAttributionEventRepository : JpaRepository<SourceBundleAttributionEventEntity, String>

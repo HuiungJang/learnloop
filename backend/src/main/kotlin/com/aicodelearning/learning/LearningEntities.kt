@@ -35,6 +35,12 @@ class GenerationRunEntity(
     @Column(name = "source_link_ids_json", nullable = false)
     var sourceLinkIdsJson: String = "[]",
 
+    @Column(name = "source_bundle_ids_json", nullable = false)
+    var sourceBundleIdsJson: String = "[]",
+
+    @Column(name = "evidence_item_ids_json", nullable = false)
+    var evidenceItemIdsJson: String = "[]",
+
     @Column(name = "failure_code")
     var failureCode: String? = null,
 

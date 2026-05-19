@@ -462,19 +462,21 @@ Verification:
 
 ### Phase 5: Add Minimal Local Session Evidence Schema And API Contract
 
-- [ ] Add source kind `local_ai_session` through a new Flyway migration.
-- [ ] Drop/recreate affected check constraints in the new migration; do not edit old migrations.
-- [ ] Add item types for prompt, AI response, before file, after file, diff, and tool event.
-- [ ] Add artifact metadata fields: repo-relative path, size bytes, metadata JSON, content hash, content truncated, and raw purged timestamp.
-- [ ] Add source-bundle attribution columns: `auto_attribution`, `user_attribution`, `attribution_confidence`, and `attribution_reasons_json`.
-- [ ] Add `source_bundle_attribution_events` for append-only attribution history.
-- [ ] Add generated-asset lineage references to source bundle ids and evidence item ids where missing.
+- [x] Add source kind `local_ai_session` through a new Flyway migration.
+- [x] Drop/recreate affected check constraints in the new migration; do not edit old migrations.
+- [x] Add item types for prompt, AI response, before file, after file, diff, and tool event.
+- [x] Keep item-type enforcement at the DTO/service contract layer so legacy free-form `evidence_items.item_type` rows remain purgeable.
+- [x] Add artifact metadata fields: repo-relative path, size bytes, metadata JSON, content hash, content truncated, and raw purged timestamp.
+- [x] Add source-bundle attribution columns: `auto_attribution`, `user_attribution`, `attribution_confidence`, and `attribution_reasons_json`.
+- [x] Add `source_bundle_attribution_events` for append-only attribution history.
+- [x] Add generated-asset lineage references to source bundle ids and evidence item ids where missing.
 
 Verification:
 
-- [ ] Migration test proves old evidence rows remain readable with default values.
-- [ ] DTO serialization test covers a full local session payload.
-- [ ] Constraint migration is tested against existing rows.
+- [x] Migration test proves old evidence rows remain readable with default values.
+- [x] DTO serialization test covers a full local session payload.
+- [x] Constraint migration is tested against existing rows.
+- [x] Migration test proves legacy free-form item types remain updateable for raw purge.
 
 ### Phase 6: Validate Paths, Limits, Ignore Rules, And Secret Scan Staging
 
