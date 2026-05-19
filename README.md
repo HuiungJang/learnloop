@@ -149,7 +149,7 @@ LearnLoop uses GitHub Actions for the main quality and release gates.
 
 - `CI` runs on pull requests and pushes to `main`: changed-file validation, tests, builds, dependency checks, secret scanning, filesystem scanning, and container image scanning.
 - `CodeQL` runs on pull requests, pushes to `main`, and a weekly schedule for Kotlin and TypeScript static analysis.
-- `Release` runs on version tags such as `v0.1.0` or manual dispatch: tests, build, security scan, release bundle packaging, and GitHub Release publishing.
+- `Release` runs after a successful `CI` run on `main`, on version tags such as `v0.1.0`, or by manual dispatch. Successful `main` CI runs publish prerelease snapshot releases; version tags publish stable GitHub Releases.
 
 ## Development
 
