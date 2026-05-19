@@ -86,6 +86,13 @@ class SourceBundleEntity(
     var dedupeKey: String? = null,
 )
 
+fun SourceBundleEntity.passesGenerationCurationGate(): Boolean =
+    sourceKind != LocalAiSessionPolicy.SOURCE_KIND ||
+        (status == LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE && userAttribution == LocalAiSessionPolicy.USER_ATTRIBUTION_USE_FOR_GENERATION)
+
+fun List<EvidenceItemEntity>.stableLocalSessionItemOrder(): List<EvidenceItemEntity> =
+    sortedWith(compareBy({ LocalAiSessionPolicy.itemSortRank(it.itemType) }, { it.repoRelativePath.orEmpty() }, { it.id }))
+
 @Entity
 @Table(name = "evidence_items")
 class EvidenceItemEntity(

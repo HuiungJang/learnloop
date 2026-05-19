@@ -319,3 +319,54 @@ Initial Phase 1 files:
 - Idempotency keys must include safety state, not only accepted artifacts, because ignored artifacts can still carry secret findings.
 - Ignored artifacts do not persist raw content, but their submitted content still affects quarantine decisions.
 - Request-level metadata can carry secrets too; token-shaped fields still need scanner checks before persistence.
+
+### 2026-05-20 - Phase 8 Attribution Override
+
+**By:** Codex
+
+**Actions:**
+- Added `PATCH /api/evidence/{bundleId}/attribution` for local-owner curation.
+- Implemented user attribution values `use_for_generation`, `manual`, and `delete`.
+- Preserved `autoAttribution` separately while writing each user override to `source_bundle_attribution_events`.
+- Changed generation eligibility through user curation without mutating the collected evidence status.
+- Blocked `use_for_generation` for quarantined or otherwise unsafe evidence.
+- Added audit metadata for attribution overrides using only bundle id, attribution values, confidence, safe reason codes, and status.
+- Added integration tests for eligibility changes, repeated override history, audit-safe metadata, and quarantined evidence gating.
+- Checked off Phase 8 in the plan document.
+
+**Learnings:**
+- User-entered attribution reasons should be treated as reason codes, not free-form notes, because audit metadata must never become a raw evidence side channel.
+- Automatic attribution and user curation need separate storage semantics: the user can override generation eligibility without mutating the original detection result.
+
+### 2026-05-20 - Phase 8 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Restricted attribution override to `local_ai_session` bundles only.
+- Kept automatic attribution confidence and reason fields immutable on the bundle; user override confidence and reason codes now live in attribution events and audit metadata.
+- Added a shared local-session generation curation predicate.
+- Blocked local-session source-link suggestion, source-link confirmation, and generation unless local evidence is marked `use_for_generation`.
+- Made `delete` attribution delegate to the existing soft-delete semantics.
+- Filtered local-session generation input to prompt/AI response/before/after/diff artifacts so `tool_event` metadata can remain raw-free.
+- Serialized attribution override and evidence delete mutations with a row lock so stale curation updates cannot commit after a delete.
+- Made generation participate in the same source-bundle row lock before checking local-session curation.
+- Made source-link suggest and confirm participate in the same source-bundle row lock before checking curation.
+- Made raw purge participate in the same source-bundle row lock before clearing evidence item content.
+- Moved sorted source-bundle row locking to a shared repository helper.
+- Renamed the lock helper to make its existing-row contract explicit.
+- Applied stable local-session item ordering to evidence detail reads.
+- Renamed the generation curation predicate to describe the full pass-through gate policy.
+- Split required locked bundle loading from existing-row purge locking in generation and source-link flows.
+- Moved stable local-session item ordering to a shared evidence helper.
+- Centralized local-session source kind, generation status, curation values, generation item types, and item ordering in `LocalAiSessionPolicy`.
+- Moved local-session item-type predicates such as diff/tool-event/content-required into `LocalAiSessionPolicy`.
+- Sorted local-session generation artifacts by type, path, and id before building the generation prompt.
+- Preserved requested source-link order when building multi-link generation input.
+- Updated tests to verify non-local override rejection, source-link/generation gating, append-only event history without timestamp ordering assumptions, soft-delete behavior, tool-event filtering, and preserved automatic metadata.
+
+**Learnings:**
+- Changing a curation field is not enough unless every generation entrypoint uses the same effective eligibility predicate.
+- `delete` needs to behave like the destructive evidence action; otherwise API naming would mislead the UI and user.
+- Local-session `tool_event` artifacts are useful lineage metadata, but they must not be treated as required raw generation content.
+- The preflight eligibility policy and generation input policy should share one definition so they do not drift.

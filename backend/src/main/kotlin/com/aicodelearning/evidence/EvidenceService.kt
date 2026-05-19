@@ -120,7 +120,7 @@ class EvidenceService(
         currentUser: CurrentUser,
         request: LocalAiSessionIngestRequest,
     ): LocalAiSessionIngestResult {
-        if (request.sourceKind != LOCAL_SESSION_SOURCE_KIND) {
+        if (request.sourceKind != LocalAiSessionPolicy.SOURCE_KIND) {
             throw BadRequestException("sourceKind must be local_ai_session")
         }
         localOwnerAccess.requireLocalOwner(currentUser)
@@ -158,7 +158,11 @@ class EvidenceService(
             throw NotFoundException("Evidence bundle not found")
         }
         authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
-        return EvidenceDetail(bundle = bundle, items = evidenceItemRepository.findByBundleId(bundle.id))
+        val items = evidenceItemRepository.findByBundleId(bundle.id)
+        return EvidenceDetail(
+            bundle = bundle,
+            items = if (bundle.sourceKind == LocalAiSessionPolicy.SOURCE_KIND) items.stableLocalSessionItemOrder() else items,
+        )
     }
 
     @Transactional
@@ -166,17 +170,75 @@ class EvidenceService(
         currentUser: CurrentUser,
         bundleId: String,
     ) {
-        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow { NotFoundException("Evidence bundle not found") }
+        val bundle = sourceBundleRepository.findForUpdateById(bundleId) ?: throw NotFoundException("Evidence bundle not found")
         localOwnerAccess.requireLocalOwner(currentUser)
         authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
         if (bundle.deletedAt != null) {
             return
         }
+        markBundleDeleted(currentUser, bundle)
+    }
 
-        bundle.deletedAt = Instant.now()
-        bundle.deletedByUserId = currentUser.id
-        bundle.deletionReason = "local_owner_delete"
-        auditService.append(currentUser, bundle.organizationId, "evidence.deleted", "source_bundle", bundle.id, mapOf("status" to "deleted"))
+    @Transactional
+    fun updateAttribution(
+        currentUser: CurrentUser,
+        bundleId: String,
+        request: AttributionOverrideRequest,
+    ): SourceBundleEntity {
+        val bundle = sourceBundleRepository.findForUpdateById(bundleId) ?: throw NotFoundException("Evidence bundle not found")
+        if (bundle.deletedAt != null) {
+            throw NotFoundException("Evidence bundle not found")
+        }
+        if (bundle.sourceKind != LocalAiSessionPolicy.SOURCE_KIND) {
+            throw BadRequestException("attribution override supports local AI session evidence only")
+        }
+        localOwnerAccess.requireLocalOwner(currentUser)
+        authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
+
+        val userAttribution = requireAllowedUserAttribution(request.userAttribution)
+        val overrideConfidence = requireValidConfidence(request.attributionConfidence)
+        val overrideReasons = safeAttributionReasons(request.attributionReasons)
+        val overrideReasonsJson = objectMapper.writeValueAsString(overrideReasons)
+        val now = Instant.now()
+        requireValidAttributionState(bundle, userAttribution)
+
+        bundle.userAttribution = userAttribution
+
+        sourceBundleAttributionEventRepository.save(
+            SourceBundleAttributionEventEntity(
+                id = prefixedId("attr_event"),
+                bundleId = bundle.id,
+                organizationId = bundle.organizationId,
+                actorUserId = currentUser.id,
+                eventType = "user_override",
+                autoAttribution = bundle.autoAttribution,
+                userAttribution = bundle.userAttribution,
+                attributionConfidence = overrideConfidence,
+                attributionReasonsJson = overrideReasonsJson,
+                createdAt = now,
+            ),
+        )
+        auditService.append(
+            actor = currentUser,
+            organizationId = bundle.organizationId,
+            eventType = "evidence.attribution_overridden",
+            targetType = "source_bundle",
+            targetId = bundle.id,
+            metadata =
+                mapOf(
+                    "bundleId" to bundle.id,
+                    "status" to bundle.status,
+                    "autoAttribution" to bundle.autoAttribution,
+                    "userAttribution" to userAttribution,
+                    "attributionConfidence" to overrideConfidence,
+                    "attributionReasons" to overrideReasons,
+                ),
+        )
+        if (userAttribution == LocalAiSessionPolicy.USER_ATTRIBUTION_DELETE) {
+            markBundleDeleted(currentUser, bundle)
+        }
+
+        return bundle
     }
 
     @Transactional
@@ -184,7 +246,7 @@ class EvidenceService(
         currentUser: CurrentUser,
         bundleId: String,
     ): RawPurgeResponse {
-        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow { NotFoundException("Evidence bundle not found") }
+        val bundle = sourceBundleRepository.findForUpdateById(bundleId) ?: throw NotFoundException("Evidence bundle not found")
         localOwnerAccess.requireLocalOwner(currentUser)
         authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
         return purgeRawForBundles(currentUser, listOf(bundle), BUNDLE_RAW_PURGE_REASON)
@@ -209,7 +271,7 @@ class EvidenceService(
             } else {
                 sourceBundleRepository.findByOrganizationId(organizationId)
             }
-        return purgeRawForBundles(currentUser, bundles, if (purgeAll) ALL_RAW_PURGE_REASON else REPOSITORY_RAW_PURGE_REASON)
+        return purgeRawForBundles(currentUser, sourceBundleRepository.findExistingForUpdateSortedById(bundles.map { it.id }), if (purgeAll) ALL_RAW_PURGE_REASON else REPOSITORY_RAW_PURGE_REASON)
     }
 
     private fun purgeRawForBundles(
@@ -261,6 +323,19 @@ class EvidenceService(
         return RawPurgeResponse(purgedBundles = changedBundleIds.size, purgedItems = changedItems.size)
     }
 
+    private fun markBundleDeleted(
+        currentUser: CurrentUser,
+        bundle: SourceBundleEntity,
+    ) {
+        if (bundle.deletedAt != null) {
+            return
+        }
+        bundle.deletedAt = Instant.now()
+        bundle.deletedByUserId = currentUser.id
+        bundle.deletionReason = "local_owner_delete"
+        auditService.append(currentUser, bundle.organizationId, "evidence.deleted", "source_bundle", bundle.id, mapOf("status" to "deleted"))
+    }
+
     private fun persistLocalAiSession(
         currentUser: CurrentUser,
         request: LocalAiSessionIngestRequest,
@@ -268,7 +343,7 @@ class EvidenceService(
         dedupeKey: String,
     ): LocalAiSessionIngestResult {
         val now = Instant.now()
-        val status = if (preflight.generationEligible) "generation_eligible" else preflight.status
+        val status = if (preflight.generationEligible) LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE else preflight.status
         val findings = preflight.secretFindings
         val bundle =
             sourceBundleRepository.save(
@@ -279,7 +354,7 @@ class EvidenceService(
                     projectId = request.projectId,
                     createdByUserId = currentUser.id,
                     title = safeLocalSessionTitle(request),
-                    sourceKind = LOCAL_SESSION_SOURCE_KIND,
+                    sourceKind = LocalAiSessionPolicy.SOURCE_KIND,
                     status = status,
                     repositoryUrl = localRepositoryReference(request),
                     commitSha = safeCommitSha(request.commitSha),
@@ -343,7 +418,7 @@ class EvidenceService(
 
         return LocalAiSessionIngestResult(
             bundle = bundle,
-            items = items.stableItemOrder(),
+            items = items.stableLocalSessionItemOrder(),
             ignoredArtifacts = preflight.ignoredArtifacts,
             duplicate = false,
         )
@@ -357,12 +432,12 @@ class EvidenceService(
         sourceBundleRepository
             .findFirstByOrganizationIdAndSourceKindAndDedupeKeyAndDeletedAtIsNullOrderByCreatedAtDesc(
                 organizationId,
-                LOCAL_SESSION_SOURCE_KIND,
+                LocalAiSessionPolicy.SOURCE_KIND,
                 dedupeKey,
             )?.let {
                 LocalAiSessionIngestResult(
                     bundle = it,
-                    items = evidenceItemRepository.findByBundleId(it.id).stableItemOrder(),
+                    items = evidenceItemRepository.findByBundleId(it.id).stableLocalSessionItemOrder(),
                     ignoredArtifacts = preflight.ignoredArtifacts,
                     duplicate = true,
                 )
@@ -427,7 +502,7 @@ class EvidenceService(
                 }
         return sha256Hex(
             listOf(
-                LOCAL_SESSION_SOURCE_KIND,
+                LocalAiSessionPolicy.SOURCE_KIND,
                 request.repoIdentityHash.trim(),
                 eventKey,
                 preflight.status,
@@ -483,6 +558,14 @@ class EvidenceService(
         return normalized
     }
 
+    private fun requireAllowedUserAttribution(userAttribution: String): String {
+        val normalized = userAttribution.trim()
+        if (normalized !in allowedLocalUserAttributions) {
+            throw BadRequestException("userAttribution is not supported")
+        }
+        return normalized
+    }
+
     private fun requireValidConfidence(confidence: BigDecimal?): BigDecimal? {
         if (confidence != null && (confidence < BigDecimal.ZERO || confidence > BigDecimal.ONE)) {
             throw BadRequestException("attributionConfidence must be between 0 and 1")
@@ -491,7 +574,19 @@ class EvidenceService(
     }
 
     private fun safeAttributionReasons(reasons: List<String>): List<String> =
-        reasons.mapNotNull { safeRequestToken(it) }.distinct().take(MAX_ATTRIBUTION_REASONS)
+        reasons.mapNotNull { safeRequestToken(it) }
+            .filter { it in allowedAttributionReasons }
+            .distinct()
+            .take(MAX_ATTRIBUTION_REASONS)
+
+    private fun requireValidAttributionState(
+        bundle: SourceBundleEntity,
+        userAttribution: String,
+    ) {
+        if (userAttribution == LocalAiSessionPolicy.USER_ATTRIBUTION_USE_FOR_GENERATION && bundle.status != LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE) {
+            throw BadRequestException("evidence is not safe for generation")
+        }
+    }
 
     private fun safeCommitSha(commitSha: String?): String? =
         commitSha?.trim()?.takeIf { commitShaPattern.matches(it) }
@@ -505,12 +600,8 @@ class EvidenceService(
     private fun safeRequestToken(value: String): String? =
         value.trim().takeIf { safeTokenPattern.matches(it) && secretScanner.scan(it).isEmpty() }
 
-    private fun List<EvidenceItemEntity>.stableItemOrder(): List<EvidenceItemEntity> =
-        sortedWith(compareBy({ itemTypeOrder[it.itemType] ?: Int.MAX_VALUE }, { it.repoRelativePath.orEmpty() }, { it.id }))
-
     private companion object {
         val allowedSourceKinds = setOf("code", "diff", "commit", "pull_request", "conversation", "supporting_context")
-        const val LOCAL_SESSION_SOURCE_KIND = "local_ai_session"
         const val BUNDLE_RAW_PURGE_REASON = "local_owner_bundle_raw_purge"
         const val REPOSITORY_RAW_PURGE_REASON = "local_owner_repository_raw_purge"
         const val ALL_RAW_PURGE_REASON = "local_owner_all_raw_purge"
@@ -520,19 +611,12 @@ class EvidenceService(
         const val MAX_ATTRIBUTION_REASONS = 20
         const val MAX_BRANCH_CHARS = 120
         val allowedLocalAutoAttributions = setOf("ai_assisted", "manual_or_unknown")
+        val allowedLocalUserAttributions = LocalAiSessionPolicy.userAttributions
+        val allowedAttributionReasons = setOf("tool_session", "changed_files", "human_review", "curation_approved", "user_deleted")
         val safeTokenPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.:#@+-]{0,119}$")
         val commitShaPattern = Regex("^[a-fA-F0-9]{7,64}$")
         val safeBranchPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_./#@+-]{0,119}$")
         val unsafeLocalPathPattern = Regex("""(^|[^A-Za-z0-9._-])(?:/|~|[A-Za-z]:[\\/]|\\\\)[^\s]+""")
-        val itemTypeOrder =
-            mapOf(
-                "prompt" to 0,
-                "ai_response" to 1,
-                "file_before" to 2,
-                "file_after" to 3,
-                "diff" to 4,
-                "tool_event" to 5,
-            )
     }
 }
 

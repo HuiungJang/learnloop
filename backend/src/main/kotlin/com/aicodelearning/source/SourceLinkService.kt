@@ -5,6 +5,8 @@ import com.aicodelearning.auth.CurrentUser
 import com.aicodelearning.evidence.EvidenceItemRepository
 import com.aicodelearning.evidence.SourceBundleEntity
 import com.aicodelearning.evidence.SourceBundleRepository
+import com.aicodelearning.evidence.findExistingForUpdateSortedById
+import com.aicodelearning.evidence.passesGenerationCurationGate
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.NotFoundException
@@ -29,8 +31,9 @@ class SourceLinkService(
         conversationBundleId: String,
         codeBundleId: String,
     ): SourceLinkEntity {
-        val conversation = sourceBundleRepository.findById(conversationBundleId).orElseThrow { NotFoundException("Conversation bundle not found") }
-        val code = sourceBundleRepository.findById(codeBundleId).orElseThrow { NotFoundException("Code bundle not found") }
+        val bundles = requiredLockedSourceBundlesById(listOf(conversationBundleId, codeBundleId))
+        val conversation = bundles.getValue(conversationBundleId)
+        val code = bundles.getValue(codeBundleId)
         if (conversation.deletedAt != null || code.deletedAt != null) {
             throw NotFoundException("Source bundle not found")
         }
@@ -39,6 +42,8 @@ class SourceLinkService(
         }
         authorizationService.requireRole(currentUser, conversation.organizationId, "contributor", conversation.teamId, conversation.projectId)
         authorizationService.requireRole(currentUser, code.organizationId, "contributor", code.teamId, code.projectId)
+        requireGenerationCurated(conversation)
+        requireGenerationCurated(code)
 
         val confidence = similarity(bundleText(conversation), bundleText(code))
         val link =
@@ -65,13 +70,18 @@ class SourceLinkService(
         status: String,
     ): SourceLinkEntity {
         val link = sourceLinkRepository.findById(linkId).orElseThrow { NotFoundException("Source link not found") }
-        val conversation = sourceBundleRepository.findById(link.conversationBundleId).orElseThrow { NotFoundException("Conversation bundle not found") }
-        val code = sourceBundleRepository.findById(link.codeBundleId).orElseThrow { NotFoundException("Code bundle not found") }
+        val bundles = requiredLockedSourceBundlesById(listOf(link.conversationBundleId, link.codeBundleId))
+        val conversation = bundles.getValue(link.conversationBundleId)
+        val code = bundles.getValue(link.codeBundleId)
         if (conversation.deletedAt != null || code.deletedAt != null) {
             throw NotFoundException("Source bundle not found")
         }
         authorizationService.requireRole(currentUser, conversation.organizationId, "contributor", conversation.teamId, conversation.projectId)
         authorizationService.requireRole(currentUser, code.organizationId, "contributor", code.teamId, code.projectId)
+        if (status == "confirmed") {
+            requireGenerationCurated(conversation)
+            requireGenerationCurated(code)
+        }
         link.status = status
         link.decidedByUserId = currentUser.id
         link.decidedAt = Instant.now()
@@ -84,6 +94,23 @@ class SourceLinkService(
             .findByBundleId(bundle.id)
             .mapNotNull { it.contentText }
             .joinToString("\n")
+
+    private fun requireGenerationCurated(bundle: SourceBundleEntity) {
+        if (!bundle.passesGenerationCurationGate()) {
+            throw BadRequestException("Local AI session evidence must be marked for generation")
+        }
+    }
+
+    private fun requiredLockedSourceBundlesById(bundleIds: List<String>): Map<String, SourceBundleEntity> {
+        val requestedIds = bundleIds.distinct()
+        val bundlesById =
+            sourceBundleRepository.findExistingForUpdateSortedById(requestedIds)
+                .associateBy { it.id }
+        if (bundlesById.size != requestedIds.size) {
+            throw NotFoundException("Source bundle not found")
+        }
+        return bundlesById
+    }
 
     private fun similarity(
         left: String,

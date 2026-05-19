@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -51,7 +52,7 @@ class EvidenceController(
         @PathVariable bundleId: String,
     ): EvidenceDetailResponse {
         val detail = evidenceService.readBundle(currentUser, bundleId)
-        val contentLimit = if (detail.bundle.sourceKind == "local_ai_session") LOCAL_SESSION_DETAIL_EXCERPT_LIMIT else null
+        val contentLimit = if (detail.bundle.sourceKind == LocalAiSessionPolicy.SOURCE_KIND) LOCAL_SESSION_DETAIL_EXCERPT_LIMIT else null
         return EvidenceDetailResponse(
             bundle = detail.bundle.toResponse(),
             evidenceItems = detail.items.map { it.toResponse(includeContent = true, contentLimit = contentLimit) },
@@ -66,6 +67,13 @@ class EvidenceController(
     ) {
         evidenceService.deleteBundle(currentUser, bundleId)
     }
+
+    @PatchMapping("/api/evidence/{bundleId}/attribution")
+    fun updateAttribution(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @PathVariable bundleId: String,
+        @Valid @RequestBody request: AttributionOverrideRequest,
+    ): SourceBundleResponse = evidenceService.updateAttribution(currentUser, bundleId, request).toResponse()
 
     @PostMapping("/api/evidence/{bundleId}/purge-raw")
     fun purgeBundleRaw(
@@ -112,7 +120,7 @@ data class LocalAiSessionIngestRequest(
     val projectId: String? = null,
     @field:NotBlank
     val title: String = "",
-    val sourceKind: String = "local_ai_session",
+    val sourceKind: String = LocalAiSessionPolicy.SOURCE_KIND,
     @field:NotBlank
     val repoIdentityHash: String = "",
     @field:NotBlank
@@ -176,6 +184,14 @@ data class ScopedRawPurgeRequest(
     val organizationId: String = "",
     val repositoryUrl: String? = null,
     val purgeAll: Boolean = false,
+)
+
+data class AttributionOverrideRequest(
+    @field:NotBlank
+    val userAttribution: String = "",
+    val attributionConfidence: BigDecimal? = null,
+    @field:Size(max = 20)
+    val attributionReasons: List<String> = emptyList(),
 )
 
 data class RawPurgeResponse(

@@ -35,13 +35,13 @@ class LocalSessionArtifactPreflight(
         request.artifacts.forEachIndexed { index, artifact ->
             requireAllowedItemType(artifact.itemType)
             val normalizedPath = artifact.repoRelativePath?.let(::normalizeArtifactPath)
-            if (artifact.itemType in itemTypesRequiringPath && normalizedPath == null) {
+            if (artifact.itemType in LocalAiSessionPolicy.itemTypesRequiringPath && normalizedPath == null) {
                 throw BadRequestException("${artifact.itemType} artifacts require a repo-relative path")
             }
-            if (artifact.itemType !in itemTypesRequiringPath && normalizedPath != null) {
+            if (artifact.itemType !in LocalAiSessionPolicy.itemTypesRequiringPath && normalizedPath != null) {
                 throw BadRequestException("${artifact.itemType} artifacts must not include a repo-relative path")
             }
-            if (artifact.itemType in itemTypesRequiringPath && normalizedPath != null) {
+            if (artifact.itemType in LocalAiSessionPolicy.itemTypesRequiringPath && normalizedPath != null) {
                 filePaths += normalizedPath
                 if (filePaths.size > MAX_FILES) {
                     throw BadRequestException("local session may include at most $MAX_FILES files")
@@ -60,7 +60,7 @@ class LocalSessionArtifactPreflight(
                 throw BadRequestException("local session exceeds maximum size")
             }
             totalBytes += metadataBytes
-            if (artifact.itemType == "diff") {
+            if (LocalAiSessionPolicy.isDiff(artifact.itemType)) {
                 totalDiffBytes =
                     if (totalDiffBytes > MAX_DIFF_BYTES.toLong() || byteSize > MAX_DIFF_BYTES.toLong() - totalDiffBytes) {
                         MAX_DIFF_BYTES + 1L
@@ -125,7 +125,7 @@ class LocalSessionArtifactPreflight(
                         },
                     sizeBytes = byteSize,
                     metadata = metadataForResult,
-                    contentText = if (artifact.itemType != "tool_event" && limitReason == null && artifactFindings.isEmpty()) artifact.content else null,
+                    contentText = if (LocalAiSessionPolicy.requiresGenerationContent(artifact.itemType) && limitReason == null && artifactFindings.isEmpty()) artifact.content else null,
                     contentTruncated = artifact.contentTruncated || limitReason != null,
                     limitReason = limitReason,
                     secretFindings = artifactFindings,
@@ -133,8 +133,8 @@ class LocalSessionArtifactPreflight(
         }
 
         val hasSecrets = findings.isNotEmpty()
-        val hasMissingRequiredContent = accepted.any { it.itemType != "tool_event" && it.contentText == null }
-        val hasGenerationArtifact = accepted.any { it.itemType in generationArtifactTypes }
+        val hasMissingRequiredContent = accepted.any { LocalAiSessionPolicy.requiresGenerationContent(it.itemType) && it.contentText == null }
+        val hasGenerationArtifact = accepted.any { it.itemType in LocalAiSessionPolicy.generationItemTypes }
         return LocalSessionPreflightResult(
             status =
                 when {
@@ -208,7 +208,7 @@ class LocalSessionArtifactPreflight(
     }
 
     private fun requireAllowedItemType(itemType: String) {
-        if (itemType !in allowedItemTypes) {
+        if (itemType !in LocalAiSessionPolicy.itemTypes) {
             throw BadRequestException("artifact itemType is not supported")
         }
     }
@@ -313,10 +313,10 @@ class LocalSessionArtifactPreflight(
         if (contentTruncated) {
             return normalizeLimitReason(limitReason) ?: "client_truncated"
         }
-        if (itemType == "diff" && (byteSize > MAX_DIFF_BYTES || totalDiffBytes > MAX_DIFF_BYTES)) {
+        if (LocalAiSessionPolicy.isDiff(itemType) && (byteSize > MAX_DIFF_BYTES || totalDiffBytes > MAX_DIFF_BYTES)) {
             return "diff_too_large"
         }
-        if (itemType != "diff" && byteSize > MAX_TEXT_ARTIFACT_BYTES) {
+        if (!LocalAiSessionPolicy.isDiff(itemType) && byteSize > MAX_TEXT_ARTIFACT_BYTES) {
             return "artifact_too_large"
         }
         return normalizeLimitReason(limitReason)
@@ -342,13 +342,10 @@ class LocalSessionArtifactPreflight(
         const val MAX_METADATA_DURATION_MS = 86_400_000L
         const val UNSAFE_CONTENT_PATH_LIMIT_REASON = "unsafe_content_path"
 
-        private val allowedItemTypes = setOf("prompt", "ai_response", "file_before", "file_after", "diff", "tool_event")
-        private val generationArtifactTypes = setOf("prompt", "ai_response", "file_before", "file_after", "diff")
         private val allowedMetadataKeys = setOf("language", "event", "exitCode", "tool", "provider", "durationMs", "truncated")
         private val allowedLimitReasons = setOf("client_truncated", "artifact_too_large", "diff_too_large")
         private val metadataSlugPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.+#-]{0,63}$")
         private val sha256Pattern = Regex("^[a-fA-F0-9]{64}$")
-        private val itemTypesRequiringPath = setOf("file_before", "file_after", "diff")
         private val windowsDrivePattern = Regex("^[A-Za-z]:.*")
         private val embeddedAbsolutePathPattern = Regex("""(^|[^A-Za-z0-9._-])/[^\s]+""")
         private val embeddedHomePathPattern = Regex("""(^|[^A-Za-z0-9._-])~[^\s]+""")

@@ -2,8 +2,14 @@ package com.aicodelearning.learning
 
 import com.aicodelearning.audit.AuditService
 import com.aicodelearning.auth.CurrentUser
+import com.aicodelearning.evidence.EvidenceItemEntity
 import com.aicodelearning.evidence.EvidenceItemRepository
+import com.aicodelearning.evidence.LocalAiSessionPolicy
+import com.aicodelearning.evidence.SourceBundleEntity
 import com.aicodelearning.evidence.SourceBundleRepository
+import com.aicodelearning.evidence.findExistingForUpdateSortedById
+import com.aicodelearning.evidence.passesGenerationCurationGate
+import com.aicodelearning.evidence.stableLocalSessionItemOrder
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ForbiddenException
@@ -71,23 +77,31 @@ class GenerationService(
             throw ForbiddenException("Organization publication requires an approved provider")
         }
 
-        val links = sourceLinkRepository.findByIdIn(request.sourceLinkIds)
-        if (links.size != request.sourceLinkIds.toSet().size || links.any { it.organizationId != request.organizationId || it.status != "confirmed" }) {
+        val requestedSourceLinkIds = request.sourceLinkIds.distinct()
+        val linksById = sourceLinkRepository.findByIdIn(requestedSourceLinkIds).associateBy { it.id }
+        val links = requestedSourceLinkIds.mapNotNull { linksById[it] }
+        if (links.size != requestedSourceLinkIds.size || links.any { it.organizationId != request.organizationId || it.status != "confirmed" }) {
             throw BadRequestException("Generation requires confirmed source links")
         }
         val linkedBundleIds =
             links
                 .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
                 .distinct()
-        val linkedBundles = sourceBundleRepository.findAllById(linkedBundleIds).associateBy { it.id }
-        if (linkedBundles.size != linkedBundleIds.size || linkedBundles.values.any { it.organizationId != request.organizationId || it.deletedAt != null }) {
+        val linkedBundles = requiredLockedSourceBundlesById(linkedBundleIds)
+        if (linkedBundles.values.any { it.organizationId != request.organizationId || it.deletedAt != null }) {
             throw BadRequestException("Generation requires source bundles in the requested organization")
+        }
+        if (linkedBundles.values.any { !it.passesGenerationCurationGate() }) {
+            throw BadRequestException("Generation requires local AI session evidence marked for generation")
         }
         linkedBundles.values.forEach { bundle ->
             authorizationService.requireRole(currentUser, bundle.organizationId, "contributor", bundle.teamId, bundle.projectId)
         }
-        val linkedEvidenceItems = linkedBundleIds.flatMap { evidenceItemRepository.findByBundleId(it) }
-        if (linkedEvidenceItems.isEmpty() || linkedEvidenceItems.any { it.contentText == null }) {
+        val linkedEvidenceItems =
+            linkedBundleIds.flatMap { bundleId ->
+                generationEvidenceItems(linkedBundles.getValue(bundleId), evidenceItemRepository.findByBundleId(bundleId))
+            }
+        if (linkedEvidenceItems.isEmpty()) {
             throw BadRequestException("Generation requires unpurged source evidence")
         }
 
@@ -102,7 +116,7 @@ class GenerationService(
                     status = "completed",
                     visibility = request.visibility,
                     idempotencyKey = request.idempotencyKey,
-                    sourceLinkIdsJson = objectMapper.writeValueAsString(request.sourceLinkIds.distinct()),
+                    sourceLinkIdsJson = objectMapper.writeValueAsString(requestedSourceLinkIds),
                     sourceBundleIdsJson = objectMapper.writeValueAsString(linkedBundleIds),
                     evidenceItemIdsJson = objectMapper.writeValueAsString(linkedEvidenceItems.map { it.id }),
                     createdAt = now,
@@ -167,6 +181,40 @@ class GenerationService(
             )
         auditService.append(currentUser, request.organizationId, "generation.completed", "generation_run", run.id)
         return GenerationResponse(run.toResponse(), patternReadService.toResponse(currentUser, card, true), task.toResponse())
+    }
+
+    private fun generationEvidenceItems(
+        bundle: SourceBundleEntity,
+        items: List<EvidenceItemEntity>,
+    ): List<EvidenceItemEntity> {
+        if (items.isEmpty()) {
+            throw BadRequestException("Generation requires unpurged source evidence")
+        }
+        if (bundle.sourceKind == LocalAiSessionPolicy.SOURCE_KIND) {
+            val generationItems =
+                items
+                    .filter { it.itemType in LocalAiSessionPolicy.generationItemTypes }
+                    .stableLocalSessionItemOrder()
+            if (generationItems.isEmpty() || generationItems.any { it.contentText == null }) {
+                throw BadRequestException("Generation requires unpurged source evidence")
+            }
+            return generationItems
+        }
+        if (items.any { it.contentText == null }) {
+            throw BadRequestException("Generation requires unpurged source evidence")
+        }
+        return items
+    }
+
+    private fun requiredLockedSourceBundlesById(bundleIds: List<String>): Map<String, SourceBundleEntity> {
+        val requestedIds = bundleIds.distinct()
+        val bundlesById =
+            sourceBundleRepository.findExistingForUpdateSortedById(requestedIds)
+                .associateBy { it.id }
+        if (bundlesById.size != requestedIds.size) {
+            throw BadRequestException("Generation requires source bundles in the requested organization")
+        }
+        return bundlesById
     }
 
     @Transactional(readOnly = true)

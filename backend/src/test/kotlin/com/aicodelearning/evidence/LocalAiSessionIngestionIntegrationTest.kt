@@ -285,6 +285,271 @@ class LocalAiSessionIngestionIntegrationTest {
         assertEquals(1, countBundlesByDedupe(secondBundleId))
     }
 
+    @Test
+    fun `attribution override changes generation eligibility while preserving automatic attribution history`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val created = postJson("/api/ingest/local-ai-session", owner.token, localSessionRequest(repoRoot, "attribution-override"))
+        val bundleId = json(created)["bundle"]["id"].asText()
+
+        val manual =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "manual",
+                    "attributionConfidence" to 0.41,
+                    "attributionReasons" to listOf("human_review", "stdout raw output", "token:abcdefghijklmnop"),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, manual.statusCode)
+        val manualBody = json(manual)
+        assertEquals("ai_assisted", manualBody["autoAttribution"].asText())
+        assertEquals("manual", manualBody["userAttribution"].asText())
+        assertEquals("generation_eligible", manualBody["status"].asText())
+        assertEquals("""["tool_session","changed_files"]""", manualBody["attributionReasonsJson"].asText())
+
+        val eligible =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.88,
+                    "attributionReasons" to listOf("curation_approved", "/tmp/local-path", "stdout raw output"),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, eligible.statusCode)
+        val eligibleBody = json(eligible)
+        assertEquals("ai_assisted", eligibleBody["autoAttribution"].asText())
+        assertEquals("use_for_generation", eligibleBody["userAttribution"].asText())
+        assertEquals("generation_eligible", eligibleBody["status"].asText())
+        assertEquals("""["tool_session","changed_files"]""", eligibleBody["attributionReasonsJson"].asText())
+
+        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow()
+        assertEquals("ai_assisted", bundle.autoAttribution)
+        assertEquals("use_for_generation", bundle.userAttribution)
+        assertEquals("generation_eligible", bundle.status)
+        assertEquals(listOf("tool_session", "changed_files"), objectMapper.readValue(bundle.attributionReasonsJson, List::class.java))
+
+        val events = attributionEvents(bundleId)
+        assertEquals(3, events.size)
+        val autoEvent = events.single { it["event_type"] == "auto_detected" }
+        val manualEvent = events.single { it["user_attribution"] == "manual" }
+        val useForGenerationEvent = events.single { it["user_attribution"] == "use_for_generation" }
+        assertNull(autoEvent["user_attribution"])
+        assertEquals("""["human_review"]""", manualEvent["attribution_reasons_json"])
+        assertEquals("""["curation_approved"]""", useForGenerationEvent["attribution_reasons_json"])
+    }
+
+    @Test
+    fun `attribution override audit metadata contains only safe attribution fields`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val created = postJson("/api/ingest/local-ai-session", owner.token, localSessionRequest(repoRoot, "attribution-audit"))
+        val bundleId = json(created)["bundle"]["id"].asText()
+        val rawSentinel = "raw-audit-sentinel-${System.nanoTime()}"
+
+        val updated =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "delete",
+                    "attributionConfidence" to 0.12,
+                    "attributionReasons" to listOf("user_deleted", rawSentinel, "stdout raw output", "src/service.ts", "/tmp/$rawSentinel"),
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, updated.statusCode)
+        val metadataJson = latestAttributionAuditMetadata(bundleId)
+        val metadata = objectMapper.readTree(metadataJson)
+        assertEquals(bundleId, metadata["bundleId"].asText())
+        assertEquals("ai_assisted", metadata["autoAttribution"].asText())
+        assertEquals("delete", metadata["userAttribution"].asText())
+        assertEquals("generation_eligible", metadata["status"].asText())
+        assertEquals("user_deleted", metadata["attributionReasons"][0].asText())
+        assertFalse(metadataJson.contains(rawSentinel))
+        assertFalse(metadataJson.contains("stdout raw output"))
+        assertFalse(metadataJson.contains("src/service.ts"))
+        assertFalse(metadataJson.contains("/tmp/"))
+        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow()
+        assertNotNull(bundle.deletedAt)
+        assertEquals("delete", bundle.userAttribution)
+    }
+
+    @Test
+    fun `quarantined local session cannot be marked for generation`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val created =
+            postJson(
+                "/api/ingest/local-ai-session",
+                owner.token,
+                localSessionRequest(repoRoot, "quarantined-attribution", promptContent = "Use token sk-testtesttesttesttesttesttesttest"),
+            )
+        val bundleId = json(created)["bundle"]["id"].asText()
+
+        val updated =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.99,
+                    "attributionReasons" to listOf("curation_approved"),
+                ),
+            )
+
+        assertEquals(HttpStatus.BAD_REQUEST, updated.statusCode)
+        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow()
+        assertEquals("quarantined_secret", bundle.status)
+        assertNull(bundle.userAttribution)
+        assertEquals(1, attributionEvents(bundleId).size)
+    }
+
+    @Test
+    fun `attribution override rejects non local session evidence`() {
+        val owner = login()
+        val created =
+            postJson(
+                "/api/ingest/manual",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Manual code",
+                    "sourceKind" to "code",
+                    "content" to "class ManualCode",
+                ),
+            )
+        val bundleId = json(created)["bundle"]["id"].asText()
+
+        val updated =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.9,
+                    "attributionReasons" to listOf("curation_approved"),
+                ),
+            )
+
+        assertEquals(HttpStatus.BAD_REQUEST, updated.statusCode)
+        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow()
+        assertNull(bundle.userAttribution)
+        assertEquals("ready", bundle.status)
+    }
+
+    @Test
+    fun `local session source links and generation require use for generation curation`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val localSession =
+            postJson(
+                "/api/ingest/local-ai-session",
+                owner.token,
+                localSessionGenerationRequest(repoRoot, "generation-curation"),
+            )
+        val localBundleId = json(localSession)["bundle"]["id"].asText()
+        val conversation =
+            postJson(
+                "/api/ingest/manual",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "teamId" to "team-platform",
+                    "projectId" to "project-learning",
+                    "title" to "Local generation conversation",
+                    "sourceKind" to "conversation",
+                    "content" to "Use a provider for this generated pattern.",
+                ),
+            )
+        val conversationBundleId = json(conversation)["bundle"]["id"].asText()
+
+        val uncuratedSuggested =
+            postJson(
+                "/api/source-links/suggest",
+                owner.token,
+                mapOf(
+                    "conversationBundleId" to conversationBundleId,
+                    "codeBundleId" to localBundleId,
+                ),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, uncuratedSuggested.statusCode)
+
+        patchJson(
+            "/api/evidence/$localBundleId/attribution",
+            owner.token,
+            mapOf(
+                "userAttribution" to "use_for_generation",
+                "attributionConfidence" to 0.88,
+                "attributionReasons" to listOf("curation_approved"),
+            ),
+        )
+        val suggested =
+            postJson(
+                "/api/source-links/suggest",
+                owner.token,
+                mapOf(
+                    "conversationBundleId" to conversationBundleId,
+                    "codeBundleId" to localBundleId,
+                ),
+            )
+        assertEquals(HttpStatus.OK, suggested.statusCode)
+        val linkId = json(suggested)["links"][0]["id"].asText()
+        val confirmed = postJson("/api/source-links/$linkId/confirm", owner.token, emptyMap<String, String>())
+        assertEquals("confirmed", json(confirmed)["status"].asText())
+
+        patchJson(
+            "/api/evidence/$localBundleId/attribution",
+            owner.token,
+            mapOf(
+                "userAttribution" to "manual",
+                "attributionConfidence" to 0.41,
+                "attributionReasons" to listOf("human_review"),
+            ),
+        )
+        val blocked =
+            postJson(
+                "/api/generation/run",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "private",
+                ),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, blocked.statusCode)
+
+        patchJson(
+            "/api/evidence/$localBundleId/attribution",
+            owner.token,
+            mapOf(
+                "userAttribution" to "use_for_generation",
+                "attributionConfidence" to 0.9,
+                "attributionReasons" to listOf("curation_approved"),
+            ),
+        )
+        val generated =
+            postJson(
+                "/api/generation/run",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(linkId),
+                    "visibility" to "private",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+    }
+
     private fun login(): SessionResponse {
         val response = restTemplate.postForEntity("/api/session", LoginRequest("owner@local.learnloop", "demo-password"), SessionResponse::class.java)
         assertEquals(HttpStatus.CREATED, response.statusCode)
@@ -325,6 +590,20 @@ class LocalAiSessionIngestionIntegrationTest {
                     artifact("tool_event", metadata = mapOf("event" to "command_exit", "exitCode" to "0", "tool" to "codex-cli"), content = "stdout raw output"),
                 ),
         )
+
+    private fun localSessionGenerationRequest(
+        repoRoot: Path,
+        suffix: String,
+    ): Map<String, Any?> =
+        localSessionRequest(repoRoot, suffix) +
+            (
+                "artifacts" to
+                    listOf(
+                        artifact("prompt", content = "Use a provider for this generated pattern."),
+                        artifact("file_after", path = "src/service.ts", content = "class ProviderScopedPattern"),
+                        artifact("tool_event", metadata = mapOf("event" to "command_exit", "exitCode" to "0"), content = "stdout raw output"),
+                    )
+            )
 
     private fun artifact(
         itemType: String,
@@ -367,12 +646,43 @@ class LocalAiSessionIngestionIntegrationTest {
         body: Any,
     ) = restTemplate.exchange(path, HttpMethod.POST, HttpEntity(body, bearerHeaders(token)), String::class.java)
 
+    private fun patchJson(
+        path: String,
+        token: String,
+        body: Any,
+    ) = restTemplate.exchange(path, HttpMethod.PATCH, HttpEntity(body, bearerHeaders(token)), String::class.java)
+
     private fun json(response: org.springframework.http.ResponseEntity<String>): JsonNode = objectMapper.readTree(response.body)
 
     private fun bearerHeaders(token: String): HttpHeaders =
         HttpHeaders().apply {
             setBearerAuth(token)
         }
+
+    private fun attributionEvents(bundleId: String): List<Map<String, Any>> =
+        jdbcTemplate.queryForList(
+            """
+            SELECT event_type, user_attribution, attribution_reasons_json
+            FROM source_bundle_attribution_events
+            WHERE bundle_id = ?
+            """.trimIndent(),
+            bundleId,
+        )
+
+    private fun latestAttributionAuditMetadata(bundleId: String): String =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                """
+                SELECT metadata_json
+                FROM audit_logs
+                WHERE target_id = ? AND event_type = 'evidence.attribution_overridden'
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """.trimIndent(),
+                String::class.java,
+                bundleId,
+            ),
+        )
 
     companion object {
         @Container

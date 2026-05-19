@@ -516,17 +516,17 @@ Verification:
 
 ### Phase 8: Add Simple Attribution And User Override
 
-- [ ] Implement MVP automatic attribution: `ai_assisted` or `manual_or_unknown`.
-- [ ] Implement user curation values: `use_for_generation`, `manual`, and `delete`.
-- [ ] Add `PATCH /api/evidence/{bundleId}/attribution`.
-- [ ] Each override writes an attribution event row and an audit log entry with no raw code, prompt, diff, stdout/stderr, or full path list.
-- [ ] Preserve automatic attribution separately from user override.
+- [x] Implement MVP automatic attribution: `ai_assisted` or `manual_or_unknown`.
+- [x] Implement user curation values: `use_for_generation`, `manual`, and `delete`.
+- [x] Add `PATCH /api/evidence/{bundleId}/attribution`.
+- [x] Each override writes an attribution event row and an audit log entry with no raw code, prompt, diff, stdout/stderr, or full path list.
+- [x] Preserve automatic attribution separately from user override.
 
 Verification:
 
-- [ ] Backend test proves override changes generation eligibility while preserving automatic attribution.
-- [ ] Repeated overrides preserve full history.
-- [ ] Audit metadata contains only attribution values, confidence/reason codes, bundle id, and safe metadata.
+- [x] Backend test proves override changes generation eligibility while preserving automatic attribution.
+- [x] Repeated overrides preserve full history.
+- [x] Audit metadata contains only attribution values, confidence/reason codes, bundle id, and safe metadata.
 
 ### Phase 9: Generate From Curated Local Evidence
 

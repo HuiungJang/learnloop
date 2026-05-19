@@ -83,7 +83,18 @@ class AuditService(
 
     private companion object {
         const val MAX_METADATA_STRING_CHARS = 200
-        val allowedMetadataKeys = setOf("scope", "sourceKind", "status", "secretFindingTypes")
+        val allowedMetadataKeys =
+            setOf(
+                "scope",
+                "sourceKind",
+                "status",
+                "secretFindingTypes",
+                "bundleId",
+                "autoAttribution",
+                "userAttribution",
+                "attributionConfidence",
+                "attributionReasons",
+            )
         val sensitiveKeyRegex = Regex("credential|token|password|apiKey|rawContent|content|prompt|response|diff|stdout|stderr|path", RegexOption.IGNORE_CASE)
         val sensitiveValueRegex =
             Regex(
