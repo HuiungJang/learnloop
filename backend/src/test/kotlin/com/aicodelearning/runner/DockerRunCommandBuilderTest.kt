@@ -21,7 +21,7 @@ class DockerRunCommandBuilderTest {
                     files = listOf(RunnerRunFile(path = "src/solution.ts", content = "export const answer = 1")),
                 ),
             )
-        val workspace = RunnerWorkspace(runId = request.runId, root = Path.of("/tmp/learnloop-run"))
+        val workspace = RunnerWorkspace(runId = request.runId, root = Path.of("/tmp/learnloop-run"), dockerRoot = Path.of("/tmp/learnloop-run"))
 
         val plan = builder.build(request, workspace)
 
@@ -52,7 +52,11 @@ class DockerRunCommandBuilderTest {
                 ),
             )
 
-        val report = builder.build(request, RunnerWorkspace(runId = request.runId, root = Path.of("/tmp/learnloop-run"))).constraints
+        val report =
+            builder.build(
+                request,
+                RunnerWorkspace(runId = request.runId, root = Path.of("/tmp/learnloop-run"), dockerRoot = Path.of("/tmp/learnloop-run")),
+            ).constraints
 
         assertTrue(report.networkDisabled)
         assertEquals("1.0", report.cpuLimit)

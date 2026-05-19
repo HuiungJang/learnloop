@@ -69,7 +69,7 @@ class DockerRunCommandBuilder(
                 "--workdir",
                 "/workspace",
                 "--volume",
-                "${workspace.root}:/workspace:rw",
+                "${workspace.dockerRoot}:/workspace:rw",
                 request.harness.image,
             ) + request.harness.command
 

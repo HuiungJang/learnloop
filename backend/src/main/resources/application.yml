@@ -40,3 +40,5 @@ app:
     docker-command: ${APP_RUNNER_DOCKER_COMMAND:docker}
     command-timeout: ${APP_RUNNER_COMMAND_TIMEOUT:PT2S}
     require-limits: ${APP_RUNNER_REQUIRE_LIMITS:true}
+    workspace-container-root: ${APP_RUNNER_WORKSPACE_CONTAINER_ROOT:}
+    workspace-host-root: ${APP_RUNNER_WORKSPACE_HOST_ROOT:}

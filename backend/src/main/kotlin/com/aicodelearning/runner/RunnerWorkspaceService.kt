@@ -9,18 +9,21 @@ import java.util.Comparator
 data class RunnerWorkspace(
     val runId: String,
     val root: Path,
+    val dockerRoot: Path,
 )
 
 @Service
-class RunnerWorkspaceService {
+class RunnerWorkspaceService(
+    private val properties: RunnerProperties = RunnerProperties(),
+) {
     fun <T> withWorkspace(
         request: ValidatedRunnerRunRequest,
         action: (RunnerWorkspace) -> T,
     ): T {
-        val root = Files.createTempDirectory("learnloop-${request.runId}-")
+        val root = createWorkspaceRoot(request.runId)
         return try {
             writeFiles(root, request)
-            action(RunnerWorkspace(runId = request.runId, root = root))
+            action(RunnerWorkspace(runId = request.runId, root = root, dockerRoot = dockerRootFor(root)))
         } finally {
             deleteRecursively(root)
         }
@@ -51,6 +54,30 @@ class RunnerWorkspaceService {
         }
         Files.createDirectories(target.parent)
         Files.writeString(target, content)
+    }
+
+    private fun createWorkspaceRoot(runId: String): Path {
+        val configuredRoot = properties.workspaceContainerRoot.trim()
+        if (configuredRoot.isBlank()) {
+            return Files.createTempDirectory("learnloop-$runId-")
+        }
+
+        val rootDirectory = Path.of(configuredRoot).toAbsolutePath().normalize()
+        Files.createDirectories(rootDirectory)
+        return Files.createTempDirectory(rootDirectory, "learnloop-$runId-")
+    }
+
+    private fun dockerRootFor(root: Path): Path {
+        val containerRoot = properties.workspaceContainerRoot.trim()
+        val hostRoot = properties.workspaceHostRoot.trim()
+        if (containerRoot.isBlank() || hostRoot.isBlank()) return root
+
+        val normalizedContainerRoot = Path.of(containerRoot).toAbsolutePath().normalize()
+        val normalizedRoot = root.toAbsolutePath().normalize()
+        if (!normalizedRoot.startsWith(normalizedContainerRoot)) return root
+
+        val relativeRoot = normalizedContainerRoot.relativize(normalizedRoot)
+        return Path.of(hostRoot).toAbsolutePath().normalize().resolve(relativeRoot).normalize()
     }
 
     private fun deleteRecursively(root: Path) {

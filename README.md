@@ -91,13 +91,14 @@ Runner limitations for the current version:
 Useful runner checks from source:
 
 ```sh
+./scripts/build-runner-images.sh
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
 ./scripts/status.sh
 ```
 
-The default installed containers do not mount Docker access into the backend. That keeps installation simple and avoids exposing the host Docker socket by default; `./scripts/status.sh` prints runner health so operators can see whether execution is available in their environment.
+The installed app now enables local sandbox execution by default. It installs Docker CLI support in the backend image, mounts the host Docker socket, builds the TypeScript/Java/Kotlin runner images, and uses `.local-runner-workspaces/` as the shared host/container workspace. This is powerful local-only functionality: users who do not want the backend container to access the host Docker daemon should set `APP_RUNNER_ENABLED=false` before starting the app.
 
 ### Attempts and Sync
 
@@ -138,9 +139,9 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-Release-bundle installation does not build from source. It loads the packaged Docker images, starts the stack, and prints the generated demo password.
+Release-bundle installation does not build from source. It loads the packaged Docker images, including the language runner images, starts the stack, and prints the generated demo password.
 
-The release bundle includes the application and database images. Language runner images are intentionally separate from the application bundle because they are larger and require an execution environment with Docker access. When runner prerequisites are not available, the release app still supports browsing, editing, saving, submitting, and reviewing practice attempts.
+The release bundle includes the application, database, and TypeScript/Java/Kotlin runner images. Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and reviewing practice attempts.
 
 ## CI/CD
 

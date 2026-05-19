@@ -19,7 +19,10 @@ healthcheck() {
 }
 
 start() {
-  if is_running && healthcheck; then
+  if healthcheck; then
+    if ! is_running; then
+      rm -f "$PID_FILE"
+    fi
     echo "LearnLoop local AI companion is already running on http://127.0.0.1:$PORT"
     return
   fi
@@ -56,7 +59,7 @@ stop() {
 }
 
 status() {
-  if is_running && healthcheck; then
+  if healthcheck; then
     echo "LearnLoop local AI companion is running on http://127.0.0.1:$PORT"
   else
     echo "LearnLoop local AI companion is not running."

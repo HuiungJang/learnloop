@@ -48,11 +48,15 @@ OS_NAME=${OS_NAME:-$(detect_os)}
 ARCH_NAME=${ARCH_NAME:-$(detect_arch)}
 OUTPUT_DIR=${OUTPUT_DIR:-dist/release}
 INCLUDE_POSTGRES_IMAGE=${INCLUDE_POSTGRES_IMAGE:-true}
+INCLUDE_RUNNER_IMAGES=${INCLUDE_RUNNER_IMAGES:-true}
 
 PACKAGE_NAME="learnloop-$VERSION-$OS_NAME-$ARCH_NAME"
 BACKEND_IMAGE="learnloop-backend:$VERSION"
 WEB_IMAGE="learnloop-web:$VERSION"
 POSTGRES_IMAGE="postgres:16-alpine"
+RUNNER_TYPESCRIPT_IMAGE="learnloop-runner-typescript:latest"
+RUNNER_JAVA_IMAGE="learnloop-runner-java:latest"
+RUNNER_KOTLIN_IMAGE="learnloop-runner-kotlin:latest"
 
 require_command docker
 require_command tar
@@ -79,6 +83,10 @@ docker compose --env-file "$BUILD_ENV" -f docker-compose.install.yml build backe
 docker tag learnloop-backend:latest "$BACKEND_IMAGE"
 docker tag learnloop-web:latest "$WEB_IMAGE"
 
+if [ "$INCLUDE_RUNNER_IMAGES" = "true" ]; then
+  APP_RUNNER_ENABLED=true ./scripts/build-runner-images.sh
+fi
+
 if [ "$INCLUDE_POSTGRES_IMAGE" = "true" ]; then
   if ! docker image inspect "$POSTGRES_IMAGE" >/dev/null 2>&1; then
     docker pull "$POSTGRES_IMAGE"
@@ -90,6 +98,7 @@ mkdir -p "$STAGING_DIR/images" "$OUTPUT_DIR"
 
 cp packaging/release-bundle/README.md "$STAGING_DIR/README.md"
 cp packaging/release-bundle/docker-compose.yml "$STAGING_DIR/docker-compose.yml"
+cp packaging/release-bundle/docker-compose.runner.yml "$STAGING_DIR/docker-compose.runner.yml"
 cp packaging/release-bundle/install.sh "$STAGING_DIR/install.sh"
 cp packaging/release-bundle/start.sh "$STAGING_DIR/start.sh"
 cp packaging/release-bundle/status.sh "$STAGING_DIR/status.sh"
@@ -113,6 +122,11 @@ docker save "$BACKEND_IMAGE" -o "$STAGING_DIR/images/backend.tar"
 docker save "$WEB_IMAGE" -o "$STAGING_DIR/images/web.tar"
 if [ "$INCLUDE_POSTGRES_IMAGE" = "true" ]; then
   docker save "$POSTGRES_IMAGE" -o "$STAGING_DIR/images/postgres.tar"
+fi
+if [ "$INCLUDE_RUNNER_IMAGES" = "true" ]; then
+  docker save "$RUNNER_TYPESCRIPT_IMAGE" -o "$STAGING_DIR/images/runner-typescript.tar"
+  docker save "$RUNNER_JAVA_IMAGE" -o "$STAGING_DIR/images/runner-java.tar"
+  docker save "$RUNNER_KOTLIN_IMAGE" -o "$STAGING_DIR/images/runner-kotlin.tar"
 fi
 
 (

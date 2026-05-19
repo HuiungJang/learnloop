@@ -1,0 +1,10 @@
+services:
+  backend:
+    environment:
+      APP_RUNNER_WORKSPACE_CONTAINER_ROOT: /runner-workspaces
+      APP_RUNNER_WORKSPACE_HOST_ROOT: ${APP_RUNNER_WORKSPACE_HOST_ROOT:?APP_RUNNER_WORKSPACE_HOST_ROOT is required}
+    group_add:
+      - "0"
+    volumes:
+      - ${APP_RUNNER_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${APP_RUNNER_WORKSPACE_HOST_ROOT:?APP_RUNNER_WORKSPACE_HOST_ROOT is required}:/runner-workspaces

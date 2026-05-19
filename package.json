@@ -26,6 +26,7 @@
     "assets:security": "./scripts/check-asset-exposure.sh",
     "e2e:installed": "./scripts/e2e-installed.sh",
     "perf:measure": "./scripts/perf-measure.sh",
+    "runner:build": "./scripts/build-runner-images.sh",
     "runner:typescript:smoke": "./scripts/runner-typescript-smoke.sh",
     "runner:java:smoke": "./scripts/runner-java-smoke.sh",
     "runner:kotlin:smoke": "./scripts/runner-kotlin-smoke.sh"

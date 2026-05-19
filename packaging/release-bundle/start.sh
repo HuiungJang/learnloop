@@ -14,9 +14,27 @@ if [ ! -f ".release-version" ]; then
   exit 1
 fi
 
+if ! grep -q "^APP_RUNNER_DOCKER_SOCKET=" .env; then
+  printf '%s=%s\n' APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock >> .env
+fi
+if ! grep -q "^APP_RUNNER_WORKSPACE_HOST_ROOT=" .env; then
+  printf '%s=%s\n' APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces" >> .env
+fi
+
 AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < .release-version)
 export AI_CODE_RELEASE_VERSION
 
-docker compose --env-file .env -f docker-compose.yml up -d
+set -a
+. ./.env
+set +a
+
+if [ "${APP_RUNNER_ENABLED:-true}" = "true" ]; then
+  mkdir -p "${APP_RUNNER_WORKSPACE_HOST_ROOT:?APP_RUNNER_WORKSPACE_HOST_ROOT is required}"
+  chmod 1777 "$APP_RUNNER_WORKSPACE_HOST_ROOT"
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.runner.yml up -d
+else
+  docker compose --env-file .env -f docker-compose.yml up -d
+fi
+
 ./local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./local-ai-companion.sh."
 ./status.sh --wait

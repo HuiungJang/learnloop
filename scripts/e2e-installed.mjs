@@ -169,7 +169,9 @@ try {
   assert.equal(practicePayload.includes("Trim input, split separators"), false);
 
   await page.getByRole("heading", { name: /Normalize AI-generated tag labels/i }).waitFor();
-  await page.locator(".code-editor-root").click();
+  await page.locator(".monaco-editor textarea").waitFor({ timeout: 20_000 });
+  await page.locator(".view-line").filter({ hasText: "export function formatTag" }).first().waitFor({ timeout: 20_000 });
+  await page.locator(".view-line").filter({ hasText: "export function formatTag" }).first().click();
   const shortcut = process.platform === "darwin" ? "Meta" : "Control";
   await page.keyboard.press(`${shortcut}+A`);
   await page.keyboard.insertText(`
@@ -186,9 +188,11 @@ export function formatTag(input: string): string {
     page.keyboard.press(`${shortcut}+Shift+Enter`)
   ]);
   const runPayload = await runResponse.json();
-  assert.ok(["passed", "runner_unavailable"].includes(runPayload.run.status));
+  assert.ok(["passed", "failed", "compile_error", "runner_unavailable"].includes(runPayload.run.status), JSON.stringify(runPayload.run));
   if (runPayload.run.status === "runner_unavailable") {
     await page.getByText(/Runner unavailable|Local runner is unavailable/i).first().waitFor({ timeout: 20_000 });
+  } else if (runPayload.run.status === "failed" || runPayload.run.status === "compile_error") {
+    await page.getByText(/Run failed|Latest run failed|Compile failed|Compilation failed/i).first().waitFor({ timeout: 20_000 });
   } else {
     await page.getByText(/Run passed|Latest run passed/i).first().waitFor({ timeout: 20_000 });
   }
@@ -221,6 +225,39 @@ export function formatTag(input: string): string {
   const secondPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: secondSession.token });
   const canonicalContent = firstPractice.problem.files[0].content;
   assert.equal(secondPractice.problem.files[0].content, canonicalContent);
+
+  const runnerHealth = await apiRequest("/api/runner/health");
+  const directRunnerFiles = firstPractice.problem.files.map((file) => ({
+    path: file.path,
+    content:
+      file.path === "src/formatTag.ts"
+        ? `
+export function formatTag(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[_\\s-]+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+`.trimStart()
+        : file.content
+  }));
+  const directRun = await apiRequest(`/api/problems/${demoProblemId}/runs`, {
+    method: "POST",
+    token: firstSession.token,
+    body: {
+      clientAttemptId: `direct-run-${Date.now()}`,
+      assetRevision: firstPractice.problem.assetRevision,
+      language: "typescript",
+      timeoutMs: 5_000,
+      files: directRunnerFiles
+    }
+  });
+  if (runnerHealth.status === "ready") {
+    assert.equal(directRun.run.status, "passed", JSON.stringify(directRun.run));
+  } else {
+    assert.ok(["passed", "runner_unavailable"].includes(directRun.run.status), JSON.stringify(directRun.run));
+  }
 
   const firstAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: firstSession.token });
   const secondAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: secondSession.token });

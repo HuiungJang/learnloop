@@ -22,7 +22,10 @@ start() {
     echo "Node.js is required for the local AI companion. Install Node.js or set NODE_BIN." >&2
     return 1
   fi
-  if is_running && healthcheck; then
+  if healthcheck; then
+    if ! is_running; then
+      rm -f "$PID_FILE"
+    fi
     echo "LearnLoop local AI companion is already running on http://127.0.0.1:$PORT"
     return
   fi
@@ -62,7 +65,7 @@ case "${1:-start}" in
     start
     ;;
   status)
-    if is_running && healthcheck; then
+    if healthcheck; then
       echo "LearnLoop local AI companion is running on http://127.0.0.1:$PORT"
     else
       echo "LearnLoop local AI companion is not running."

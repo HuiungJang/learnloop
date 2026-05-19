@@ -47,7 +47,7 @@ The application stores learner attempts in PostgreSQL. Stopping and starting the
 
 The bundled app supports the LearnLoop practice workbench for TypeScript, Java, and Kotlin exercises. Learners can browse practices, edit files, save drafts, submit answers, and inspect answer diffs without any extra setup.
 
-Sandbox execution is optional. The Run action is available only when the backend runtime can use a Docker CLI, reach a Docker daemon, and find the local language runner images. The default bundle does not mount host Docker access into the backend container, so runner health may report `missing` or `runner_unavailable`. In that state, reading, editing, local save, draft sync, submission, and review still work.
+Sandbox execution is enabled by default when local Docker is available. The bundle loads the TypeScript, Java, and Kotlin runner images, mounts the host Docker socket into the backend container, and uses `.local-runner-workspaces/` as the shared workspace for nested runner containers. This gives the backend container access to the host Docker daemon; set `APP_RUNNER_ENABLED=false` before starting the app if you want to disable code execution.
 
 Runner limits in this version:
 

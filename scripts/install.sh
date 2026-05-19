@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 ENV_FILE=".env"
 COMPOSE_FILE="docker-compose.install.yml"
+RUNNER_COMPOSE_FILE="docker-compose.runner.yml"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -15,7 +16,26 @@ require_command() {
 }
 
 compose() {
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  load_env_file
+  if [ "${APP_RUNNER_ENABLED:-true}" = "true" ]; then
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f "$RUNNER_COMPOSE_FILE" "$@"
+  else
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  fi
+}
+
+ensure_env_value() {
+  key="$1"
+  value="$2"
+  if ! grep -q "^$key=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+load_env_file() {
+  set -a
+  . "./$ENV_FILE"
+  set +a
 }
 
 generate_secret() {
@@ -46,8 +66,33 @@ APP_RUNNER_ENABLED=true
 APP_RUNNER_BASE_URL=
 APP_RUNNER_TOKEN=
 APP_RUNNER_REQUIRE_LIMITS=true
+APP_RUNNER_DOCKER_SOCKET=/var/run/docker.sock
+APP_RUNNER_WORKSPACE_HOST_ROOT=$ROOT_DIR/.local-runner-workspaces
 EOF
   umask "$old_umask"
+}
+
+ensure_runner_env() {
+  ensure_env_value APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock
+  ensure_env_value APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces"
+}
+
+prepare_runner_workspace() {
+  load_env_file
+  if [ "${APP_RUNNER_ENABLED:-true}" != "true" ]; then
+    return
+  fi
+  mkdir -p "${APP_RUNNER_WORKSPACE_HOST_ROOT:?APP_RUNNER_WORKSPACE_HOST_ROOT is required}"
+  chmod 1777 "$APP_RUNNER_WORKSPACE_HOST_ROOT"
+}
+
+build_runner_images() {
+  load_env_file
+  if [ "${APP_RUNNER_ENABLED:-true}" != "true" ]; then
+    echo "Runner is disabled; skipped runner image build."
+    return
+  fi
+  APP_RUNNER_ENABLED="${APP_RUNNER_ENABLED:-true}" ./scripts/build-runner-images.sh
 }
 
 require_command docker
@@ -60,15 +105,16 @@ else
   echo "Using existing $ENV_FILE."
 fi
 
+ensure_runner_env
+prepare_runner_workspace
 compose build
+build_runner_images
 compose up -d
 ./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh."
 
 ./scripts/status.sh --wait
 
-set -a
-. "./$ENV_FILE"
-set +a
+load_env_file
 
 echo
 echo "LearnLoop is installed."
@@ -87,3 +133,4 @@ echo "- ./scripts/start.sh"
 echo "- ./scripts/stop.sh"
 echo "- ./scripts/status.sh"
 echo "- ./scripts/local-ai-companion.sh"
+echo "- ./scripts/build-runner-images.sh"

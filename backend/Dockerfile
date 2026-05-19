@@ -11,7 +11,7 @@ RUN chmod +x ./gradlew && ./gradlew :backend:bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre-alpine
 
-RUN apk add --no-cache curl && addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache curl docker-cli && addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 

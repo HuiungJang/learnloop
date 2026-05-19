@@ -91,13 +91,14 @@ http://localhost:8080
 소스에서 runner를 확인하는 명령:
 
 ```sh
+./scripts/build-runner-images.sh
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
 ./scripts/status.sh
 ```
 
-기본 설치형 container는 backend에 Docker 접근 권한을 mount하지 않습니다. 설치를 단순하게 유지하고 host Docker socket 노출을 기본값으로 피하기 위한 선택입니다. `./scripts/status.sh`는 runner health를 출력하므로 운영자는 현재 환경에서 코드 실행이 가능한지 확인할 수 있습니다.
+설치형 앱은 이제 기본으로 로컬 샌드박스 실행을 활성화합니다. backend image에 Docker CLI를 포함하고, host Docker socket을 mount하고, TypeScript/Java/Kotlin runner image를 빌드하며, `.local-runner-workspaces/`를 host/container 공유 workspace로 사용합니다. 이 기능은 강력한 로컬 실행 권한을 사용하므로 backend container가 host Docker daemon에 접근하지 않게 하려면 시작 전에 `APP_RUNNER_ENABLED=false`로 설정하세요.
 
 ### 풀이기록과 동기화
 
@@ -138,9 +139,9 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 Docker image를 로드하고 stack을 시작한 뒤 demo password를 출력합니다.
+릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 application, database, 언어별 runner Docker image를 로드하고 stack을 시작한 뒤 demo password를 출력합니다.
 
-릴리즈 번들은 application과 database image를 포함합니다. 언어별 runner image는 크기가 크고 Docker 실행 권한이 있는 환경이 필요하므로 application bundle과 분리했습니다. Runner 조건이 준비되지 않은 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
+릴리즈 번들은 application, database, TypeScript/Java/Kotlin runner image를 포함합니다. Runner 실행은 여전히 mounted Docker socket을 통한 로컬 Docker daemon 접근이 필요합니다. Runner 조건이 준비되지 않았거나 `APP_RUNNER_ENABLED=false`인 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
 
 ## CI/CD
 
