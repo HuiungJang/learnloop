@@ -690,6 +690,11 @@ h1 {
   background: var(--error-fill);
 }
 
+.status-warning {
+  color: rgba(107, 76, 0, 0.94);
+  background: rgba(255, 214, 102, 0.24);
+}
+
 .status-neutral {
   color: var(--muted);
   background: var(--surface-tint);
@@ -717,6 +722,29 @@ h1 {
   background: var(--surface-tint);
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.evidence-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid rgba(184, 136, 0, 0.35);
+  border-radius: 6px;
+  color: rgba(82, 62, 8, 0.94);
+  background: rgba(255, 244, 202, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.evidence-notice span,
+.evidence-blocked-copy {
+  overflow-wrap: anywhere;
+}
+
+.evidence-blocked-copy {
+  color: var(--muted);
 }
 
 .mini-action-row {

@@ -611,3 +611,21 @@ Initial Phase 1 files:
 **Learnings:**
 - GUI-only evidence should be confirmable as a correlation, but it must not become generation-eligible until a later phase attaches direct AI output or patch data.
 - Database check constraints need to evolve alongside Kotlin allowlists; otherwise new safe attribution/status values fail after service validation succeeds.
+
+### 2026-05-20 - Post-MVP Phase 20 GUI Correlation UI States
+
+**By:** Codex
+
+**Actions:**
+- Added GUI-correlated labels for collected evidence rows and detail summaries.
+- Added lower-confidence state copy for GUI activity correlation, including the competing-tools case.
+- Added a confirm action that records human review while keeping generation blocked for metadata-only GUI evidence.
+- Kept the existing manual, delete, purge, lazy detail loading, and disabled generation flows visible in the evidence panel.
+- Checked off Post-MVP Phase 20 in the plan document.
+
+**Verification:**
+- Ran `./scripts/frontend-typecheck.sh`.
+- Manual checklist: a GUI-correlated bundle shows `Needs confirmation`, lower-confidence copy, `Confirm`, `Manual`, disabled `Generate`, `Purge raw`, and `Delete`; after confirm it shows `Confirmed` while generation remains blocked.
+
+**Learnings:**
+- GUI correlation confirmation should update curation state only; it should not imply generation eligibility while the bundle lacks direct AI output, patch, or diff content.

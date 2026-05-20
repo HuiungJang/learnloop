@@ -225,7 +225,9 @@ function repositoryStatusLabel(status: RepositoryConsentStatus): string {
 
 function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
   if (bundle.userAttribution === "use_for_generation") return "Use";
+  if (isGuiCorrelatedEvidence(bundle) && bundle.userAttribution === "manual") return "Confirmed";
   if (bundle.userAttribution === "manual") return "Manual";
+  if (bundle.status === "user_confirmation_required") return "Needs confirmation";
   if (bundle.status === "quarantined_secret") return "Quarantined";
   if (bundle.status === "purged_raw") return "Purged";
   return "Uncurated";
@@ -234,11 +236,13 @@ function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
 function bundleStatusClass(bundle: SourceBundleSummaryResponse): string {
   if (bundle.status === "quarantined_secret") return "status-danger";
   if (bundle.userAttribution === "use_for_generation") return "status-success";
+  if (bundle.status === "user_confirmation_required") return "status-warning";
   return "status-neutral";
 }
 
 function attributionLabel(value: string): string {
   if (value === "ai_assisted") return "AI assisted";
+  if (value === "gui_correlated") return "GUI correlated";
   if (value === "manual_or_unknown") return "Manual or unknown";
   if (value === "use_for_generation") return "Use for generation";
   if (value === "manual") return "Manual";
@@ -254,6 +258,44 @@ function reasonCodes(value: string): string[] {
   } catch {
     return [];
   }
+}
+
+function isGuiCorrelatedEvidence(bundle: SourceBundleSummaryResponse): boolean {
+  return bundle.autoAttribution === "gui_correlated" || bundle.status === "user_confirmation_required";
+}
+
+function reasonCodeLabel(value: string): string {
+  if (value === "gui_activity_window") return "GUI activity window";
+  if (value === "repo_changed") return "Repository changed";
+  if (value === "single_ai_tool") return "Single AI tool";
+  if (value === "competing_ai_tools") return "Competing AI tools";
+  if (value === "tool_session") return "Tool session";
+  if (value === "changed_files") return "Changed files";
+  if (value === "human_review") return "Human review";
+  if (value === "curation_approved") return "Curation approved";
+  if (value === "user_deleted") return "User deleted";
+  return value.replaceAll("_", " ");
+}
+
+function guiCorrelationExplanation(bundle: SourceBundleSummaryResponse): string {
+  const reasons = reasonCodes(bundle.attributionReasonsJson);
+  if (reasons.includes("competing_ai_tools")) {
+    return "Lower confidence because more than one AI tool was active while repository files changed.";
+  }
+  return "Lower confidence because this was inferred from app activity and repository changes, not direct AI output or patch data.";
+}
+
+function generationBlockedReason(bundle: SourceBundleSummaryResponse): string | null {
+  if (isGuiCorrelatedEvidence(bundle)) {
+    return "Generation stays blocked until direct AI output or patch data is attached.";
+  }
+  if (bundle.sourceKind === "local_ai_session" && bundle.status !== "generation_eligible") {
+    return "Generation is blocked until this evidence passes local safety checks.";
+  }
+  if (bundle.sourceKind === "local_ai_session" && bundle.userAttribution !== "use_for_generation") {
+    return "Mark this evidence for generation before creating practice.";
+  }
+  return null;
 }
 
 function formatShortDate(value: string): string {
@@ -1222,6 +1264,9 @@ export function App() {
   function renderEvidenceSummary(bundle: SourceBundleSummaryResponse) {
     const canUseForGeneration = bundle.sourceKind === "local_ai_session" && bundle.status === "generation_eligible";
     const canGenerate = canUseForGeneration && bundle.userAttribution === "use_for_generation";
+    const isGuiCorrelated = isGuiCorrelatedEvidence(bundle);
+    const blockedReason = generationBlockedReason(bundle);
+    const reasons = reasonCodes(bundle.attributionReasonsJson);
 
     return (
       <div className="evidence-summary">
@@ -1233,14 +1278,29 @@ export function App() {
           <span>Auto: {attributionLabel(bundle.autoAttribution)}</span>
           <span>User: {attributionLabel(bundle.userAttribution ?? "uncurated")}</span>
           <span>Confidence: {bundle.attributionConfidence === null ? "unknown" : bundle.attributionConfidence.toFixed(2)}</span>
-          <span>{reasonCodes(bundle.attributionReasonsJson).join(", ") || "no reason codes"}</span>
+          <span>{reasons.map(reasonCodeLabel).join(", ") || "no reason codes"}</span>
         </div>
+        {isGuiCorrelated ? (
+          <div className="evidence-notice">
+            <ShieldCheck aria-hidden="true" size={16} />
+            <span>{guiCorrelationExplanation(bundle)}</span>
+          </div>
+        ) : null}
+        {blockedReason !== null ? <small className="evidence-blocked-copy">{blockedReason}</small> : null}
         <div className="mini-action-row">
-          <button disabled={!canUseForGeneration} onClick={() => void applyEvidenceAttribution(bundle, "use_for_generation")} type="button">
-            <CheckCircle2 aria-hidden="true" size={14} />
-            Use
-          </button>
+          {isGuiCorrelated ? (
+            <button disabled={bundle.userAttribution === "manual"} onClick={() => void confirmGuiCorrelation(bundle)} type="button">
+              <CheckCircle2 aria-hidden="true" size={14} />
+              Confirm
+            </button>
+          ) : (
+            <button disabled={!canUseForGeneration} onClick={() => void applyEvidenceAttribution(bundle, "use_for_generation")} type="button">
+              <CheckCircle2 aria-hidden="true" size={14} />
+              Use
+            </button>
+          )}
           <button onClick={() => void applyEvidenceAttribution(bundle, "manual")} type="button">
+            <Bot aria-hidden="true" size={14} />
             Manual
           </button>
           <button disabled={!canGenerate} onClick={() => void generatePracticeFromEvidence(bundle)} type="button">
@@ -1476,6 +1536,23 @@ export function App() {
       await refreshLocalRepositories(session);
     } catch (error) {
       setOnboardingError(error instanceof Error ? error.message : "Repository status update failed");
+    }
+  }
+
+  async function confirmGuiCorrelation(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    setEvidenceActionMessage("");
+    try {
+      await updateEvidenceAttribution(session.token, bundle.id, {
+        userAttribution: "manual",
+        attributionConfidence: bundle.attributionConfidence ?? undefined,
+        attributionReasons: ["human_review"]
+      });
+      setEvidenceActionMessage("GUI correlation confirmed. Generation remains blocked until direct AI output or patch data is attached.");
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence confirmation failed");
     }
   }
 

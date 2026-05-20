@@ -696,14 +696,15 @@ Verification:
 
 ### Post-MVP Phase 20: Add GUI Correlation UI States
 
-- [ ] Add UI labels for GUI-correlated evidence.
-- [ ] Show why the evidence is lower confidence.
-- [ ] Let the user confirm, mark manual, or delete the correlated evidence.
-- [ ] Keep raw detail views bounded and lazy-loaded.
+- [x] Add UI labels for GUI-correlated evidence.
+- [x] Show why the evidence is lower confidence.
+- [x] Let the user confirm, mark manual, or delete the correlated evidence.
+- [x] Keep raw detail views bounded and lazy-loaded.
 
 Verification:
 
-- [ ] Frontend test or manual checklist covers confirm, manual, delete, and blocked generation states.
+- [x] Frontend test or manual checklist covers confirm, manual, delete, and blocked generation states.
+  - Manual checklist: GUI-correlated bundle shows `Needs confirmation`, lower-confidence copy, `Confirm`, `Manual`, disabled `Generate`, `Purge raw`, and `Delete`; after confirm it shows `Confirmed` while generation remains blocked.
 
 ### Post-MVP Phase 21: Add Watcher Registry
 
