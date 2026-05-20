@@ -764,15 +764,15 @@ Verification:
 
 ### Post-MVP Phase 26: Add Before Snapshot Cache
 
-- [ ] Capture before snapshots when a clean approved file first becomes dirty.
-- [ ] Mark before snapshot unavailable for files already dirty when watcher starts.
-- [ ] Bound before snapshot cache by count and bytes per repo.
-- [ ] Use LRU eviction.
-- [ ] Store metadata-only entries for oversized files.
+- [x] Capture before snapshots when a clean approved file first becomes dirty.
+- [x] Mark before snapshot unavailable for files already dirty when watcher starts.
+- [x] Bound before snapshot cache by count and bytes per repo.
+- [x] Use LRU eviction.
+- [x] Store metadata-only entries for oversized files.
 
 Verification:
 
-- [ ] Tests cover clean-to-dirty, pre-existing dirty, cache eviction, oversized file, and deleted file.
+- [x] Tests cover clean-to-dirty, pre-existing dirty, cache eviction, oversized file, and deleted file.
 
 ### Post-MVP Phase 27: Add After Snapshot And Diff Capture
 

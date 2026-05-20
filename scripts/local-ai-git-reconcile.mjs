@@ -65,6 +65,30 @@ export async function reconcileGitRepository(input, options = {}) {
     ? changedFiles.filter((file) => requestedPaths.has(file.repoRelativePath))
     : changedFiles;
   const { safeFiles: diffCandidates, ignoredFiles } = await filterSafeDiffCandidates(metadata.repoRoot, rawDiffCandidates);
+  if (input?.initialScan === true) {
+    options.beforeSnapshotCache?.markPreExistingDirty(repoIdentityHash(input, metadata), diffCandidates);
+    return {
+      status: "ok",
+      reason: null,
+      repoRoot: metadata.repoRoot,
+      branchName: metadata.branchName,
+      remoteUrl: metadata.remoteUrl,
+      changedFiles,
+      diffCandidates: [],
+      ignoredFiles,
+      beforeSnapshots: [],
+      diff: "",
+      diffTruncated: false,
+      commandCounts
+    };
+  }
+  const beforeSnapshots = options.beforeSnapshotCache
+    ? await options.beforeSnapshotCache.captureSnapshots({
+        repoIdentityHash: repoIdentityHash(input, metadata),
+        files: diffCandidates,
+        readSnapshot: (repoRelativePath) => readHeadSnapshot(repoRelativePath, run, options.beforeSnapshotCache.maxSnapshotBytes)
+      })
+    : [];
   const diffArgs = ["diff", "--no-ext-diff", "--", ...diffCandidates.map((file) => file.repoRelativePath)];
   const diffResult = diffCandidates.length > 0
     ? await run("diff", diffArgs)
@@ -79,10 +103,25 @@ export async function reconcileGitRepository(input, options = {}) {
     changedFiles,
     diffCandidates,
     ignoredFiles,
+    beforeSnapshots,
     diff: diffResult.stdout,
     diffTruncated: diffResult.outputTruncated === true,
     commandCounts
   };
+}
+
+async function readHeadSnapshot(repoRelativePath, run, maxSnapshotBytes) {
+  const result = await run("show", ["show", `HEAD:${repoRelativePath}`], {
+    allowFailure: true,
+    maxOutputBytes: maxSnapshotBytes + 1
+  });
+  return result.ok && result.stdout.length > 0
+    ? { ok: true, content: result.stdout }
+    : { ok: false };
+}
+
+function repoIdentityHash(input, metadata) {
+  return input?.repoIdentityHash || metadata.repoRoot;
 }
 
 async function filterSafeDiffCandidates(repoRoot, files) {

@@ -5,6 +5,7 @@ import { chmod, lstat, mkdir, open, readFile, stat, writeFile } from "node:fs/pr
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { BeforeSnapshotCache } from "./local-ai-before-snapshot-cache.mjs";
 import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
 import { GitReconciliationCache, reconcileGitRepository } from "./local-ai-git-reconcile.mjs";
 import { readHostProcessSnapshot } from "./local-ai-process-snapshot.mjs";
@@ -41,12 +42,18 @@ const maxShimEvents = 100;
 const consentActions = [];
 const rateLimitBuckets = new Map();
 const gitReconciliationCache = new GitReconciliationCache();
+const beforeSnapshotCache = new BeforeSnapshotCache();
 const watcherRegistry =
   new LocalAiWatcherRegistry({
     debounceMs: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS"),
     maxPendingChanges: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_MAX_PENDING_CHANGES"),
     maxConcurrentReconciliations: readNumericEnv("LEARNLOOP_LOCAL_AI_RECONCILE_CONCURRENCY"),
-    reconcileRepository: (input) => reconcileGitRepository(input, { cache: gitReconciliationCache })
+    initialReconciliation: true,
+    reconcileRepository: (input) =>
+      reconcileGitRepository(input, {
+        cache: gitReconciliationCache,
+        beforeSnapshotCache
+      })
   });
 
 const server = http.createServer(async (req, res) => {

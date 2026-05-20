@@ -23,6 +23,7 @@ export class LocalAiWatcherRegistry {
     this.setTimeout = options.setTimeoutFn ?? setTimeout;
     this.clearTimeout = options.clearTimeoutFn ?? clearTimeout;
     this.reconcileRepository = options.reconcileRepository ?? null;
+    this.initialReconciliation = options.initialReconciliation === true;
     this.reconciliationPromises = new Set();
     this.registrations = new Map();
     this.activeReconciliations = 0;
@@ -111,6 +112,9 @@ export class LocalAiWatcherRegistry {
     }
 
     this.registrations.set(input.repoIdentityHash, registration);
+    if (this.initialReconciliation) {
+      this.requestReconciliation(registration, { initialScan: true });
+    }
     return publicRegistration(registration);
   }
 
@@ -229,7 +233,7 @@ export class LocalAiWatcherRegistry {
     this.requestReconciliation(registration);
   }
 
-  requestReconciliation(registration) {
+  requestReconciliation(registration, options = {}) {
     if (!this.reconcileRepository) return;
     if (!this.tryStartReconciliation(registration.repoIdentityHash)) {
       registration.reconciliationQueued = true;
@@ -240,8 +244,9 @@ export class LocalAiWatcherRegistry {
     const payload = {
       repoIdentityHash: registration.repoIdentityHash,
       repoRoot: registration.repoRoot,
-      changedPaths: needsFullReconciliation ? [] : registration.settledChanges.map((change) => change.repoRelativePath),
-      needsFullReconciliation
+      changedPaths: options.initialScan || needsFullReconciliation ? [] : registration.settledChanges.map((change) => change.repoRelativePath),
+      needsFullReconciliation,
+      initialScan: options.initialScan === true
     };
     const promise =
       Promise.resolve()

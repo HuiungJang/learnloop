@@ -727,3 +727,24 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Watcher ignore rules need to run at candidate selection time, not only during later file reads, because `git diff` can reveal sensitive tracked file content.
+
+### 2026-05-20 - Post-MVP Phase 26 Before Snapshot Cache
+
+**By:** Codex
+
+**Actions:**
+- Added a bounded per-repo before snapshot cache.
+- Captured clean-to-dirty and deleted file before snapshots from `HEAD:path`.
+- Marked files already dirty during watcher startup as unavailable instead of pretending their current dirty content is a clean before state.
+- Added LRU eviction by entry count and byte budget.
+- Stored oversized before snapshots as metadata-only entries with hash and size.
+- Wired the cache into companion Git reconciliation and release packaging.
+- Checked off Post-MVP Phase 26 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-before-snapshot-cache.test.js`.
+- Ran bundled-Node `tests/local-ai-git-reconcile.test.js`, `tests/local-ai-watcher-registry.test.js`, and `tests/codex-shim.test.js`.
+- Tests cover clean-to-dirty, pre-existing dirty, cache eviction, oversized file, and deleted file.
+
+**Learnings:**
+- Before snapshots should come from Git's clean baseline, not the filesystem at reconciliation time, otherwise pre-existing dirty files can create false before/after pairs.
