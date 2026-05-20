@@ -50,6 +50,7 @@ class LocalDataService(
                 "source_links",
                 "evidence_items",
                 "local_repository_consents",
+                "local_evidence_retention_settings",
                 "source_bundles",
                 "ai_providers",
                 "audit_logs",
