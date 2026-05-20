@@ -3,10 +3,12 @@ package com.aicodelearning.evidence
 import com.aicodelearning.auth.sha256Hex
 import com.aicodelearning.platform.BadRequestException
 import org.springframework.stereotype.Service
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.text.Normalizer
+import java.time.Instant
 import java.util.Locale
 
 @Service
@@ -250,6 +252,11 @@ class LocalSessionArtifactPreflight(
             "language", "event", "tool", "provider" -> value.takeIf { metadataSlugPattern.matches(it) }
             "exitCode" -> value.toIntOrNull()?.takeIf { it in 0..255 }?.toString()
             "durationMs" -> value.toLongOrNull()?.takeIf { it in 0..MAX_METADATA_DURATION_MS }?.toString()
+            "repoIdentityHash" -> value.takeIf { metadataIdentityPattern.matches(it) }
+            "repoRelativePath" -> value.takeIf { normalizeOptionalMetadataPath(it) != null }
+            "changedAt", "activityWindowStartedAt", "activityWindowEndedAt" -> normalizeMetadataInstant(value)
+            "confidence" -> normalizeMetadataConfidence(value)
+            "reasonCodes" -> normalizeMetadataReasonCodes(value)
             "truncated" ->
                 when (value.lowercase(Locale.ROOT)) {
                     "true" -> "true"
@@ -258,6 +265,28 @@ class LocalSessionArtifactPreflight(
                 }
             else -> null
         }
+
+    private fun normalizeOptionalMetadataPath(value: String): String? =
+        runCatching { normalizeArtifactPath(value) }.getOrNull()
+
+    private fun normalizeMetadataInstant(value: String): String? =
+        runCatching { Instant.parse(value).toString() }.getOrNull()
+
+    private fun normalizeMetadataConfidence(value: String): String? {
+        val confidence = value.toBigDecimalOrNull() ?: return null
+        return confidence
+            .takeIf { it >= BigDecimal.ZERO && it <= BigDecimal.ONE }
+            ?.stripTrailingZeros()
+            ?.toPlainString()
+    }
+
+    private fun normalizeMetadataReasonCodes(value: String): String? {
+        val codes = value.split(",").map { it.trim() }.filter { it.isNotBlank() }
+        if (codes.isEmpty() || codes.size > MAX_REASON_CODES) return null
+        if (codes.any { !metadataReasonCodePattern.matches(it) }) return null
+        if (codes.any { it !in allowedMetadataReasonCodes }) return null
+        return codes.distinct().joinToString(",")
+    }
 
     private fun containsAbsolutePath(value: String): Boolean =
         value.startsWith("/") ||
@@ -342,9 +371,29 @@ class LocalSessionArtifactPreflight(
         const val MAX_METADATA_DURATION_MS = 86_400_000L
         const val UNSAFE_CONTENT_PATH_LIMIT_REASON = "unsafe_content_path"
 
-        private val allowedMetadataKeys = setOf("language", "event", "exitCode", "tool", "provider", "durationMs", "truncated")
-        private val allowedLimitReasons = setOf("client_truncated", "artifact_too_large", "diff_too_large")
+        private const val MAX_REASON_CODES = 20
+        private val allowedMetadataKeys =
+            setOf(
+                "language",
+                "event",
+                "exitCode",
+                "tool",
+                "provider",
+                "durationMs",
+                "repoIdentityHash",
+                "repoRelativePath",
+                "changedAt",
+                "activityWindowStartedAt",
+                "activityWindowEndedAt",
+                "confidence",
+                "reasonCodes",
+                "truncated",
+            )
+        private val allowedLimitReasons = setOf("client_truncated", "artifact_too_large", "diff_too_large", "gui_correlation_metadata_only")
         private val metadataSlugPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.+#-]{0,63}$")
+        private val metadataIdentityPattern = Regex("^[A-Za-z0-9._:-]{3,128}$")
+        private val metadataReasonCodePattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.:#@+-]{0,119}$")
+        private val allowedMetadataReasonCodes = setOf("gui_activity_window", "repo_changed", "single_ai_tool", "competing_ai_tools")
         private val sha256Pattern = Regex("^[a-fA-F0-9]{64}$")
         private val windowsDrivePattern = Regex("^[A-Za-z]:.*")
         private val embeddedAbsolutePathPattern = Regex("""(^|[^A-Za-z0-9._-])/[^\s]+""")

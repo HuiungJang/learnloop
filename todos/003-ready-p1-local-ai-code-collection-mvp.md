@@ -595,3 +595,19 @@ Initial Phase 1 files:
 **Learnings:**
 - `running` is a presence signal, not a GUI activity signal; using it for correlation would over-attribute ordinary repo changes.
 - Correlation output should never include repo roots, absolute paths, window text, or raw changed content because Phase 19 can build evidence from safe metadata only.
+
+### 2026-05-20 - Post-MVP Phase 19 GUI Correlation Evidence
+
+**By:** Codex
+
+**Actions:**
+- Added a GUI correlation evidence builder that converts matched activity windows into metadata-only `local_ai_session` ingest payloads.
+- Added `gui_correlated` automatic attribution and `user_confirmation_required` bundle status with Flyway constraints.
+- Allowed safe GUI correlation reason codes and metadata keys while continuing to strip raw snippets, full absolute paths, and unsupported attribution reasons.
+- Added backend integration coverage that creates one GUI-correlated evidence bundle, confirms it stores only tool-event metadata, rejects generation override, and keeps direct generation blocked without direct AI output or patch evidence.
+- Ran `./scripts/test.sh`, targeted backend evidence/migration tests, and full `./gradlew :backend:test`.
+- Checked off Post-MVP Phase 19 in the plan document.
+
+**Learnings:**
+- GUI-only evidence should be confirmable as a correlation, but it must not become generation-eligible until a later phase attaches direct AI output or patch data.
+- Database check constraints need to evolve alongside Kotlin allowlists; otherwise new safe attribution/status values fail after service validation succeeds.

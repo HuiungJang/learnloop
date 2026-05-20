@@ -3,6 +3,10 @@ package com.aicodelearning.evidence
 object LocalAiSessionPolicy {
     const val SOURCE_KIND = "local_ai_session"
     const val STATUS_GENERATION_ELIGIBLE = "generation_eligible"
+    const val STATUS_USER_CONFIRMATION_REQUIRED = "user_confirmation_required"
+    const val AUTO_ATTRIBUTION_AI_ASSISTED = "ai_assisted"
+    const val AUTO_ATTRIBUTION_MANUAL_OR_UNKNOWN = "manual_or_unknown"
+    const val AUTO_ATTRIBUTION_GUI_CORRELATED = "gui_correlated"
     const val USER_ATTRIBUTION_USE_FOR_GENERATION = "use_for_generation"
     const val USER_ATTRIBUTION_MANUAL = "manual"
     const val USER_ATTRIBUTION_DELETE = "delete"

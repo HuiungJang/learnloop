@@ -420,7 +420,13 @@ class EvidenceService(
         dedupeKey: String,
     ): LocalAiSessionIngestResult {
         val now = Instant.now()
-        val status = if (preflight.generationEligible) LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE else preflight.status
+        val autoAttribution = requireAllowedAutoAttribution(request.autoAttribution)
+        val status =
+            when {
+                preflight.generationEligible -> LocalAiSessionPolicy.STATUS_GENERATION_ELIGIBLE
+                autoAttribution == LocalAiSessionPolicy.AUTO_ATTRIBUTION_GUI_CORRELATED -> LocalAiSessionPolicy.STATUS_USER_CONFIRMATION_REQUIRED
+                else -> preflight.status
+            }
         val findings = preflight.secretFindings
         val bundle =
             sourceBundleRepository.save(
@@ -441,7 +447,7 @@ class EvidenceService(
                     contentHash = localSessionBundleHash(dedupeKey, preflight),
                     secretFindingsJson = objectMapper.writeValueAsString(findings),
                     createdAt = now,
-                    autoAttribution = requireAllowedAutoAttribution(request.autoAttribution),
+                    autoAttribution = autoAttribution,
                     attributionConfidence = requireValidConfidence(request.attributionConfidence),
                     attributionReasonsJson = objectMapper.writeValueAsString(safeAttributionReasons(request.attributionReasons)),
                     dedupeKey = dedupeKey,
@@ -771,9 +777,25 @@ class EvidenceService(
         const val MAX_EVIDENCE_LIST_PAGE_SIZE = 100
         const val MAX_REPOSITORY_DISPLAY_LABEL_LENGTH = 240
         const val REPOSITORY_CONSENT_APPROVED = "approved"
-        val allowedLocalAutoAttributions = setOf("ai_assisted", "manual_or_unknown")
+        val allowedLocalAutoAttributions =
+            setOf(
+                LocalAiSessionPolicy.AUTO_ATTRIBUTION_AI_ASSISTED,
+                LocalAiSessionPolicy.AUTO_ATTRIBUTION_MANUAL_OR_UNKNOWN,
+                LocalAiSessionPolicy.AUTO_ATTRIBUTION_GUI_CORRELATED,
+            )
         val allowedLocalUserAttributions = LocalAiSessionPolicy.userAttributions
-        val allowedAttributionReasons = setOf("tool_session", "changed_files", "human_review", "curation_approved", "user_deleted")
+        val allowedAttributionReasons =
+            setOf(
+                "tool_session",
+                "changed_files",
+                "human_review",
+                "curation_approved",
+                "user_deleted",
+                "gui_activity_window",
+                "repo_changed",
+                "single_ai_tool",
+                "competing_ai_tools",
+            )
         val REPOSITORY_CONSENT_STATUSES = setOf("approved", "revoked", "always_ignored", "missing")
         val REPO_IDENTITY_HASH_PATTERN = Regex("[A-Za-z0-9._:-]{3,128}")
         val ROLE_ORDER = listOf("learner", "contributor", "reviewer", "admin")

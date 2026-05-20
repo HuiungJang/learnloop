@@ -4,6 +4,7 @@ import com.aicodelearning.auth.KPostgreSQLContainer
 import com.aicodelearning.auth.LoginRequest
 import com.aicodelearning.auth.RunnerExecutorTestConfiguration
 import com.aicodelearning.auth.SessionResponse
+import com.aicodelearning.auth.SessionService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -54,6 +55,12 @@ class LocalAiSessionIngestionIntegrationTest {
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
+
+    @Autowired
+    private lateinit var evidenceService: EvidenceService
+
+    @Autowired
+    private lateinit var sessionService: SessionService
 
     @TempDir
     lateinit var tempDir: Path
@@ -687,6 +694,70 @@ class LocalAiSessionIngestionIntegrationTest {
     }
 
     @Test
+    fun `GUI correlated evidence requires confirmation and cannot generate without direct AI output`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val request = guiCorrelationSessionRequest(repoRoot, "guicorrelation")
+        approveLocalRepository(owner.token, request)
+        val currentUser = requireNotNull(sessionService.authenticate(owner.token))
+        val created =
+            evidenceService.ingestLocalAiSession(
+                currentUser,
+                objectMapper.convertValue(request, LocalAiSessionIngestRequest::class.java),
+            )
+        val bundleId = created.bundle.id
+        assertEquals(LocalAiSessionPolicy.STATUS_USER_CONFIRMATION_REQUIRED, created.bundle.status)
+        assertEquals(LocalAiSessionPolicy.AUTO_ATTRIBUTION_GUI_CORRELATED, created.bundle.autoAttribution)
+        assertNull(created.bundle.userAttribution)
+
+        val bundle = sourceBundleRepository.findById(bundleId).orElseThrow()
+        assertEquals(LocalAiSessionPolicy.STATUS_USER_CONFIRMATION_REQUIRED, bundle.status)
+        assertEquals(LocalAiSessionPolicy.AUTO_ATTRIBUTION_GUI_CORRELATED, bundle.autoAttribution)
+        assertEquals(
+            listOf("gui_activity_window", "repo_changed", "single_ai_tool"),
+            objectMapper.readValue(bundle.attributionReasonsJson, List::class.java),
+        )
+        assertFalse(bundle.attributionReasonsJson.contains("/"))
+        assertFalse(bundle.repositoryUrl.orEmpty().contains(repoRoot.toString()))
+
+        val item = evidenceItemRepository.findByBundleId(bundleId).single()
+        assertEquals(LocalAiSessionPolicy.ITEM_TYPE_TOOL_EVENT, item.itemType)
+        assertNull(item.contentText)
+        val metadata = objectMapper.readTree(item.metadataJson)
+        assertEquals("gui_correlation", metadata["event"].asText())
+        assertEquals("src/gui-correlated.ts", metadata["repoRelativePath"].asText())
+        assertEquals("gui_activity_window,repo_changed,single_ai_tool", metadata["reasonCodes"].asText())
+        assertFalse(item.metadataJson.contains(repoRoot.toString()))
+
+        assertDirectGenerationRejected(owner.token, bundleId)
+        val generationOverride =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.9,
+                    "attributionReasons" to listOf("curation_approved"),
+                ),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, generationOverride.statusCode)
+
+        val confirmed =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                owner.token,
+                mapOf(
+                    "userAttribution" to "manual",
+                    "attributionConfidence" to 0.41,
+                    "attributionReasons" to listOf("human_review"),
+                ),
+            )
+        assertEquals(HttpStatus.OK, confirmed.statusCode)
+        assertEquals("manual", json(confirmed)["userAttribution"].asText())
+        assertDirectGenerationRejected(owner.token, bundleId)
+    }
+
+    @Test
     fun `direct local session generation rejects multiple bundles`() {
         val owner = login()
         val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
@@ -882,10 +953,50 @@ class LocalAiSessionIngestionIntegrationTest {
                     )
             )
 
+    private fun guiCorrelationSessionRequest(
+        repoRoot: Path,
+        suffix: String,
+    ): Map<String, Any?> =
+        localSessionRequest(repoRoot, suffix) +
+            mapOf(
+                "title" to "GUI correlated session $suffix",
+                "branchName" to "feature/gui-correlation-$suffix",
+                "toolProvider" to "gui_correlation",
+                "toolSessionId" to "gui-session-$suffix",
+                "toolEventId" to "gui-event-$suffix",
+                "timestampBucket" to "2026-05-20T01:00Z",
+                "idempotencyKey" to "repo-identity-$suffix:gui-event-$suffix",
+                "autoAttribution" to LocalAiSessionPolicy.AUTO_ATTRIBUTION_GUI_CORRELATED,
+                "attributionConfidence" to 0.55,
+                "attributionReasons" to listOf("gui_activity_window", "repo_changed", "single_ai_tool", "/tmp/not-allowed"),
+                "artifacts" to
+                    listOf(
+                        artifact(
+                            "tool_event",
+                            metadata =
+                                mapOf(
+                                    "event" to "gui_correlation",
+                                    "tool" to "gui_correlation",
+                                    "provider" to "codex_app",
+                                    "repoIdentityHash" to "repo-identity-$suffix",
+                                    "repoRelativePath" to "src/gui-correlated.ts",
+                                    "changedAt" to "2026-05-20T01:00:30Z",
+                                    "activityWindowStartedAt" to "2026-05-20T00:59:30Z",
+                                    "activityWindowEndedAt" to "2026-05-20T01:02:00Z",
+                                    "confidence" to "0.55",
+                                    "reasonCodes" to "gui_activity_window,repo_changed,single_ai_tool",
+                                ),
+                            content = null,
+                            limitReason = "gui_correlation_metadata_only",
+                        ),
+                    ),
+            )
+
     private fun artifact(
         itemType: String,
         path: String? = null,
         metadata: Map<String, String> = emptyMap(),
+        limitReason: String? = null,
         content: String?,
     ): Map<String, Any?> =
         mapOf(
@@ -895,6 +1006,7 @@ class LocalAiSessionIngestionIntegrationTest {
             "metadata" to metadata,
             "contentHash" to "a".repeat(64),
             "contentTruncated" to false,
+            "limitReason" to limitReason,
             "content" to content,
         )
 

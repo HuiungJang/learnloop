@@ -685,14 +685,14 @@ Verification:
 
 ### Post-MVP Phase 19: Create GUI Correlation Evidence
 
-- [ ] Convert GUI activity windows into `local_ai_session` payloads with correlation evidence only.
-- [ ] Mark GUI-only sessions as user-confirmation-required.
-- [ ] Do not auto-generate practice from GUI-only evidence unless direct AI output or patch data is later attached.
-- [ ] Ensure reason codes do not include raw snippets or full absolute paths.
+- [x] Convert GUI activity windows into `local_ai_session` payloads with correlation evidence only.
+- [x] Mark GUI-only sessions as user-confirmation-required.
+- [x] Do not auto-generate practice from GUI-only evidence unless direct AI output or patch data is later attached.
+- [x] Ensure reason codes do not include raw snippets or full absolute paths.
 
 Verification:
 
-- [ ] Integration test creates one GUI-correlated evidence bundle and blocks generation until user confirmation.
+- [x] Integration test creates one GUI-correlated evidence bundle and blocks generation until user confirmation.
 
 ### Post-MVP Phase 20: Add GUI Correlation UI States
 
