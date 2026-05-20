@@ -798,14 +798,14 @@ Verification:
 
 ### Post-MVP Phase 29: Add Watcher Upload Queue And Retry
 
-- [ ] Add bounded local queue for sessions when backend is down.
-- [ ] Define retry count, retry delay, and discard policy.
-- [ ] Cancel queued uploads when repo approval is revoked.
-- [ ] Store queue metadata without raw code when possible.
+- [x] Add bounded local queue for sessions when backend is down.
+- [x] Define retry count, retry delay, and discard policy.
+- [x] Cancel queued uploads when repo approval is revoked.
+- [x] Store queue metadata without raw code when possible.
 
 Verification:
 
-- [ ] Tests cover backend-down queueing, retry after restart, revoke-before-upload, and queue-size limit.
+- [x] Tests cover backend-down queueing, retry after restart, revoke-before-upload, and queue-size limit.
 
 ### Post-MVP Phase 30: Add Watcher Settings And Status UI
 

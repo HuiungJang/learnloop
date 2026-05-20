@@ -789,3 +789,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - The watcher bundler should require at least one safe code artifact so tool-only activity does not become a code-learning session.
+
+### 2026-05-20 - Post-MVP Phase 29 Watcher Upload Queue And Retry
+
+**By:** Codex
+
+**Actions:**
+- Added a persistent local AI session upload queue with bounded capacity.
+- Added backend-down retry scheduling with exponential backoff and a max-attempt discard policy.
+- Added repository cancellation so queued sessions can be removed when approval is revoked.
+- Added metadata-only queue status output that avoids exposing raw code content.
+- Added an uploader helper for posting queued sessions to `/api/ingest/local-ai-session`.
+- Checked off Post-MVP Phase 29 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-session-upload-queue.test.js`.
+- Tests cover backend-down queueing, retry after restart, revoke-before-upload, queue-size limit, retry-limit discard, and backend ingest endpoint posting.
+
+**Learnings:**
+- The queue needs to keep raw payloads only inside the private retry store, while public status should expose hashes and counts only.
