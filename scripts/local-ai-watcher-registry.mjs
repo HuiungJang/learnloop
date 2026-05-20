@@ -4,11 +4,17 @@ import path from "node:path";
 const APPROVED_STATUS = "approved";
 const REPOSITORY_STATUSES = new Set(["approved", "revoked", "always_ignored", "missing"]);
 const REPO_IDENTITY_PATTERN = /^[A-Za-z0-9._:-]{3,128}$/;
+const DEFAULT_DEBOUNCE_MS = 750;
+const MIN_DEBOUNCE_MS = 250;
+const MAX_DEBOUNCE_MS = 5000;
 
 export class LocalAiWatcherRegistry {
   constructor(options = {}) {
     this.watchFactory = options.watchFactory ?? defaultWatchFactory;
     this.clock = options.clock ?? (() => new Date());
+    this.debounceMs = normalizeDebounceMs(options.debounceMs);
+    this.setTimeout = options.setTimeoutFn ?? setTimeout;
+    this.clearTimeout = options.clearTimeoutFn ?? clearTimeout;
     this.registrations = new Map();
   }
 
@@ -18,17 +24,19 @@ export class LocalAiWatcherRegistry {
     const now = this.clock().toISOString();
 
     if (input.status !== APPROVED_STATUS) {
-      if (existing?.watcher) {
-        stopWatcher(existing.watcher);
+      if (existing) {
+        this.stopActiveWatcher(existing);
       }
       const registration = {
         ...baseRegistration(input, now),
+        debounceMs: this.debounceMs,
         state: "stopped",
         reason: `repository_${input.status}`,
         startedAt: existing?.startedAt ?? null,
         stoppedAt: now,
         eventCount: existing?.eventCount ?? 0,
         lastEventAt: existing?.lastEventAt ?? null,
+        ...changeState(existing),
         watcher: null
       };
       this.registrations.set(input.repoIdentityHash, registration);
@@ -36,17 +44,19 @@ export class LocalAiWatcherRegistry {
     }
 
     if (!input.repoRoot) {
-      if (existing?.watcher) {
-        stopWatcher(existing.watcher);
+      if (existing) {
+        this.stopActiveWatcher(existing);
       }
       const registration = {
         ...baseRegistration(input, now),
+        debounceMs: this.debounceMs,
         state: "unavailable",
         reason: "missing_repo_root",
         startedAt: existing?.startedAt ?? null,
         stoppedAt: now,
         eventCount: existing?.eventCount ?? 0,
         lastEventAt: existing?.lastEventAt ?? null,
+        ...changeState(existing),
         watcher: null
       };
       this.registrations.set(input.repoIdentityHash, registration);
@@ -59,25 +69,29 @@ export class LocalAiWatcherRegistry {
       return publicRegistration(existing);
     }
 
-    if (existing?.watcher) {
-      stopWatcher(existing.watcher);
+    if (existing) {
+      this.stopActiveWatcher(existing);
     }
 
     const registration = {
       ...baseRegistration(input, now),
+      debounceMs: this.debounceMs,
       state: "active",
       reason: null,
       startedAt: now,
       stoppedAt: null,
       eventCount: existing?.eventCount ?? 0,
       lastEventAt: existing?.lastEventAt ?? null,
+      ...changeState(existing),
       watcher: null
     };
 
     try {
-      registration.watcher = this.watchFactory(input.repoRoot, () => {
+      registration.watcher = this.watchFactory(input.repoRoot, (eventType, filename) => {
+        const observedAt = this.clock().toISOString();
         registration.eventCount += 1;
-        registration.lastEventAt = this.clock().toISOString();
+        registration.lastEventAt = observedAt;
+        this.recordFileEvent(registration, eventType, filename, observedAt);
       });
     } catch {
       registration.state = "degraded";
@@ -94,6 +108,11 @@ export class LocalAiWatcherRegistry {
     return [...this.registrations.values()].map(publicRegistration);
   }
 
+  settledChangesFor(repoIdentityHash) {
+    const registration = this.registrations.get(repoIdentityHash);
+    return registration ? [...registration.settledChanges] : [];
+  }
+
   counts() {
     return this.list().reduce(
       (counts, registration) => ({
@@ -107,15 +126,48 @@ export class LocalAiWatcherRegistry {
   stopAll() {
     const now = this.clock().toISOString();
     for (const registration of this.registrations.values()) {
-      if (registration.watcher) {
-        stopWatcher(registration.watcher);
-        registration.watcher = null;
+      if (registration.watcher || registration.debounceTimer) {
+        this.stopActiveWatcher(registration);
         registration.state = "stopped";
         registration.reason = "companion_stopping";
         registration.stoppedAt = now;
         registration.updatedAt = now;
       }
     }
+  }
+
+  stopActiveWatcher(registration) {
+    if (registration.watcher) {
+      stopWatcher(registration.watcher);
+      registration.watcher = null;
+    }
+    if (registration.debounceTimer) {
+      this.clearTimeout(registration.debounceTimer);
+      registration.debounceTimer = null;
+    }
+    registration.pendingChanges.clear();
+  }
+
+  recordFileEvent(registration, eventType, filename, changedAt) {
+    const repoRelativePath = normalizeEventPath(filename);
+    if (!repoRelativePath) return;
+    registration.pendingChanges.set(repoRelativePath, {
+      repoRelativePath,
+      eventType: eventType === "rename" ? "rename" : "change",
+      changedAt
+    });
+    scheduleDebounce(this, registration);
+  }
+
+  settleChanges(registration) {
+    registration.debounceTimer = null;
+    if (registration.pendingChanges.size === 0) return;
+    registration.settledChanges = [...registration.pendingChanges.values()].sort((left, right) =>
+      left.repoRelativePath.localeCompare(right.repoRelativePath)
+    );
+    registration.pendingChanges.clear();
+    registration.lastSettledAt = this.clock().toISOString();
+    registration.settledBatchCount += 1;
   }
 }
 
@@ -147,6 +199,16 @@ function baseRegistration(input, now) {
   };
 }
 
+function changeState(existing) {
+  return {
+    pendingChanges: existing?.pendingChanges ?? new Map(),
+    settledChanges: existing?.settledChanges ?? [],
+    debounceTimer: null,
+    lastSettledAt: existing?.lastSettledAt ?? null,
+    settledBatchCount: existing?.settledBatchCount ?? 0
+  };
+}
+
 function publicRegistration(registration) {
   return {
     repoIdentityHash: registration.repoIdentityHash,
@@ -158,7 +220,12 @@ function publicRegistration(registration) {
     stoppedAt: registration.stoppedAt,
     updatedAt: registration.updatedAt,
     eventCount: registration.eventCount,
-    lastEventAt: registration.lastEventAt
+    lastEventAt: registration.lastEventAt,
+    pendingChangeCount: registration.pendingChanges.size,
+    settledChangeCount: registration.settledChanges.length,
+    lastSettledAt: registration.lastSettledAt,
+    settledBatchCount: registration.settledBatchCount,
+    debounceMs: registration.state === "active" ? registration.debounceMs ?? null : null
   };
 }
 
@@ -175,6 +242,32 @@ function stopWatcher(watcher) {
   } catch {
     // Watcher shutdown should not block repository state changes.
   }
+}
+
+function scheduleDebounce(registry, registration) {
+  if (registration.debounceTimer) {
+    registry.clearTimeout(registration.debounceTimer);
+  }
+  registration.debounceTimer = registry.setTimeout(() => {
+    registry.settleChanges(registration);
+  }, registry.debounceMs);
+  registration.debounceTimer?.unref?.();
+}
+
+function normalizeDebounceMs(value) {
+  if (!Number.isFinite(value)) return DEFAULT_DEBOUNCE_MS;
+  return Math.min(MAX_DEBOUNCE_MS, Math.max(MIN_DEBOUNCE_MS, Math.round(value)));
+}
+
+function normalizeEventPath(value) {
+  if (value === undefined || value === null) return null;
+  const raw = Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+  if (raw.length === 0 || raw.includes("\0")) return null;
+  const normalized = path.posix.normalize(raw.replace(/\\/g, "/"));
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
+    return null;
+  }
+  return normalized;
 }
 
 function safeToken(value) {

@@ -649,3 +649,22 @@ Initial Phase 1 files:
 **Learnings:**
 - Watcher registration can be stateful in the companion while repository consent remains the backend source of truth; after companion restart the app can safely re-register approved repos.
 - Phase 21 should count file events only as a minimal signal because debounce, backpressure, and Git reconciliation are separate later phases.
+
+### 2026-05-20 - Post-MVP Phase 22 Watcher Event Debounce
+
+**By:** Codex
+
+**Actions:**
+- Added per-repository debounce state to the local watcher registry.
+- Coalesced repeated file events by normalized repo-relative path.
+- Preserved only the latest event timestamp and event type per path before settling a change set.
+- Added configurable debounce timing with a default 750ms quiet period and 250ms to 5s clamping.
+- Surfaced pending and settled change counts in watcher status without exposing absolute repo roots.
+- Checked off Post-MVP Phase 22 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-registry.test.js`.
+- Ran bundled-Node `tests/codex-shim.test.js`.
+
+**Learnings:**
+- Debounce belongs before Git reconciliation so rapid editor saves collapse into one bounded change set before any expensive Git commands run.

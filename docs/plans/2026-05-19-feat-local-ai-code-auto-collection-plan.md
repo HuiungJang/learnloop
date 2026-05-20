@@ -719,14 +719,14 @@ Verification:
 
 ### Post-MVP Phase 22: Add Watcher Event Debounce
 
-- [ ] Debounce file events per repo with a default 750ms quiet period.
-- [ ] Coalesce repeated events by normalized repo-relative path.
-- [ ] Keep only the latest event timestamp per path.
-- [ ] Make debounce configurable between 250ms and 5s.
+- [x] Debounce file events per repo with a default 750ms quiet period.
+- [x] Coalesce repeated events by normalized repo-relative path.
+- [x] Keep only the latest event timestamp per path.
+- [x] Make debounce configurable between 250ms and 5s.
 
 Verification:
 
-- [ ] Rapid save test proves repeated events produce one settled change set.
+- [x] Rapid save test proves repeated events produce one settled change set.
 
 ### Post-MVP Phase 23: Add Watcher Backpressure
 

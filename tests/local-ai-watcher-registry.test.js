@@ -65,6 +65,57 @@ test("watcher registry surfaces unavailable and degraded watcher states", () => 
   assert.equal(degraded.reason, "watch_start_failed");
 });
 
+test("watcher registry debounces rapid saves into one settled change set", () => {
+  let listener = null;
+  const scheduled = [];
+  const cleared = [];
+  const registry = new LocalAiWatcherRegistry({
+    debounceMs: 300,
+    watchFactory: (_repoRoot, nextListener) => {
+      listener = nextListener;
+      return { close: () => {} };
+    },
+    setTimeoutFn: (callback, delayMs) => {
+      const handle = { callback, delayMs, unref: () => {} };
+      scheduled.push(handle);
+      return handle;
+    },
+    clearTimeoutFn: (handle) => cleared.push(handle),
+    clock: sequenceClock([
+      "2026-05-20T00:00:00.000Z",
+      "2026-05-20T00:00:00.100Z",
+      "2026-05-20T00:00:00.200Z",
+      "2026-05-20T00:00:00.300Z",
+      "2026-05-20T00:00:01.000Z"
+    ])
+  });
+
+  const approved = registry.updateRepository(repository());
+  assert.equal(approved.debounceMs, 300);
+
+  listener("change", "src/../src/app.ts");
+  listener("change", "src/app.ts");
+  listener("rename", "src/other.ts");
+  assert.equal(cleared.length, 2);
+  assert.equal(scheduled.every((handle) => handle.delayMs === 300), true);
+
+  scheduled.at(-1).callback();
+  assert.deepEqual(registry.settledChangesFor("repo-123"), [
+    { repoRelativePath: "src/app.ts", eventType: "change", changedAt: "2026-05-20T00:00:00.200Z" },
+    { repoRelativePath: "src/other.ts", eventType: "rename", changedAt: "2026-05-20T00:00:00.300Z" }
+  ]);
+  const [status] = registry.list();
+  assert.equal(status.pendingChangeCount, 0);
+  assert.equal(status.settledChangeCount, 2);
+  assert.equal(status.settledBatchCount, 1);
+  assert.equal(status.lastSettledAt, "2026-05-20T00:00:01.000Z");
+});
+
+test("watcher registry clamps debounce configuration between 250ms and 5s", () => {
+  assertDebounceDelay(1, 250);
+  assertDebounceDelay(9000, 5000);
+});
+
 function repository(overrides = {}) {
   return {
     repoIdentityHash: overrides.repoIdentityHash ?? "repo-123",
@@ -76,4 +127,30 @@ function repository(overrides = {}) {
 
 function fixedClock() {
   return () => new Date("2026-05-20T00:00:00.000Z");
+}
+
+function sequenceClock(values) {
+  let index = 0;
+  return () => new Date(values[Math.min(index++, values.length - 1)]);
+}
+
+function assertDebounceDelay(configured, expected) {
+  let listener = null;
+  let delayMs = null;
+  const registry = new LocalAiWatcherRegistry({
+    debounceMs: configured,
+    watchFactory: (_repoRoot, nextListener) => {
+      listener = nextListener;
+      return { close: () => {} };
+    },
+    setTimeoutFn: (callback, nextDelayMs) => {
+      delayMs = nextDelayMs;
+      return { callback, unref: () => {} };
+    },
+    clearTimeoutFn: () => {},
+    clock: fixedClock()
+  });
+  registry.updateRepository(repository({ repoIdentityHash: `repo-${expected}` }));
+  listener("change", "src/app.ts");
+  assert.equal(delayMs, expected);
 }
