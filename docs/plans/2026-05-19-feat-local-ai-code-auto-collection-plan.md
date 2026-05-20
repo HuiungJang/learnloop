@@ -997,14 +997,14 @@ Verification:
 
 ### Post-MVP Phase 47: Add Retention Performance Gate
 
-- [ ] Seed 10,000 expired artifacts.
-- [ ] Run cleanup in bounded batches.
-- [ ] Assert normal evidence reads continue during cleanup.
-- [ ] Assert raw content is removed from DB, filesystem artifacts, staging directories, and quarantine payloads.
+- [x] Seed 10,000 expired artifacts.
+- [x] Run cleanup in bounded batches.
+- [x] Assert normal evidence reads continue during cleanup.
+- [x] Assert raw content is removed from DB, filesystem artifacts, staging directories, and quarantine payloads.
 
 Verification:
 
-- [ ] Performance test documents runtime, batch size, and reclaimed bytes.
+- [x] Performance test documents runtime, batch size, and reclaimed bytes.
 
 ### Post-MVP Phase 48: Write Hosted/Team Re-Evaluation Decision
 

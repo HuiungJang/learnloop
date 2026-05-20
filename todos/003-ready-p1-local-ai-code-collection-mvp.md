@@ -1145,3 +1145,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - The schedule should be a decision layer over bounded cleanup, not a second cleanup implementation.
+
+### 2026-05-20 - Post-MVP Phase 47 Retention Performance Gate
+
+**By:** Codex
+
+**Actions:**
+- Added a retention performance integration test.
+- Seeded 100 bundles containing 10,000 expired raw artifacts.
+- Ran retention cleanup in bounded 500-item batches.
+- Checked normal evidence list reads after every cleanup batch.
+- Verified raw content and quarantined raw payload markers are removed from `evidence_items`.
+- Kept filesystem artifact deletion separate with a zero-count assertion because filesystem artifact storage is not present yet.
+- Checked off Post-MVP Phase 47 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.evidence.EvidenceRetentionPerformanceIntegrationTest"`.
+- Measured `artifacts=10000`, `batchSize=500`, `batches=20`, `runtimeMs=1960`, `reclaimedBytes=405890`.
+
+**Learnings:**
+- Cleanup throughput is bounded by the configured batch size while normal evidence reads remain available between batches.
