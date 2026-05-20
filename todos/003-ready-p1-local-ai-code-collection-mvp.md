@@ -929,3 +929,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Runtime capture should be provider-mode specific; shared forwarding can stay generic while excerpt policy stays narrow.
+
+### 2026-05-20 - Post-MVP Phase 36 Claude Output Parser
+
+**By:** Codex
+
+**Actions:**
+- Added a Claude-specific output parser module.
+- Parsed exact git-diff output into diff artifacts with `patch_output` capability.
+- Parsed edited `apply_patch` blocks without depending on surrounding assistant prose.
+- Accepted stream-json output only when `stream-json` format is explicitly marked.
+- Returned metadata-only adapter events when parsing fails or no patch/stream match exists.
+- Checked off Post-MVP Phase 36 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-claude-output-parser.test.js`.
+- Parser tests cover exact patch, edited patch, stable json stream, malformed stream, and no-match fallback cases.
+
+**Learnings:**
+- Provider output parsing should be fail-open: attribution can degrade, but the original CLI command and event flow must not fail.

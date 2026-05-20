@@ -875,14 +875,14 @@ Verification:
 
 ### Post-MVP Phase 36: Add Claude Output Parser
 
-- [ ] Parse patch-like output in a Claude-specific module.
-- [ ] Parse structured stream/json output only when documented and stable.
-- [ ] Fall back to low-confidence metadata when parsing fails.
-- [ ] Keep parsing failures isolated from the original CLI command.
+- [x] Parse patch-like output in a Claude-specific module.
+- [x] Parse structured stream/json output only when documented and stable.
+- [x] Fall back to low-confidence metadata when parsing fails.
+- [x] Keep parsing failures isolated from the original CLI command.
 
 Verification:
 
-- [ ] Parser tests cover exact patch, edited patch, json stream, malformed stream, and no-match cases.
+- [x] Parser tests cover exact patch, edited patch, json stream, malformed stream, and no-match cases.
 
 ### Post-MVP Phase 37: Add Gemini CLI Shim Installer
 
