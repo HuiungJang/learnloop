@@ -897,14 +897,14 @@ Verification:
 
 ### Post-MVP Phase 38: Add Gemini Runtime Capture
 
-- [ ] Forward Gemini CLI sessions without changing behavior.
-- [ ] Capture bounded stdout/stderr only after redaction.
-- [ ] Add health reporting for missing or broken Gemini runtime.
-- [ ] Keep Gemini failures isolated from other providers.
+- [x] Forward Gemini CLI sessions without changing behavior.
+- [x] Capture bounded stdout/stderr only after redaction.
+- [x] Add health reporting for missing or broken Gemini runtime.
+- [x] Keep Gemini failures isolated from other providers.
 
 Verification:
 
-- [ ] Fake `gemini` tests cover healthy, missing, broken, large output, stderr redaction, and companion-down behavior.
+- [x] Fake `gemini` tests cover healthy, missing, broken, large output, stderr redaction, and companion-down behavior.
 
 ### Post-MVP Phase 39: Add Gemini Output Parser
 

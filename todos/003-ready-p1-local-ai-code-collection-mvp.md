@@ -967,3 +967,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Provider-specific installer phases should test isolation explicitly when multiple shims share one managed directory.
+
+### 2026-05-20 - Post-MVP Phase 38 Gemini Runtime Capture
+
+**By:** Codex
+
+**Actions:**
+- Added Gemini stdout/stderr excerpt capture with bounded redaction.
+- Preserved Gemini CLI stdout, stderr, exit-code, and companion-down behavior.
+- Added Gemini runtime health events for missing originals and broken spawn paths.
+- Exposed safe runtime status fields through companion shim event status.
+- Verified Gemini runtime failures do not affect Codex shim execution in the same managed directory.
+- Checked off Post-MVP Phase 38 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Fake Gemini tests cover healthy output, missing runtime, broken runtime, large output, stderr redaction, companion-down behavior, and provider isolation.
+
+**Learnings:**
+- Runtime health events should carry only coarse status/problem codes so status surfaces stay useful without exposing local paths or output.

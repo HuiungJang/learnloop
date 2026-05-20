@@ -203,6 +203,9 @@ export async function runProviderShim(providerName, args, options = {}) {
         });
 
   if (!resolved.originalPath) {
+    if (shouldEmitRuntimeHealth(provider)) {
+      await emitRuntimeHealth(provider, options, { runtimeStatus: "missing", runtimeProblem: "original_missing" });
+    }
     throw new Error(`Original ${provider.command} was not found`);
   }
 
@@ -248,6 +251,7 @@ export async function forwardProviderRuntime(providerName, args, options = {}) {
       stdio: [stdin, captureOutput ? "pipe" : "inherit", captureOutput ? "pipe" : "inherit"]
     });
     const signalHandlers = new Map();
+    let settled = false;
 
     child.stdout?.on("data", (chunk) => {
       output.pushStdout(chunk);
@@ -258,10 +262,21 @@ export async function forwardProviderRuntime(providerName, args, options = {}) {
       stderr.write(chunk);
     });
     child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
       cleanupSignals(signalHandlers);
-      reject(error);
+      const report = shouldEmitRuntimeHealth(provider)
+        ? emitRuntimeHealth(provider, { ...options, cwd, invocationId }, {
+            runtimeStatus: "broken",
+            runtimeProblem: "spawn_error",
+            error
+          })
+        : Promise.resolve();
+      report.finally(() => reject(error));
     });
     child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
       cleanupSignals(signalHandlers);
       const endedAt = new Date();
       flushEvent(customEventSender ?? ((event) => sendCompanionEvent(event, { unref: false })), buildEndEvent({
@@ -373,6 +388,12 @@ function outputPolicyForProvider(providerName, args, { captureOutput }) {
   if (providerName === "claude" && isClaudePrintMode(args)) {
     return { stdoutExcerptLimitBytes: DEFAULT_OUTPUT_EXCERPT_LIMIT_BYTES };
   }
+  if (providerName === "gemini") {
+    return {
+      stdoutExcerptLimitBytes: DEFAULT_OUTPUT_EXCERPT_LIMIT_BYTES,
+      stderrExcerptLimitBytes: DEFAULT_OUTPUT_EXCERPT_LIMIT_BYTES
+    };
+  }
   return {};
 }
 
@@ -419,6 +440,25 @@ function takeUtf8Bytes(value, limitBytes) {
     if (!result.endsWith("\uFFFD")) return result;
   }
   return "";
+}
+
+function shouldEmitRuntimeHealth(provider) {
+  return provider.name === "gemini";
+}
+
+async function emitRuntimeHealth(provider, options, health) {
+  const eventSender = options.eventSender ?? ((event) => sendCompanionEvent(event, { unref: false }));
+  await flushEvent(eventSender, {
+    type: "shim_health",
+    provider: provider.eventProvider,
+    invocationId: options.invocationId ?? null,
+    cwd: options.cwd ?? process.cwd(),
+    command: provider.command,
+    runtimeStatus: health.runtimeStatus,
+    runtimeProblem: health.runtimeProblem,
+    errorCode: typeof health.error?.code === "string" ? health.error.code.slice(0, 80) : null,
+    checkedAt: new Date().toISOString()
+  }, options.eventTimeoutMs);
 }
 
 export async function sendCompanionEvent(event, options = {}) {

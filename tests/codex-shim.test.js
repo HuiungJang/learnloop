@@ -382,6 +382,108 @@ test("Claude shim runtime forwards interactive sessions and captures only redact
   });
 });
 
+test("Gemini shim runtime captures redacted output and reports missing or broken runtimes", async () => {
+  await withTempDir(async (dir) => {
+    const originalDir = path.join(dir, "original-bin");
+    const shimDir = path.join(dir, "learnloop-shims");
+    const pathEnv = `${shimDir}${path.delimiter}${originalDir}`;
+    const geminiPath = path.join(originalDir, "gemini");
+    await writeFakeGemini(geminiPath);
+    await writeFakeCodex(path.join(originalDir, "codex"));
+    await installProviderShim("gemini", { shimDir, pathEnv: originalDir });
+    await installCodexShim({ shimDir, pathEnv: originalDir });
+
+    const healthyEvents = [];
+    const healthyStdout = captureStream();
+    const healthyStderr = captureStream();
+    const healthy = await runProviderShim("gemini", ["success"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: healthyStdout,
+      stderr: healthyStderr,
+      eventSender: (event) => healthyEvents.push(event)
+    });
+    assert.equal(healthy.exitCode, 0);
+    assert.match(healthyStdout.value(), /sk-geministdoutsecret/);
+    assert.match(healthyStderr.value(), /sk-geministderrsecret/);
+    const healthyEnd = healthyEvents.find((event) => event.type === "shim_end");
+    assert.equal(healthyEnd.provider, "gemini_cli");
+    assert.match(healthyEnd.stdoutExcerpt, /token=\[redacted\]/);
+    assert.match(healthyEnd.stderrExcerpt, /token=\[redacted\]/);
+    assert.equal(healthyEnd.excerptLimitBytes, 4096);
+    assert.doesNotMatch(JSON.stringify(healthyEvents), /sk-gemini(?:stdout|stderr)secret/);
+
+    const largeEvents = [];
+    const largeStdout = captureStream();
+    const large = await runProviderShim("gemini", ["large"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: largeStdout,
+      stderr: captureStream(),
+      eventSender: (event) => largeEvents.push(event)
+    });
+    assert.equal(large.exitCode, 0);
+    assert.match(largeStdout.value(), /gemini-line-799/);
+    const largeEnd = largeEvents.find((event) => event.type === "shim_end");
+    assert.ok(Buffer.byteLength(largeEnd.stdoutExcerpt, "utf8") <= 4096);
+    assert.equal(largeEnd.stdoutSuppressed, true);
+
+    const down = await runProviderShim("gemini", ["success"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: captureStream(),
+      stderr: captureStream(),
+      eventSender: () => new Promise(() => {}),
+      eventTimeoutMs: 1
+    });
+    assert.equal(down.exitCode, 0);
+
+    const missingEvents = [];
+    await assert.rejects(
+      runProviderShim("gemini", ["success"], {
+        shimDir: path.join(dir, "missing-shims"),
+        pathEnv: path.join(dir, "missing-bin"),
+        eventSender: (event) => missingEvents.push(event),
+        eventTimeoutMs: 1
+      }),
+      /Original gemini was not found/
+    );
+    const missingHealth = missingEvents.find((event) => event.type === "shim_health");
+    assert.equal(missingHealth.runtimeStatus, "missing");
+    assert.equal(missingHealth.runtimeProblem, "original_missing");
+
+    await writeExecutable(geminiPath, "#!/definitely/missing/gemini\n");
+    const brokenEvents = [];
+    await assert.rejects(
+      runProviderShim("gemini", ["success"], {
+        shimDir,
+        pathEnv,
+        stdin: "ignore",
+        stdout: captureStream(),
+        stderr: captureStream(),
+        eventSender: (event) => brokenEvents.push(event),
+        eventTimeoutMs: 1
+      })
+    );
+    const brokenHealth = brokenEvents.find((event) => event.type === "shim_health");
+    assert.equal(brokenHealth.runtimeStatus, "broken");
+    assert.equal(brokenHealth.runtimeProblem, "spawn_error");
+
+    const codex = await runProviderShim("codex", ["success", "OK"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: captureStream(),
+      stderr: captureStream(),
+      eventSender: () => {}
+    });
+    assert.equal(codex.exitCode, 0);
+  });
+});
+
 test("codex shim forwards large output and child signals", async () => {
   await withTempDir(async (dir) => {
     const originalDir = path.join(dir, "original-bin");
@@ -535,7 +637,9 @@ test("local companion accepts shim events on the real receiver path", async () =
     assert.deepEqual(status, {
       queued: 1,
       lastEventType: "shim_start",
-      lastProvider: "codex_cli"
+      lastProvider: "codex_cli",
+      lastRuntimeStatus: null,
+      lastRuntimeProblem: null
     });
     assert.equal(stderr(), "");
   });
@@ -949,6 +1053,30 @@ case "$1" in
     ;;
   chat)
     printf 'chat output token=sk-claudechatsecret123456\\n'
+    exit 0
+    ;;
+esac
+exit 0
+`
+  );
+}
+
+async function writeFakeGemini(filePath) {
+  await writeExecutable(
+    filePath,
+    `#!/usr/bin/env sh
+case "$1" in
+  success)
+    printf 'gemini token=sk-geministdoutsecret123456\\n'
+    printf 'gemini stderr token=sk-geministderrsecret123456\\n' >&2
+    exit 0
+    ;;
+  large)
+    i=0
+    while [ "$i" -lt 800 ]; do
+      printf 'gemini-line-%03d generated output\\n' "$i"
+      i=$((i + 1))
+    done
     exit 0
     ;;
 esac

@@ -129,7 +129,9 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         queued: shimEvents.length,
         lastEventType: lastEvent?.type ?? null,
-        lastProvider: lastEvent?.provider ?? null
+        lastProvider: lastEvent?.provider ?? null,
+        lastRuntimeStatus: lastEvent?.runtimeStatus ?? null,
+        lastRuntimeProblem: lastEvent?.runtimeProblem ?? null
       });
       return;
     }
@@ -561,7 +563,11 @@ function sanitizeShimEvent(value) {
     stdoutBytes: safeNumber(input.stdoutBytes),
     stderrBytes: safeNumber(input.stderrBytes),
     stdoutSuppressed: input.stdoutSuppressed === true,
-    stderrSuppressed: input.stderrSuppressed === true
+    stderrSuppressed: input.stderrSuppressed === true,
+    runtimeStatus: safeString(input.runtimeStatus, 40),
+    runtimeProblem: safeString(input.runtimeProblem, 80),
+    errorCode: safeString(input.errorCode, 80),
+    checkedAt: safeString(input.checkedAt, 40)
   };
 }
 
