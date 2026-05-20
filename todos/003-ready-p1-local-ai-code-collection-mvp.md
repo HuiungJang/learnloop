@@ -518,3 +518,18 @@ Initial Phase 1 files:
 **Learnings:**
 - Installed-app E2E should run against a clean Compose project when the default local project has stale migration volumes; the successful Phase 13 run used `learnloop-phase13` on port 18080.
 - Direct installed runner checks require the runner Docker overlay, otherwise backend health can pass while local execution endpoints fail.
+
+### 2026-05-20 - Post-MVP Phase 14 Adapter Contract
+
+**By:** Codex
+
+**Actions:**
+- Added a common local AI tool adapter event contract module with schema version, tool identity, invocation, cwd, repo root, timestamps, command classification, output excerpt metadata, capability flags, and attribution confidence output.
+- Defined the supported capability flags: `process_signal`, `window_signal`, `cli_transcript`, `patch_output`, and `json_stream`.
+- Added confidence contribution rules for each capability and a small corroboration bonus when multiple independent capabilities are present.
+- Added contract tests that validate one fake event per capability flag and prove parser-owned raw payload fields are excluded from the common contract.
+- Checked off Post-MVP Phase 14 in the plan document.
+
+**Learnings:**
+- Keeping the common contract metadata-only makes future provider parsers responsible for interpreting patch/json/transcript content without leaking raw provider output into shared adapter status.
+- Confidence should be derived from declared capabilities rather than provider names, so future Codex, Claude, and Gemini adapters can share one attribution path.

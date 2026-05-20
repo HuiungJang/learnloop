@@ -630,14 +630,14 @@ Post-MVP phases are intentionally smaller than the MVP phases. Each phase should
 
 ### Post-MVP Phase 14: Define Tool Adapter Event Contract
 
-- [ ] Define the common adapter event shape: tool id, provider, invocation id, cwd, repo root, timestamps, command classification, output excerpt metadata, and capability flags.
-- [ ] Define supported capability flags: `process_signal`, `window_signal`, `cli_transcript`, `patch_output`, and `json_stream`.
-- [ ] Define how each capability contributes to attribution confidence.
-- [ ] Keep provider-specific parsing outside the common contract.
+- [x] Define the common adapter event shape: tool id, provider, invocation id, cwd, repo root, timestamps, command classification, output excerpt metadata, and capability flags.
+- [x] Define supported capability flags: `process_signal`, `window_signal`, `cli_transcript`, `patch_output`, and `json_stream`.
+- [x] Define how each capability contributes to attribution confidence.
+- [x] Keep provider-specific parsing outside the common contract.
 
 Verification:
 
-- [ ] Contract test validates one fake event for each capability flag.
+- [x] Contract test validates one fake event for each capability flag.
 
 ### Post-MVP Phase 15: Add Adapter Fixture Harness
 
