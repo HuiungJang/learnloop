@@ -399,6 +399,11 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
     assert.ok(["running", "frontmost", "recently_active", "unavailable"].includes(codexAppStatus.status));
     assert.equal(JSON.stringify(codexAppStatus).includes("sk-"), false);
 
+    const unauthenticatedWatchers = await httpRequest(port, "/watchers/status", {
+      host: goodHost
+    });
+    assert.equal(unauthenticatedWatchers.status, 401);
+
     const acceptedRevoke = await httpRequest(port, "/consent/revoke", {
       method: "POST",
       host: goodHost,
@@ -452,6 +457,65 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
     });
     assert.notEqual(repoToken.code, 0);
     assert.match(repoToken.stderr, /outside application and repository directories/);
+  });
+});
+
+test("local companion watcher registry updates approved repositories and resets on restart", async () => {
+  await withTempDir(async (dir) => {
+    const repoRoot = path.join(dir, "repo");
+    await mkdirp(repoRoot);
+
+    await withCompanion(async ({ port, token }) => {
+      const goodHost = `127.0.0.1:${port}`;
+      const approved = await httpRequest(port, "/watchers/repositories", {
+        method: "POST",
+        host: goodHost,
+        token,
+        body: JSON.stringify({
+          repoIdentityHash: "repo-watch-1",
+          repositoryDisplayLabel: "fixture/repo",
+          repoRoot,
+          status: "approved"
+        })
+      });
+      assert.equal(approved.status, 200);
+      const approvedBody = JSON.parse(approved.body);
+      assert.equal(approvedBody.watcher.state, "active");
+      assert.equal(JSON.stringify(approvedBody).includes(repoRoot), false);
+
+      const revoked = await httpRequest(port, "/watchers/repositories", {
+        method: "POST",
+        host: goodHost,
+        token,
+        body: JSON.stringify({
+          repoIdentityHash: "repo-watch-1",
+          repositoryDisplayLabel: "fixture/repo",
+          status: "revoked"
+        })
+      });
+      assert.equal(revoked.status, 200);
+      assert.equal(JSON.parse(revoked.body).watcher.state, "stopped");
+
+      const status = await httpRequest(port, "/watchers/status", {
+        host: goodHost,
+        token
+      });
+      assert.equal(status.status, 200);
+      const statusBody = JSON.parse(status.body);
+      assert.equal(statusBody.watcherCounts.stopped, 1);
+      assert.equal(statusBody.watcherCounts.active, 0);
+    });
+
+    await withCompanion(async ({ port, token }) => {
+      const restarted = await httpRequest(port, "/watchers/status", {
+        host: `127.0.0.1:${port}`,
+        token
+      });
+      assert.equal(restarted.status, 200);
+      const restartedBody = JSON.parse(restarted.body);
+      assert.deepEqual(restartedBody.watchers, []);
+      assert.equal(restartedBody.watcherCounts.active, 0);
+    });
   });
 });
 

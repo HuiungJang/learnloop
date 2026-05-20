@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
 import { readHostProcessSnapshot } from "./local-ai-process-snapshot.mjs";
+import { LocalAiWatcherRegistry } from "./local-ai-watcher-registry.mjs";
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), ".learnloop");
 const DEFAULT_TOKEN_FILE_NAME = "local-api-token";
@@ -38,6 +39,7 @@ const shimEvents = [];
 const maxShimEvents = 100;
 const consentActions = [];
 const rateLimitBuckets = new Map();
+const watcherRegistry = new LocalAiWatcherRegistry();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -63,7 +65,8 @@ const server = http.createServer(async (req, res) => {
         bindHost: host,
         tokenRequired: true,
         shimEventsQueued: shimEvents.length,
-        consentActionsQueued: consentActions.length
+        consentActionsQueued: consentActions.length,
+        watcherCounts: watcherRegistry.counts()
       });
       return;
     }
@@ -124,6 +127,28 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/watchers/status") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      sendJson(res, 200, {
+        status: "ok",
+        watcherCounts: watcherRegistry.counts(),
+        watchers: watcherRegistry.list()
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/watchers/repositories") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      const body = await readJson(req);
+      sendJson(res, 200, {
+        status: "ok",
+        watcher: updateWatcherRepository(body)
+      });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/consent/status") {
       sendJson(res, 200, {
         status: "ok",
@@ -162,6 +187,12 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, host, () => {
   console.log(`LearnLoop local AI companion listening on ${baseUrl}`);
+});
+
+process.once("SIGTERM", () => {
+  watcherRegistry.stopAll();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 1000).unref();
 });
 
 function commandFromEnv(name, fallback) {
@@ -454,6 +485,14 @@ function recordConsentAction(action, value) {
   });
   if (consentActions.length > 100) {
     consentActions.splice(0, consentActions.length - 100);
+  }
+}
+
+function updateWatcherRepository(value) {
+  try {
+    return watcherRegistry.updateRepository(value);
+  } catch (error) {
+    throw httpError(400, error.message || "watcher repository update is invalid");
   }
 }
 

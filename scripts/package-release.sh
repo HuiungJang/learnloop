@@ -109,6 +109,7 @@ cp scripts/local-ai-codex-app-adapter.mjs "$STAGING_DIR/local-ai-codex-app-adapt
 cp scripts/local-ai-companion.mjs "$STAGING_DIR/local-ai-companion.mjs"
 cp scripts/local-ai-process-snapshot.mjs "$STAGING_DIR/local-ai-process-snapshot.mjs"
 cp scripts/local-ai-shim.mjs "$STAGING_DIR/local-ai-shim.mjs"
+cp scripts/local-ai-watcher-registry.mjs "$STAGING_DIR/local-ai-watcher-registry.mjs"
 cp .env.example "$STAGING_DIR/.env.example"
 cp LICENSE "$STAGING_DIR/LICENSE"
 cp NOTICE "$STAGING_DIR/NOTICE"

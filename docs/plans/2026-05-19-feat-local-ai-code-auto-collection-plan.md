@@ -708,14 +708,14 @@ Verification:
 
 ### Post-MVP Phase 21: Add Watcher Registry
 
-- [ ] Add one watcher registration per approved repo root.
-- [ ] Start watchers only for approved repos.
-- [ ] Stop watchers immediately when a repo is revoked, missing, or ignored.
-- [ ] Surface watcher state as active, stopped, degraded, or unavailable.
+- [x] Add one watcher registration per approved repo root.
+- [x] Start watchers only for approved repos.
+- [x] Stop watchers immediately when a repo is revoked, missing, or ignored.
+- [x] Surface watcher state as active, stopped, degraded, or unavailable.
 
 Verification:
 
-- [ ] Node tests cover approve, revoke, missing repo, ignored repo, and companion restart.
+- [x] Node tests cover approve, revoke, missing repo, ignored repo, and companion restart.
 
 ### Post-MVP Phase 22: Add Watcher Event Debounce
 

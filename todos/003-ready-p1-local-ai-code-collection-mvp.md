@@ -629,3 +629,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - GUI correlation confirmation should update curation state only; it should not imply generation eligibility while the bundle lacks direct AI output, patch, or diff content.
+
+### 2026-05-20 - Post-MVP Phase 21 Watcher Registry
+
+**By:** Codex
+
+**Actions:**
+- Added a local AI watcher registry module that starts one watcher for approved repository roots.
+- Stopped active watchers immediately when the repository state changes to revoked, missing, or always ignored.
+- Surfaced watcher status through companion endpoints with active, stopped, degraded, and unavailable counts.
+- Kept absolute repository roots out of public watcher status responses.
+- Included the watcher registry module in release packaging.
+- Checked off Post-MVP Phase 21 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-registry.test.js`.
+- Ran bundled-Node `tests/codex-shim.test.js`.
+
+**Learnings:**
+- Watcher registration can be stateful in the companion while repository consent remains the backend source of truth; after companion restart the app can safely re-register approved repos.
+- Phase 21 should count file events only as a minimal signal because debounce, backpressure, and Git reconciliation are separate later phases.
