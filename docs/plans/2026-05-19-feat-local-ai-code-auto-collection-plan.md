@@ -674,14 +674,14 @@ Verification:
 
 ### Post-MVP Phase 18: Correlate GUI Activity Windows
 
-- [ ] Define activity window start/end rules for GUI-only signals.
-- [ ] Match approved repo changes that occur during the activity window.
-- [ ] Lower confidence when multiple AI tools are active in the same window.
-- [ ] Keep correlation metadata as reason codes, timestamps, and repo-relative paths only.
+- [x] Define activity window start/end rules for GUI-only signals.
+- [x] Match approved repo changes that occur during the activity window.
+- [x] Lower confidence when multiple AI tools are active in the same window.
+- [x] Keep correlation metadata as reason codes, timestamps, and repo-relative paths only.
 
 Verification:
 
-- [ ] Tests cover single tool, multiple tools, no approved repo, and stale activity windows.
+- [x] Tests cover single tool, multiple tools, no approved repo, and stale activity windows.
 
 ### Post-MVP Phase 19: Create GUI Correlation Evidence
 

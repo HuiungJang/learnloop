@@ -579,3 +579,19 @@ Initial Phase 1 files:
 **Learnings:**
 - The Codex App adapter should use tool/app identity from sanitized process metadata only; CLI process names are intentionally not enough to identify the GUI app.
 - `recently_active` is best modeled as a separate hint layered on top of snapshots, so the process reader does not need to collect window text or app cache data.
+
+### 2026-05-20 - Post-MVP Phase 18 GUI Activity Correlation
+
+**By:** Codex
+
+**Actions:**
+- Added GUI activity window correlation for frontmost and recently-active tool signals.
+- Matched repo changes only when their repo identity is approved and the change timestamp falls inside the activity window.
+- Lowered confidence when multiple AI tools overlap the same repo change.
+- Kept correlation output limited to tool/provider ids, repo identity, repo-relative paths, timestamps, confidence, and reason codes.
+- Added tests for single tool, multiple tools, no approved repo, stale windows, unsafe paths, and non-activity running status.
+- Checked off Post-MVP Phase 18 in the plan document.
+
+**Learnings:**
+- `running` is a presence signal, not a GUI activity signal; using it for correlation would over-attribute ordinary repo changes.
+- Correlation output should never include repo roots, absolute paths, window text, or raw changed content because Phase 19 can build evidence from safe metadata only.
