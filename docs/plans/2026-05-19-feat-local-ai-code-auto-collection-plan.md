@@ -1022,91 +1022,91 @@ Verification:
 
 Deferred by Phase 48: hosted/team mode is not approved for this cycle.
 
-- [ ] Define export manifest format for metadata, hashes, generated assets, and optional raw evidence.
-- [ ] Make raw evidence export opt-in.
-- [ ] Redact or omit quarantined raw payloads.
-- [ ] Include schema version and workspace namespace.
+- [x] Deferred: define export manifest format only if hosted/team mode is approved later.
+- [x] Deferred: make raw evidence export opt-in only if export is approved later.
+- [x] Deferred: redact or omit quarantined raw payloads only if export is approved later.
+- [x] Deferred: include schema version and workspace namespace only if export is approved later.
 
 Verification:
 
-- [ ] Export test creates a manifest without raw content by default.
+- [x] Deferred: export test is not required while local data remains local-only by default.
 
 ### Post-MVP Phase 50: Add Hosted Import Prototype If Approved
 
 Deferred by Phase 48: hosted/team mode is not approved for this cycle.
 
-- [ ] Validate exported metadata into a separate hosted/team import path.
-- [ ] Detect id collisions using workspace namespace and dedupe keys.
-- [ ] Import generated cards and practice progress without requiring raw evidence.
-- [ ] Reject imports containing unresolved quarantined raw payloads.
+- [x] Deferred: validate exported metadata only if hosted/team mode is approved later.
+- [x] Deferred: detect id collisions only if hosted/team import is approved later.
+- [x] Deferred: import generated cards and practice progress only if hosted/team import is approved later.
+- [x] Deferred: reject unresolved quarantined raw payloads only if hosted/team import is approved later.
 
 Verification:
 
-- [ ] Prototype import test covers metadata-only import, duplicate import, and rejected quarantined payload.
+- [x] Deferred: hosted import prototype tests are not required while hosted/team mode is no-go.
 
 ### Post-MVP Phase 51: Reintroduce Team Roles Only Behind Separate Mode
 
 Deferred by Phase 48: hosted/team mode is not approved for this cycle.
 
-- [ ] Add team roles only if the hosted/team decision approves it.
-- [ ] Keep team surfaces outside the local personal primary UI.
-- [ ] Do not alter local owner authorization semantics.
-- [ ] Add migration and regression tests before exposing team UI.
+- [x] Deferred: add team roles only if a later hosted/team decision approves it.
+- [x] Keep team surfaces outside the local personal primary UI.
+- [x] Do not alter local owner authorization semantics.
+- [x] Deferred: add migration and regression tests before exposing team UI only if team UI is approved later.
 
 Verification:
 
-- [ ] Local personal E2E still has no admin/reviewer role switching.
-- [ ] Team-mode tests are isolated from local-mode tests.
+- [x] Local personal E2E still has no admin/reviewer role switching.
+- [x] Deferred: team-mode tests are not required while team mode is no-go.
 
 ## Acceptance Criteria
 
 ### Functional Requirements
 
-- [ ] The MVP runs as a single-user local installed app.
-- [ ] The primary UI does not expose admin/reviewer role switching.
-- [ ] First run can complete with no repos and empty collection state.
-- [ ] User can approve, revoke, ignore, and see missing repositories.
-- [ ] User can ingest or collect one local AI session from an approved repo.
-- [ ] Codex CLI shim can create AI-assisted evidence without changing CLI behavior.
-- [ ] User can correct attribution, generate a pattern, delete evidence, purge raw evidence, and practice locally.
-- [ ] Existing manual/source-link generation remains available as a fallback.
+- [x] The MVP runs as a single-user local installed app.
+- [x] The primary UI does not expose admin/reviewer role switching.
+- [x] First run can complete with no repos and empty collection state.
+- [x] User can approve, revoke, ignore, and see missing repositories.
+- [x] User can ingest or collect one local AI session from an approved repo.
+- [x] Codex CLI shim can create AI-assisted evidence without changing CLI behavior.
+- [x] User can correct attribution, generate a pattern, delete evidence, purge raw evidence, and practice locally.
+- [x] Existing manual/source-link generation remains available as a fallback.
 
 ### Security And Privacy Requirements
 
-- [ ] Localhost endpoints reject bad Origin, bad Host, missing token, oversized requests, unauthenticated control actions, and non-loopback access.
-- [ ] Raw local evidence is not written to audit logs, application logs, frontend state, browser storage, test snapshots, or broad list responses.
-- [ ] Secret scanning covers prompts, AI responses, before/after files, diffs, stdout, stderr, and sensitive paths/filenames.
-- [ ] `.env`, keys, certificates, binary files, dependency folders, and build output are ignored by default.
-- [ ] Raw evidence is never durably persisted before repo approval, path checks, ignore checks, size checks, and secret checks pass, except short-lived staging deleted on failure.
-- [ ] Secret findings quarantine evidence and block generation.
-- [ ] Purge removes raw content from DB, filesystem artifacts, staging directories, collector cache, quarantine payloads, and API-visible excerpts.
-- [ ] CLI shims never capture environment variables, shell history, credential files, provider auth caches, or terminal scrollback.
-- [ ] Git remote URLs and paths are sanitized before storage or logging.
-- [ ] Raw evidence encryption is documented as optional/future, not an MVP requirement.
+- [x] Localhost endpoints reject bad Origin, bad Host, missing token, oversized requests, unauthenticated control actions, and non-loopback access.
+- [x] Raw local evidence is not written to audit logs, application logs, frontend state, browser storage, test snapshots, or broad list responses.
+- [x] Secret scanning covers prompts, AI responses, before/after files, diffs, stdout, stderr, and sensitive paths/filenames.
+- [x] `.env`, keys, certificates, binary files, dependency folders, and build output are ignored by default.
+- [x] Raw evidence is never durably persisted before repo approval, path checks, ignore checks, size checks, and secret checks pass, except short-lived staging deleted on failure.
+- [x] Secret findings quarantine evidence and block generation.
+- [x] Purge removes raw content from DB, filesystem artifacts, staging directories, collector cache, quarantine payloads, and API-visible excerpts.
+- [x] CLI shims never capture environment variables, shell history, credential files, provider auth caches, or terminal scrollback.
+- [x] Git remote URLs and paths are sanitized before storage or logging.
+- [x] Raw evidence encryption is documented as optional/future, not an MVP requirement.
 
 ### Data Integrity Requirements
 
-- [ ] Deleting evidence excludes it from generation queries.
-- [ ] Raw purge preserves metadata, hashes, lineage, generated cards, and progress.
-- [ ] Full app-data delete has distinct destructive behavior and confirmation.
-- [ ] Attribution overrides are append-only and reversible.
-- [ ] Concurrent duplicate uploads create only one durable bundle.
-- [ ] Flyway constraint changes are made only through new migrations.
+- [x] Deleting evidence excludes it from generation queries.
+- [x] Raw purge preserves metadata, hashes, lineage, generated cards, and progress.
+- [x] Full app-data delete has distinct destructive behavior and confirmation.
+- [x] Attribution overrides are append-only and reversible.
+- [x] Concurrent duplicate uploads create only one durable bundle.
+- [x] Flyway constraint changes are made only through new migrations.
 
 ### Performance Requirements
 
-- [ ] CLI shim latency budget is measured for healthy, slow, and companion-down paths.
-- [ ] Evidence list remains responsive with 1,000 local session bundles.
-- [ ] Local session payload size, file count, and diff limits are enforced.
-- [ ] Post-MVP watcher work includes explicit Git command-count and queue-growth tests before release.
-- [ ] Post-MVP retention cleanup deletes expired raw artifacts in bounded batches.
+- [x] CLI shim latency budget is measured for healthy, slow, and companion-down paths.
+- [x] Evidence list remains responsive with 1,000 local session bundles.
+- [x] Local session payload size, file count, and diff limits are enforced.
+- [x] Post-MVP watcher work includes explicit Git command-count and queue-growth tests before release.
+- [x] Post-MVP retention cleanup deletes expired raw artifacts in bounded batches.
 
 ### Quality Gates
 
-- [ ] Backend tests cover local owner access, evidence ingestion, secret quarantine, attribution override, deletion, purge, idempotency, and generation gating.
-- [ ] Node tests cover companion status/consent endpoints and Codex shim behavior.
-- [ ] Frontend build/typecheck passes.
-- [ ] Installed-app E2E covers the personal learning loop.
+- [x] Backend tests cover local owner access, evidence ingestion, secret quarantine, attribution override, deletion, purge, idempotency, and generation gating.
+- [x] Node tests cover companion status/consent endpoints and Codex shim behavior.
+- [x] Frontend build/typecheck passes.
+- [x] Installed-app E2E covers the personal learning loop.
 
 ## Success Metrics
 
