@@ -641,6 +641,48 @@ test("local companion accepts shim events on the real receiver path", async () =
       lastRuntimeStatus: null,
       lastRuntimeProblem: null
     });
+
+    const adapterError = await fetch(`${baseUrl}/shim/events`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-learnloop-local-token": token
+      },
+      body: JSON.stringify({
+        type: "adapter_error",
+        provider: "gemini_cli",
+        runtimeStatus: "failed",
+        runtimeProblem: "parser_failed",
+        errorCode: "E_PARSE",
+        stdoutExcerpt: "raw prompt and code must not be returned"
+      })
+    });
+    assert.equal(adapterError.status, 202);
+
+    const codexEnd = await fetch(`${baseUrl}/shim/events`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-learnloop-local-token": token
+      },
+      body: JSON.stringify({
+        type: "shim_end",
+        provider: "codex_cli",
+        invocationId: "test",
+        command: "codex",
+        exitCode: 0,
+        endedAt: "2026-05-20T00:00:01.000Z"
+      })
+    });
+    assert.equal(codexEnd.status, 202);
+
+    const adapterStatus = await fetch(`${baseUrl}/adapters/status`, {
+      headers: { "x-learnloop-local-token": token }
+    }).then((response) => response.json());
+    assert.equal(adapterStatus.status, "ok");
+    assert.equal(adapterStatus.adapters.find((adapter) => adapter.provider === "codex_cli").status, "ok");
+    assert.equal(adapterStatus.adapters.find((adapter) => adapter.provider === "gemini_cli").status, "failed");
+    assert.equal(JSON.stringify(adapterStatus).includes("raw prompt"), false);
     assert.equal(stderr(), "");
   });
 });

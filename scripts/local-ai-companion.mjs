@@ -5,6 +5,7 @@ import { chmod, lstat, mkdir, open, readFile, stat, writeFile } from "node:fs/pr
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { createAdapterStatusRegistry } from "./local-ai-adapter-status.mjs";
 import { BeforeSnapshotCache } from "./local-ai-before-snapshot-cache.mjs";
 import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
 import { GitReconciliationCache, reconcileGitRepository } from "./local-ai-git-reconcile.mjs";
@@ -40,6 +41,7 @@ const providers = {
 const providerState = new Map();
 const shimEvents = [];
 const maxShimEvents = 100;
+const adapterStatusRegistry = createAdapterStatusRegistry();
 const consentActions = [];
 const rateLimitBuckets = new Map();
 const gitReconciliationCache = new GitReconciliationCache();
@@ -147,6 +149,16 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       sendJson(res, 200, await readCodexAppPresence());
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/adapters/status") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      sendJson(res, 200, {
+        status: "ok",
+        adapters: adapterStatusRegistry.snapshot()
+      });
       return;
     }
 
@@ -517,6 +529,7 @@ function stateFor(provider) {
 function recordShimEvent(value) {
   const event = sanitizeShimEvent(value);
   shimEvents.push(event);
+  adapterStatusRegistry.record(event);
   if (shimEvents.length > maxShimEvents) {
     shimEvents.splice(0, shimEvents.length - maxShimEvents);
   }

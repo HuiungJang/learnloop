@@ -919,14 +919,14 @@ Verification:
 
 ### Post-MVP Phase 40: Add Multi-Adapter Isolation And Status
 
-- [ ] Show adapter status per provider.
-- [ ] Keep provider failures isolated.
-- [ ] Prevent one provider's queue, parser, or shim state from blocking another provider.
-- [ ] Add adapter-level error events without raw prompt/code.
+- [x] Show adapter status per provider.
+- [x] Keep provider failures isolated.
+- [x] Prevent one provider's queue, parser, or shim state from blocking another provider.
+- [x] Add adapter-level error events without raw prompt/code.
 
 Verification:
 
-- [ ] Tests prove Codex still collects when Claude or Gemini adapter fails.
+- [x] Tests prove Codex still collects when Claude or Gemini adapter fails.
 
 ### Post-MVP Phase 41: Add Retention Policy Settings Model
 

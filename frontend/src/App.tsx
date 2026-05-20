@@ -161,12 +161,27 @@ type LocalWatcherStatus = {
   watcherCounts: LocalWatcherCounts;
   watchers: LocalWatcherRegistration[];
 };
+type LocalAdapterStatusValue = "idle" | "running" | "ok" | "failed" | "missing";
+type LocalAdapterStatus = {
+  provider: string;
+  label: string;
+  status: LocalAdapterStatusValue;
+  reason: string | null;
+  errorCode: string | null;
+  lastEventType: string | null;
+  lastEventAt: string | null;
+};
 type CompanionWatcherStatusResponse = {
   status?: string;
   collectionEnabled?: boolean;
   uploadQueue?: Partial<LocalUploadQueueStatus>;
   watcherCounts?: Partial<LocalWatcherCounts>;
   watchers?: Partial<LocalWatcherRegistration>[];
+  message?: string;
+};
+type CompanionAdapterStatusResponse = {
+  status?: string;
+  adapters?: Partial<LocalAdapterStatus>[];
   message?: string;
 };
 
@@ -269,6 +284,13 @@ function watcherStatusClass(watcher: LocalWatcherRegistration): string {
   if (watcher.state === "active") return "status-success";
   if (watcher.state === "degraded") return "status-warning";
   if (watcher.reason === "collection_disabled") return "status-neutral";
+  return "status-danger";
+}
+
+function adapterStatusClass(adapter: LocalAdapterStatus): string {
+  if (adapter.status === "ok") return "status-success";
+  if (adapter.status === "running") return "status-warning";
+  if (adapter.status === "idle") return "status-neutral";
   return "status-danger";
 }
 
@@ -404,6 +426,27 @@ function toLocalWatcherRegistration(value: Partial<LocalWatcherRegistration>): L
     droppedEventCount: safeNumber(value.droppedEventCount),
     reconciliationQueued: value.reconciliationQueued === true
   };
+}
+
+function toLocalAdapterStatuses(payload: CompanionAdapterStatusResponse): LocalAdapterStatus[] {
+  return Array.isArray(payload.adapters) ? payload.adapters.map(toLocalAdapterStatus) : [];
+}
+
+function toLocalAdapterStatus(value: Partial<LocalAdapterStatus>): LocalAdapterStatus {
+  const status = isLocalAdapterStatusValue(value.status) ? value.status : "idle";
+  return {
+    provider: typeof value.provider === "string" ? value.provider : "unknown",
+    label: typeof value.label === "string" ? value.label : "Unknown adapter",
+    status,
+    reason: typeof value.reason === "string" ? value.reason : null,
+    errorCode: typeof value.errorCode === "string" ? value.errorCode : null,
+    lastEventType: typeof value.lastEventType === "string" ? value.lastEventType : null,
+    lastEventAt: typeof value.lastEventAt === "string" ? value.lastEventAt : null
+  };
+}
+
+function isLocalAdapterStatusValue(value: unknown): value is LocalAdapterStatusValue {
+  return value === "idle" || value === "running" || value === "ok" || value === "failed" || value === "missing";
 }
 
 function isLocalWatcherState(value: unknown): value is LocalWatcherState {
@@ -555,6 +598,7 @@ export function App() {
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
   const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
   const [localWatcherStatus, setLocalWatcherStatus] = useState<LocalWatcherStatus | null>(null);
+  const [localAdapterStatuses, setLocalAdapterStatuses] = useState<LocalAdapterStatus[]>([]);
   const [localWatcherLoading, setLocalWatcherLoading] = useState(false);
   const [localWatcherError, setLocalWatcherError] = useState("");
   const [repositoryLabel, setRepositoryLabel] = useState("");
@@ -618,6 +662,7 @@ export function App() {
     if (session === null) {
       setLocalRepositories([]);
       setLocalWatcherStatus(null);
+      setLocalAdapterStatuses([]);
       setLocalWatcherError("");
     } else {
       void refreshLocalRepositories(session);
@@ -1299,6 +1344,22 @@ export function App() {
           </div>
         </div>
         {localWatcherError.length > 0 ? <p className="form-error">{localWatcherError}</p> : null}
+        {localAdapterStatuses.length > 0 ? (
+          <div className="watcher-list" aria-label="Adapter status">
+            {localAdapterStatuses.map((adapter) => (
+              <div className="watcher-row" key={adapter.provider}>
+                <div>
+                  <strong>{adapter.label}</strong>
+                  <small>
+                    {adapter.reason === null ? adapter.provider : `${adapter.provider} · ${adapter.reason.replaceAll("_", " ")}`}
+                    {adapter.lastEventAt === null ? "" : ` · ${formatShortDate(adapter.lastEventAt)}`}
+                  </small>
+                </div>
+                <span className={`status-badge ${adapterStatusClass(adapter)}`}>{adapter.status}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="watcher-list" aria-live="polite">
           {localWatcherStatus?.watchers.length === 0 ? <p className="muted-copy">No watcher registrations.</p> : null}
           {localWatcherStatus?.watchers.map((watcher) => (
@@ -1677,11 +1738,25 @@ export function App() {
       const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
       if (!response.ok) throw new Error(payload.message || "Watcher status is unavailable");
       setLocalWatcherStatus(toLocalWatcherStatus(payload));
+      await refreshLocalAdapterStatus(localToken);
     } catch (error) {
       setLocalWatcherStatus(null);
+      setLocalAdapterStatuses([]);
       setLocalWatcherError(error instanceof Error ? error.message : "Watcher status is unavailable");
     } finally {
       setLocalWatcherLoading(false);
+    }
+  }
+
+  async function refreshLocalAdapterStatus(localToken: string) {
+    try {
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/adapters/status`, {
+        headers: { "x-learnloop-local-token": localToken }
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionAdapterStatusResponse;
+      setLocalAdapterStatuses(response.ok ? toLocalAdapterStatuses(payload) : []);
+    } catch {
+      setLocalAdapterStatuses([]);
     }
   }
 
@@ -1698,6 +1773,7 @@ export function App() {
       const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
       if (!response.ok) throw new Error(payload.message || "Watcher setting update failed");
       setLocalWatcherStatus(toLocalWatcherStatus(payload));
+      await refreshLocalAdapterStatus(localToken);
     } catch (error) {
       setLocalWatcherError(error instanceof Error ? error.message : "Watcher setting update failed");
     } finally {

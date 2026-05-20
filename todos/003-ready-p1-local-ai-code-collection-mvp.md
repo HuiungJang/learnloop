@@ -1005,3 +1005,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Gemini parser failures should degrade to adapter metadata so CLI execution and collection health remain independent of parser quality.
+
+### 2026-05-20 - Post-MVP Phase 40 Multi-Adapter Isolation And Status
+
+**By:** Codex
+
+**Actions:**
+- Added an adapter status registry with isolated per-provider states.
+- Added companion `/adapters/status` for Codex CLI, Codex App, Claude Code, and Gemini CLI.
+- Recorded shim health and adapter error events without retaining raw prompt or code excerpts.
+- Displayed adapter status inside the local Collection Status panel.
+- Kept adapter status refresh separate from watcher status so adapter failures do not block watcher visibility.
+- Checked off Post-MVP Phase 40 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-adapter-status.test.js` and `tests/codex-shim.test.js`.
+- Ran `./scripts/frontend-typecheck.sh`.
+- Tests prove Codex CLI status remains OK when Claude or Gemini adapter events fail.
+
+**Learnings:**
+- Adapter status should be an operational signal layer, not a content layer; it must never retain raw prompts, code, stdout, or stderr.
