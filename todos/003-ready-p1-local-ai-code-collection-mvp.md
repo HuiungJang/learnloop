@@ -850,3 +850,24 @@ Initial Phase 1 files:
 
 **Learnings:**
 - The watcher performance contract should be expressed as counts and budgets, not elapsed time, so it stays stable on local machines and CI.
+
+### 2026-05-20 - Post-MVP Phase 32 Generic Shim Installer
+
+**By:** Codex
+
+**Actions:**
+- Extracted provider-agnostic shim install, uninstall, repair, and status functions.
+- Kept the existing Codex wrapper API for current callers.
+- Added Gemini CLI and Claude Code provider configs.
+- Preserved LearnLoop-managed shim directories and safe overwrite checks.
+- Recorded original binary path and SHA-256 hash in provider metadata.
+- Added recursive shim-chain detection for generic provider installs.
+- Checked off Post-MVP Phase 32 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Tests cover Codex install, uninstall, repair, status, missing original, changed original, and recursive shim rejection.
+- Tests cover generic Gemini and Claude install/status/repair/uninstall plus recursive shim rejection.
+
+**Learnings:**
+- Generic shim extraction is safest when the Codex-specific public functions remain wrappers, because existing scripts and tests keep their stable API.

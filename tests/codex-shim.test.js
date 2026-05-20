@@ -9,13 +9,17 @@ import test from "node:test";
 import {
   buildEndEvent,
   createOutputCollector,
+  installProviderShim,
   installCodexShim,
   isLoopbackCompanionUrl,
+  repairProviderShim,
   repairCodexShim,
   runProviderShim,
   sendCompanionEvent,
   shouldCaptureProviderOutput,
+  statusProviderShim,
   statusCodexShim,
+  uninstallProviderShim,
   uninstallCodexShim
 } from "../scripts/local-ai-shim.mjs";
 
@@ -72,6 +76,51 @@ test("codex shim detects recursive install candidates and changed original paths
     await assert.rejects(
       installCodexShim({ shimDir: path.join(dir, "new-shims"), pathEnv: recursiveShimDir }),
       /Original codex resolves to a LearnLoop shim/
+    );
+  });
+});
+
+test("generic shim installer supports Gemini and Claude providers", async () => {
+  await withTempDir(async (dir) => {
+    const originalDir = path.join(dir, "original-bin");
+    const shimDir = path.join(dir, "learnloop-shims");
+    await writeExecutable(path.join(originalDir, "gemini"), "#!/usr/bin/env sh\necho gemini\n");
+    await writeExecutable(path.join(originalDir, "claude"), "#!/usr/bin/env sh\necho claude\n");
+
+    const gemini = await installProviderShim("gemini", { shimDir, pathEnv: originalDir });
+    const claude = await installProviderShim("claude", { shimDir, pathEnv: originalDir });
+
+    assert.equal(gemini.provider, "gemini");
+    assert.equal(gemini.command, "gemini");
+    assert.equal(gemini.originalHash.length, 64);
+    assert.match(await readFile(path.join(shimDir, "gemini"), "utf8"), /LEARNLOOP_LOCAL_AI_SHIM/);
+    assert.equal(claude.provider, "claude");
+    assert.equal(claude.command, "claude");
+    assert.equal(claude.originalHash.length, 64);
+
+    const geminiStatus = await statusProviderShim("gemini", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` });
+    assert.equal(geminiStatus.installed, true);
+    assert.equal(geminiStatus.active, true);
+
+    await rm(path.join(shimDir, "gemini"), { force: true });
+    const repaired = await repairProviderShim("gemini", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` });
+    assert.equal(repaired.provider, "gemini");
+    assert.match(await readFile(path.join(shimDir, "gemini"), "utf8"), /LEARNLOOP_LOCAL_AI_SHIM/);
+
+    const removed = await uninstallProviderShim("claude", { shimDir });
+    assert.equal(removed.provider, "claude");
+    assert.equal((await statusProviderShim("claude", { shimDir })).installed, false);
+  });
+});
+
+test("generic shim installer detects recursive shim chains for every provider", async () => {
+  await withTempDir(async (dir) => {
+    const recursiveShimDir = path.join(dir, "recursive-shims");
+    await writeExecutable(path.join(recursiveShimDir, "gemini"), "#!/usr/bin/env sh\n# LEARNLOOP_LOCAL_AI_SHIM\nexit 1\n");
+
+    await assert.rejects(
+      installProviderShim("gemini", { shimDir: path.join(dir, "learnloop-shims"), pathEnv: recursiveShimDir }),
+      /Original gemini resolves to a LearnLoop shim/
     );
   });
 });

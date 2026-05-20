@@ -831,14 +831,14 @@ Verification:
 
 ### Post-MVP Phase 32: Extract Generic Shim Installer
 
-- [ ] Extract provider-agnostic shim install, uninstall, repair, and status logic from the Codex shim.
-- [ ] Keep shims in a LearnLoop-managed directory.
-- [ ] Record original binary path and hash where practical.
-- [ ] Detect recursive shim chains for every provider.
+- [x] Extract provider-agnostic shim install, uninstall, repair, and status logic from the Codex shim.
+- [x] Keep shims in a LearnLoop-managed directory.
+- [x] Record original binary path and hash where practical.
+- [x] Detect recursive shim chains for every provider.
 
 Verification:
 
-- [ ] Fake PATH tests cover install, uninstall, repair, missing original binary, and recursion.
+- [x] Fake PATH tests cover install, uninstall, repair, missing original binary, and recursion.
 
 ### Post-MVP Phase 33: Extract Generic Shim Runtime
 

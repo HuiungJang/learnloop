@@ -10,7 +10,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SHIM_MARKER = "LEARNLOOP_CODEX_SHIM";
+const LEGACY_CODEX_SHIM_MARKER = "LEARNLOOP_CODEX_SHIM";
+const GENERIC_SHIM_MARKER = "LEARNLOOP_LOCAL_AI_SHIM";
 const DEFAULT_PROVIDER = "codex";
 const DEFAULT_EVENT_TIMEOUT_MS = 20;
 const FORWARDED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM", "SIGQUIT"];
@@ -23,11 +24,25 @@ const providerConfigs = {
     command: "codex",
     label: "Codex CLI",
     eventProvider: "codex_cli"
+  },
+  gemini: {
+    command: "gemini",
+    label: "Gemini CLI",
+    eventProvider: "gemini_cli"
+  },
+  claude: {
+    command: "claude",
+    label: "Claude Code",
+    eventProvider: "claude_code"
   }
 };
 
 export async function installCodexShim(options = {}) {
-  const provider = providerConfig(DEFAULT_PROVIDER);
+  return await installProviderShim(DEFAULT_PROVIDER, options);
+}
+
+export async function installProviderShim(providerName, options = {}) {
+  const provider = providerConfig(providerName);
   const paths = shimPaths(provider.command, options);
   await ensureShimStorage(paths);
 
@@ -36,13 +51,18 @@ export async function installCodexShim(options = {}) {
     shimDir: paths.shimDir
   });
   if (!resolved.originalPath) {
-    throw new Error(resolved.recursiveCandidateFound ? "Original codex resolves to a LearnLoop shim" : "Original codex was not found in PATH");
+    throw new Error(
+      resolved.recursiveCandidateFound
+        ? `Original ${provider.command} resolves to a LearnLoop shim`
+        : `Original ${provider.command} was not found in PATH`
+    );
   }
 
   const originalHash = await hashFileIfReadable(resolved.originalPath);
   const metadata = {
-    provider: DEFAULT_PROVIDER,
+    provider: provider.name,
     command: provider.command,
+    label: provider.label,
     originalPath: resolved.originalPath,
     originalHash,
     shimPath: paths.shimPath,
@@ -57,20 +77,28 @@ export async function installCodexShim(options = {}) {
   return {
     ...metadata,
     active: isFirstCommandPath(provider.command, paths.shimPath, options.pathEnv),
-    pathGuidance: `Put ${paths.shimDir} before the real codex directory in PATH.`
+    pathGuidance: `Put ${paths.shimDir} before the real ${provider.command} directory in PATH.`
   };
 }
 
 export async function uninstallCodexShim(options = {}) {
-  const provider = providerConfig(DEFAULT_PROVIDER);
+  return await uninstallProviderShim(DEFAULT_PROVIDER, options);
+}
+
+export async function uninstallProviderShim(providerName, options = {}) {
+  const provider = providerConfig(providerName);
   const paths = shimPaths(provider.command, options);
   await removeManagedFile(paths.shimPath, { requireLearnLoopShimMarker: true });
   await removeManagedFile(paths.metadataPath);
-  return { provider: DEFAULT_PROVIDER, shimPath: paths.shimPath, removed: true };
+  return { provider: provider.name, shimPath: paths.shimPath, removed: true };
 }
 
 export async function repairCodexShim(options = {}) {
-  const provider = providerConfig(DEFAULT_PROVIDER);
+  return await repairProviderShim(DEFAULT_PROVIDER, options);
+}
+
+export async function repairProviderShim(providerName, options = {}) {
+  const provider = providerConfig(providerName);
   const paths = shimPaths(provider.command, options);
   const metadata = await readMetadata(paths.metadataPath);
   const resolved = await resolveOriginalCommand(provider.command, {
@@ -79,13 +107,14 @@ export async function repairCodexShim(options = {}) {
   });
   const originalPath = resolved.originalPath ?? metadata?.originalPath;
   if (!originalPath || (await isLearnLoopShim(originalPath))) {
-    throw new Error("Original codex could not be repaired");
+    throw new Error(`Original ${provider.command} could not be repaired`);
   }
   await access(originalPath, fsConstants.X_OK);
   const originalHash = await hashFileIfReadable(originalPath);
   const repaired = {
-    provider: DEFAULT_PROVIDER,
+    provider: provider.name,
     command: provider.command,
+    label: provider.label,
     originalPath,
     originalHash,
     shimPath: paths.shimPath,
@@ -101,12 +130,16 @@ export async function repairCodexShim(options = {}) {
   return {
     ...repaired,
     active: isFirstCommandPath(provider.command, paths.shimPath, options.pathEnv),
-    pathGuidance: `Put ${paths.shimDir} before the real codex directory in PATH.`
+    pathGuidance: `Put ${paths.shimDir} before the real ${provider.command} directory in PATH.`
   };
 }
 
 export async function statusCodexShim(options = {}) {
-  const provider = providerConfig(DEFAULT_PROVIDER);
+  return await statusProviderShim(DEFAULT_PROVIDER, options);
+}
+
+export async function statusProviderShim(providerName, options = {}) {
+  const provider = providerConfig(providerName);
   const paths = shimPaths(provider.command, options);
   const metadata = await readMetadata(paths.metadataPath);
   const shimExists = await isExecutable(paths.shimPath);
@@ -144,7 +177,7 @@ export async function statusCodexShim(options = {}) {
   }
 
   return {
-    provider: DEFAULT_PROVIDER,
+    provider: provider.name,
     shimDir: paths.shimDir,
     shimPath: paths.shimPath,
     installed: metadata !== null && shimExists,
@@ -152,7 +185,7 @@ export async function statusCodexShim(options = {}) {
     metadata,
     warnings,
     problems,
-    pathGuidance: `Put ${paths.shimDir} before the real codex directory in PATH.`
+    pathGuidance: `Put ${paths.shimDir} before the real ${provider.command} directory in PATH.`
   };
 }
 
@@ -444,7 +477,7 @@ export async function resolveOriginalCommand(command, options = {}) {
 
 function renderShimScript(metadata) {
   return `#!/usr/bin/env sh
-# ${SHIM_MARKER}
+# ${shimMarker(metadata.provider)}
 exec ${shellQuote(metadata.nodePath)} ${shellQuote(metadata.scriptPath)} run ${shellQuote(metadata.provider)} "$@"
 `;
 }
@@ -456,7 +489,11 @@ function shellQuote(value) {
 function providerConfig(providerName) {
   const config = providerConfigs[providerName];
   if (!config) throw new Error(`Unsupported shim provider: ${providerName}`);
-  return config;
+  return { name: providerName, ...config };
+}
+
+function shimMarker(providerName) {
+  return providerName === DEFAULT_PROVIDER ? LEGACY_CODEX_SHIM_MARKER : GENERIC_SHIM_MARKER;
 }
 
 function shimPaths(command, options = {}) {
@@ -563,7 +600,7 @@ async function isExecutable(filePath) {
 async function isLearnLoopShim(filePath) {
   try {
     const content = await readFile(filePath, "utf8");
-    return content.includes(SHIM_MARKER);
+    return content.includes(LEGACY_CODEX_SHIM_MARKER) || content.includes(GENERIC_SHIM_MARKER);
   } catch {
     return false;
   }
@@ -621,18 +658,20 @@ function signalExitCode(signal) {
 }
 
 function printInstallResult(result) {
-  console.log(`Installed Codex shim: ${result.shimPath}`);
-  console.log(`Original Codex: ${result.originalPath}`);
+  const label = result.label ?? result.provider;
+  console.log(`Installed ${label} shim: ${result.shimPath}`);
+  console.log(`Original ${label}: ${result.originalPath}`);
   if (!result.active) {
     console.log(`PATH update needed: ${result.pathGuidance}`);
   }
 }
 
 function printStatus(result) {
-  console.log(result.installed ? `Codex shim installed: ${result.shimPath}` : "Codex shim is not installed.");
-  console.log(result.active ? "Codex shim is active in PATH." : "Codex shim is not first in PATH.");
+  const label = result.metadata?.label ?? result.provider;
+  console.log(result.installed ? `${label} shim installed: ${result.shimPath}` : `${label} shim is not installed.`);
+  console.log(result.active ? `${label} shim is active in PATH.` : `${label} shim is not first in PATH.`);
   if (result.metadata?.originalPath) {
-    console.log(`Original Codex: ${result.metadata.originalPath}`);
+    console.log(`Original ${label}: ${result.metadata.originalPath}`);
   }
   for (const warning of result.warnings) {
     console.log(`Warning: ${warning}`);
@@ -656,21 +695,19 @@ async function main(argv) {
     }
 
     const providerName = command ?? DEFAULT_PROVIDER;
-    if (providerName !== DEFAULT_PROVIDER) {
-      throw new Error("Usage: local-ai-shim.mjs codex [install|uninstall|repair|status]");
-    }
+    const provider = providerConfig(providerName);
     const action = providerOrAction ?? "status";
     if (action === "install") {
-      printInstallResult(await installCodexShim());
+      printInstallResult(await installProviderShim(providerName));
     } else if (action === "uninstall") {
-      const result = await uninstallCodexShim();
-      console.log(`Removed Codex shim: ${result.shimPath}`);
+      const result = await uninstallProviderShim(providerName);
+      console.log(`Removed ${provider.label} shim: ${result.shimPath}`);
     } else if (action === "repair") {
-      printInstallResult(await repairCodexShim());
+      printInstallResult(await repairProviderShim(providerName));
     } else if (action === "status") {
-      printStatus(await statusCodexShim());
+      printStatus(await statusProviderShim(providerName));
     } else {
-      throw new Error("Usage: local-ai-shim.mjs codex [install|uninstall|repair|status]");
+      throw new Error("Usage: local-ai-shim.mjs [codex|gemini|claude] [install|uninstall|repair|status]");
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
