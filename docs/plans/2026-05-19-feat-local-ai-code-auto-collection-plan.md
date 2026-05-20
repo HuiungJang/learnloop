@@ -820,14 +820,14 @@ Verification:
 
 ### Post-MVP Phase 31: Add Watcher Performance Gate
 
-- [ ] Simulate 10 approved repos.
-- [ ] Simulate 1,000 changed files.
-- [ ] Simulate rapid save bursts.
-- [ ] Assert bounded memory, bounded Git command count, and one final session per settled window.
+- [x] Simulate 10 approved repos.
+- [x] Simulate 1,000 changed files.
+- [x] Simulate rapid save bursts.
+- [x] Assert bounded memory, bounded Git command count, and one final session per settled window.
 
 Verification:
 
-- [ ] Performance test runs in CI or a documented local performance script.
+- [x] Performance test runs in CI or a documented local performance script.
 
 ### Post-MVP Phase 32: Extract Generic Shim Installer
 

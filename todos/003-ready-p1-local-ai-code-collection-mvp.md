@@ -830,3 +830,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Watcher disablement belongs in the registry, not only the UI, because approved repositories should stay approved while filesystem watchers are stopped.
+
+### 2026-05-20 - Post-MVP Phase 31 Watcher Performance Gate
+
+**By:** Codex
+
+**Actions:**
+- Added a watcher performance gate script for local and CI execution.
+- Simulated 10 approved repositories, 1,000 changed files, and 3 rapid save events per file.
+- Asserted pending changes drain to zero after reconciliation.
+- Asserted one reconciliation/session per repo settled window.
+- Asserted the simulated Git command count stays within the repo-count-based budget.
+- Checked off Post-MVP Phase 31 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-performance.test.js`.
+- Ran bundled-Node `scripts/local-ai-watcher-performance.mjs`.
+- The performance summary reported 3,000 events, 10 reconciliations, 10 sessions, 0 pending changes, 0 dropped events, and 20 estimated Git commands.
+
+**Learnings:**
+- The watcher performance contract should be expressed as counts and budgets, not elapsed time, so it stays stable on local machines and CI.
