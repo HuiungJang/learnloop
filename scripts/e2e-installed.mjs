@@ -127,7 +127,7 @@ try {
   assert.equal(storedApiKeySettings.apiKey, localAiKey);
 
   await page.getByRole("button", { name: /Run flow/i }).click();
-  await page.getByText(/Card draft|Card published|Curation open/i).waitFor({ timeout: 20_000 });
+  await page.getByText(/Card draft|Card published|Curation open/i).first().waitFor({ timeout: 20_000 });
 
   await page.getByRole("button", { name: /Logout/i }).click();
   await page.getByRole("button", { name: /^Login$/i }).first().click();

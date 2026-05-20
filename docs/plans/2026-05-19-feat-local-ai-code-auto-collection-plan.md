@@ -603,26 +603,26 @@ Verification:
 
 - [x] Node HTTP tests reject bad Host, bad Origin, missing token, oversized request, unauthenticated purge/revoke, and non-loopback access.
 - [x] Release bundle includes companion scripts and can start/stop cleanly.
-- [ ] `./scripts/e2e-installed.sh` proves no role selector, local collection/ingestion, curation, generation, and practice.
+- [x] `./scripts/e2e-installed.sh` proves no role selector, local collection/ingestion, curation, generation, and practice.
 
 ### Phase 13: Run Regression, Security, Data, And Performance Gates
 
-- [ ] Run backend tests.
-- [ ] Run frontend typecheck/build.
-- [ ] Run Node companion/shim tests.
-- [ ] Run smoke test.
-- [ ] Run installed-app E2E.
-- [ ] Run sentinel leakage tests across audit, logs, API responses, and frontend state.
-- [ ] Run duplicate-ingestion race test.
-- [ ] Run evidence list performance check with 1,000 bundles.
+- [x] Run backend tests.
+- [x] Run frontend typecheck/build.
+- [x] Run Node companion/shim tests.
+- [x] Run smoke test.
+- [x] Run installed-app E2E.
+- [x] Run sentinel leakage tests across audit, logs, API responses, and frontend state.
+- [x] Run duplicate-ingestion race test.
+- [x] Run evidence list performance check with 1,000 bundles.
 
 Verification:
 
-- [ ] `./scripts/test.sh`
-- [ ] `./scripts/frontend-typecheck.sh`
-- [ ] `./scripts/smoke.sh`
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] No raw prompt/code appears in audit logs, broad list views, browser storage, or generated diagnostics.
+- [x] `./scripts/test.sh`
+- [x] `./scripts/frontend-typecheck.sh`
+- [x] `./scripts/smoke.sh`
+- [x] `./scripts/e2e-installed.sh`
+- [x] No raw prompt/code appears in audit logs, broad list views, browser storage, or generated diagnostics.
 
 ## Post-MVP Implementation Phases
 

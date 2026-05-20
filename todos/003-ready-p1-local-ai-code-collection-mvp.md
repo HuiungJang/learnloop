@@ -503,3 +503,18 @@ Initial Phase 1 files:
 **Learnings:**
 - Browser-facing companion tokens should be scoped to the single browser action they enable, not reused as the companion's general local API token.
 - Checking only the app install directory is insufficient for local tools; token storage also has to reject any git ancestor because the user's work repos are separate from the installed app.
+
+### 2026-05-20 - Phase 13 Regression Gate
+
+**By:** Codex
+
+**Actions:**
+- Ran backend integration tests, full script tests, frontend typecheck/build, smoke tests, Node companion/shim tests, and installed-app E2E.
+- Updated the practice repository integration fixture to use the local owner seed user after removing admin/user role selection from the local profile.
+- Fixed the installed-app E2E status wait to target the first matching run-flow state when repeated status text is present.
+- Verified sentinel leakage coverage across audit/API/browser surfaces, duplicate ingestion race coverage, and the 1,000-bundle evidence list performance case.
+- Completed Phase 13 plan checks and closed the Phase 12 installed-app E2E verification item.
+
+**Learnings:**
+- Installed-app E2E should run against a clean Compose project when the default local project has stale migration volumes; the successful Phase 13 run used `learnloop-phase13` on port 18080.
+- Direct installed runner checks require the runner Docker overlay, otherwise backend health can pass while local execution endpoints fail.

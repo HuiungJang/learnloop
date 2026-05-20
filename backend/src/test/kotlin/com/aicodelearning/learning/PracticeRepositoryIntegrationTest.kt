@@ -70,6 +70,7 @@ class PracticeRepositoryIntegrationTest {
         val problemId = "problem-practice-$suffix"
         val oldSubmissionId = "submission-old-$suffix"
         val latestSubmissionId = "submission-latest-$suffix"
+        val userId = "u-local-owner"
 
         patternCardRepository.save(
             PatternCardEntity(
@@ -77,7 +78,7 @@ class PracticeRepositoryIntegrationTest {
                 organizationId = "org-demo",
                 teamId = "team-platform",
                 projectId = "project-learning",
-                createdByUserId = "u-contributor",
+                createdByUserId = userId,
                 title = "Repository-backed practice",
                 summary = "Loads the practice workbench read model.",
                 visibility = "organization",
@@ -151,7 +152,7 @@ class PracticeRepositoryIntegrationTest {
             SubmissionEntity(
                 id = oldSubmissionId,
                 problemId = problemId,
-                userId = "u-learner",
+                userId = userId,
                 textAnswer = "",
                 resultStatus = "submitted",
                 createdAt = now.minusSeconds(120),
@@ -166,7 +167,7 @@ class PracticeRepositoryIntegrationTest {
             SubmissionEntity(
                 id = latestSubmissionId,
                 problemId = problemId,
-                userId = "u-learner",
+                userId = userId,
                 textAnswer = "",
                 resultStatus = "passed",
                 createdAt = now.minusSeconds(60),
@@ -191,7 +192,7 @@ class PracticeRepositoryIntegrationTest {
             SandboxRunResultEntity(
                 id = "sandbox-run-$suffix",
                 problemId = problemId,
-                userId = "u-learner",
+                userId = userId,
                 submissionId = latestSubmissionId,
                 status = "passed",
                 runnerKind = "local-test",
@@ -212,18 +213,18 @@ class PracticeRepositoryIntegrationTest {
         val provenance = problemProvenanceLinkRepository.findByProblemIdInOrderByProblemIdAscSortOrderAsc(listOf(problemId))
         assertEquals(listOf("Repository diff"), provenance.map { it.sourceLabel })
 
-        val latestSubmission = submissionRepository.findFirstByUserIdAndProblemIdOrderByUpdatedAtDesc("u-learner", problemId)
+        val latestSubmission = submissionRepository.findFirstByUserIdAndProblemIdOrderByUpdatedAtDesc(userId, problemId)
         assertNotNull(latestSubmission)
         assertEquals(latestSubmissionId, latestSubmission?.id)
         assertEquals(
             latestSubmissionId,
-            submissionRepository.findByUserIdAndProblemIdAndClientAttemptId("u-learner", problemId, "attempt-latest-$suffix")?.id,
+            submissionRepository.findByUserIdAndProblemIdAndClientAttemptId(userId, problemId, "attempt-latest-$suffix")?.id,
         )
 
         val submissionFiles = submissionFileRepository.findBySubmissionIdInOrderBySubmissionIdAscPathAsc(listOf(latestSubmissionId))
         assertEquals(listOf("src/main.ts"), submissionFiles.map { it.path })
 
-        val latestRun = sandboxRunResultRepository.findFirstByUserIdAndProblemIdOrderByCreatedAtDesc("u-learner", problemId)
+        val latestRun = sandboxRunResultRepository.findFirstByUserIdAndProblemIdOrderByCreatedAtDesc(userId, problemId)
         assertEquals("passed", latestRun?.status)
         assertEquals(
             listOf(latestRun?.id),
