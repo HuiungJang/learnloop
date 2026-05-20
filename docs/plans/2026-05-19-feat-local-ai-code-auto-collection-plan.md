@@ -753,14 +753,14 @@ Verification:
 
 ### Post-MVP Phase 25: Add Watcher Ignore And Path Safety
 
-- [ ] Run ignore rules before file reads, snapshotting, diff upload, and UI preview.
-- [ ] Deny sensitive extensions and filenames even when Git tracks the file.
-- [ ] Reject symlink escapes and path traversal.
-- [ ] Sanitize remote URLs before storage or logging.
+- [x] Run ignore rules before file reads, snapshotting, diff upload, and UI preview.
+- [x] Deny sensitive extensions and filenames even when Git tracks the file.
+- [x] Reject symlink escapes and path traversal.
+- [x] Sanitize remote URLs before storage or logging.
 
 Verification:
 
-- [ ] Tests cover `.env`, key files, symlink escape, ignored tracked file, binary file, and sanitized remote URL.
+- [x] Tests cover `.env`, key files, symlink escape, ignored tracked file, binary file, and sanitized remote URL.
 
 ### Post-MVP Phase 26: Add Before Snapshot Cache
 

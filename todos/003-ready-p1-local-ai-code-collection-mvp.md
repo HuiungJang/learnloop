@@ -709,3 +709,21 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Git reconciliation should run after debounce and backpressure, so watcher bursts collapse before any status or diff command executes.
+
+### 2026-05-20 - Post-MVP Phase 25 Watcher Ignore And Path Safety
+
+**By:** Codex
+
+**Actions:**
+- Added watcher-side path safety filtering before diff capture.
+- Denied `.env`, key/cert-style files, hidden paths, ignored directories, and binary/archive extensions before `git diff` runs.
+- Rejected path traversal and symlink escapes from diff candidates.
+- Preserved sanitized remote URL handling in Git reconciliation output.
+- Checked off Post-MVP Phase 25 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-git-reconcile.test.js`.
+- Tests cover `.env`, key files, ignored tracked files, binary files, symlink escape, path traversal, and sanitized remote URLs.
+
+**Learnings:**
+- Watcher ignore rules need to run at candidate selection time, not only during later file reads, because `git diff` can reveal sensitive tracked file content.

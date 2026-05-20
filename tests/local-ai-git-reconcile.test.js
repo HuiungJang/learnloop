@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -95,6 +95,59 @@ test("watcher debounce triggers one bounded status pass and one final diff pass 
   });
 });
 
+test("git reconciliation rejects traversal paths before building diff args", async () => {
+  const commandLog = [];
+  const commandRunner = async (args) => {
+    commandLog.push(args);
+    if (args[0] === "rev-parse") return ok("/tmp/repo\n");
+    if (args[0] === "branch") return ok("main\n");
+    if (args[0] === "remote") return ok("");
+    if (args[0] === "status") return ok(" M ../secret.txt\0 M src/app.ts\0");
+    if (args[0] === "diff") return ok("diff --git a/src/app.ts b/src/app.ts\n");
+    return ok("");
+  };
+
+  const result = await reconcileGitRepository({ repoRoot: "/tmp/repo" }, { commandRunner });
+  const diffArgs = commandLog.find((args) => args[0] === "diff");
+  assert.deepEqual(result.diffCandidates.map((file) => file.repoRelativePath), ["src/app.ts"]);
+  assert.equal(diffArgs.includes("../secret.txt"), false);
+});
+
+test("git reconciliation filters ignored, sensitive, binary, and symlink-escape paths before diff", async () => {
+  await withTempDir(async (dir) => {
+    const repoRoot = path.join(dir, "repo");
+    const outsideTarget = path.join(dir, "outside-secret.txt");
+    await mkdir(repoRoot, { recursive: true });
+    await initPathSafetyRepo(repoRoot);
+    await writeFile(outsideTarget, "outside\n");
+    await writeFile(path.join(repoRoot, "src", "safe.ts"), "export const safe = 2;\n");
+    await writeFile(path.join(repoRoot, ".env"), "TOKEN=sk-should-not-diff\n");
+    await writeFile(path.join(repoRoot, "secrets", "private.key"), "private-key\n");
+    await writeFile(path.join(repoRoot, "assets", "logo.png"), "not really png\n");
+    await writeFile(path.join(repoRoot, "dist", "generated.js"), "generated\n");
+    await symlink(outsideTarget, path.join(repoRoot, "link-outside.txt"));
+
+    const commandLog = [];
+    const result = await reconcileGitRepository(
+      { repoRoot },
+      {
+        timeoutMs: 5000,
+        onGitCommand: (event) => commandLog.push(event)
+      }
+    );
+
+    assert.equal(result.remoteUrl, "https://example.com/org/repo.git");
+    assert.deepEqual(result.diffCandidates.map((file) => file.repoRelativePath), ["src/safe.ts"]);
+    assert.equal(result.diff.includes("sk-should-not-diff"), false);
+    assert.equal(commandLog.find((event) => event.name === "diff").args.includes(".env"), false);
+    assertIgnored(result.ignoredFiles, ".env", "sensitive_file");
+    assertIgnored(result.ignoredFiles, "secrets/private.key", "sensitive_file");
+    assertIgnored(result.ignoredFiles, "assets/logo.png", "binary_or_archive");
+    assertIgnored(result.ignoredFiles, "dist/generated.js", "ignored_directory");
+    assertIgnored(result.ignoredFiles, "link-outside.txt", "symlink_escape");
+  });
+});
+
 async function initRepo(repoRoot) {
   await runGit(repoRoot, ["init"]);
   await runGit(repoRoot, ["config", "user.email", "learnloop@example.local"]);
@@ -105,6 +158,24 @@ async function initRepo(repoRoot) {
     await writeFile(path.join(repoRoot, "src", `file-${index}.txt`), `initial-${index}\n`);
   }
   await runGit(repoRoot, ["add", "."]);
+  await runGit(repoRoot, ["commit", "-m", "init"]);
+}
+
+async function initPathSafetyRepo(repoRoot) {
+  await runGit(repoRoot, ["init"]);
+  await runGit(repoRoot, ["config", "user.email", "learnloop@example.local"]);
+  await runGit(repoRoot, ["config", "user.name", "LearnLoop"]);
+  await runGit(repoRoot, ["remote", "add", "origin", "https://user:secret@example.com/org/repo.git"]);
+  await mkdir(path.join(repoRoot, "src"), { recursive: true });
+  await mkdir(path.join(repoRoot, "secrets"), { recursive: true });
+  await mkdir(path.join(repoRoot, "assets"), { recursive: true });
+  await mkdir(path.join(repoRoot, "dist"), { recursive: true });
+  await writeFile(path.join(repoRoot, "src", "safe.ts"), "export const safe = 1;\n");
+  await writeFile(path.join(repoRoot, ".env"), "TOKEN=initial\n");
+  await writeFile(path.join(repoRoot, "secrets", "private.key"), "initial-key\n");
+  await writeFile(path.join(repoRoot, "assets", "logo.png"), "initial-png\n");
+  await writeFile(path.join(repoRoot, "dist", "generated.js"), "initial-generated\n");
+  await runGit(repoRoot, ["add", "-A"]);
   await runGit(repoRoot, ["commit", "-m", "init"]);
 }
 
@@ -137,4 +208,11 @@ async function withTempDir(fn) {
 
 function ok(stdout) {
   return { ok: true, stdout, stderr: "", outputTruncated: false };
+}
+
+function assertIgnored(ignoredFiles, repoRelativePath, reason) {
+  assert.ok(
+    ignoredFiles.some((file) => file.repoRelativePath === repoRelativePath && file.reason === reason),
+    `expected ${repoRelativePath} to be ignored as ${reason}`
+  );
 }

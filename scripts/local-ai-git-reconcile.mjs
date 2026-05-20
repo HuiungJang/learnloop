@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_TIMEOUT_MS = 2000;
@@ -60,9 +61,10 @@ export async function reconcileGitRepository(input, options = {}) {
 
   const changedFiles = parsePorcelainStatus(statusResult.stdout);
   const requestedPaths = new Set((input?.changedPaths ?? []).map(normalizeRepoRelativePath).filter(Boolean));
-  const diffCandidates = requestedPaths.size > 0
+  const rawDiffCandidates = requestedPaths.size > 0
     ? changedFiles.filter((file) => requestedPaths.has(file.repoRelativePath))
     : changedFiles;
+  const { safeFiles: diffCandidates, ignoredFiles } = await filterSafeDiffCandidates(metadata.repoRoot, rawDiffCandidates);
   const diffArgs = ["diff", "--no-ext-diff", "--", ...diffCandidates.map((file) => file.repoRelativePath)];
   const diffResult = diffCandidates.length > 0
     ? await run("diff", diffArgs)
@@ -76,10 +78,57 @@ export async function reconcileGitRepository(input, options = {}) {
     remoteUrl: metadata.remoteUrl,
     changedFiles,
     diffCandidates,
+    ignoredFiles,
     diff: diffResult.stdout,
     diffTruncated: diffResult.outputTruncated === true,
     commandCounts
   };
+}
+
+async function filterSafeDiffCandidates(repoRoot, files) {
+  const safeFiles = [];
+  const ignoredFiles = [];
+  for (const file of files) {
+    const reason = await unsafeWatchPathReason(repoRoot, file.repoRelativePath);
+    if (reason) {
+      ignoredFiles.push({ repoRelativePath: file.repoRelativePath, reason });
+    } else {
+      safeFiles.push(file);
+    }
+  }
+  return { safeFiles, ignoredFiles };
+}
+
+async function unsafeWatchPathReason(repoRoot, repoRelativePath) {
+  const normalized = normalizeRepoRelativePath(repoRelativePath);
+  if (!normalized) return "unsafe_repo_relative_path";
+  const ignoredReason = ignoredPathReason(normalized);
+  if (ignoredReason) return ignoredReason;
+
+  const absolutePath = path.resolve(repoRoot, normalized);
+  if (!isPathInside(absolutePath, repoRoot)) return "path_traversal";
+
+  const stats = await lstat(absolutePath).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (stats?.isSymbolicLink()) {
+    const target = await realpath(absolutePath).catch(() => null);
+    if (!target || !isPathInside(target, repoRoot)) return "symlink_escape";
+  }
+  return null;
+}
+
+function ignoredPathReason(repoRelativePath) {
+  const segments = repoRelativePath.split("/").filter(Boolean);
+  const lowerSegments = segments.map((segment) => segment.toLowerCase());
+  const name = lowerSegments.at(-1) ?? "";
+  if (name.startsWith(".env")) return "sensitive_file";
+  if (lowerSegments.some((segment) => segment.startsWith("."))) return "hidden_path";
+  if (lowerSegments.some((segment) => IGNORED_DIRECTORIES.has(segment))) return "ignored_directory";
+  if (SENSITIVE_FILE_PATTERN.test(name)) return "sensitive_file";
+  if (BINARY_OR_ARCHIVE_PATTERN.test(name)) return "binary_or_archive";
+  return null;
 }
 
 async function readRepositoryMetadata(repoRoot, cache, run) {
@@ -210,6 +259,15 @@ function safeMetadataToken(value) {
   return value && /^[A-Za-z0-9][A-Za-z0-9_.\/#@+-]{0,119}$/.test(value) ? value : null;
 }
 
+function isPathInside(candidate, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === "" || (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function positiveInteger(value, fallback) {
   return Number.isFinite(value) ? Math.max(1, Math.round(value)) : fallback;
 }
+
+const IGNORED_DIRECTORIES = new Set(["node_modules", "vendor", "dist", "build", "target", ".gradle", ".git"]);
+const SENSITIVE_FILE_PATTERN = /\.(?:pem|key|crt|cer|p12|pfx|jks|keystore)$/;
+const BINARY_OR_ARCHIVE_PATTERN = /\.(?:png|jpe?g|gif|webp|ico|pdf|zip|tar|gz|tgz|jar|class|so|dylib|dll|exe|bin|mp4|mov|mp3|wav)$/;
