@@ -108,6 +108,18 @@ export type RawPurgeResponse = {
   purgedItems: number;
 };
 
+export type EvidenceRetentionMode = "default" | "disabled" | "immediate";
+
+export type EvidenceRetentionSettingsResponse = {
+  organizationId: string;
+  ownerUserId: string;
+  retentionMode: EvidenceRetentionMode;
+  retentionDays: number | null;
+  automaticCleanupEnabled: boolean;
+  immediatePurge: boolean;
+  updatedAt: string | null;
+};
+
 export type LocalRepositoryConsentResponse = {
   repoIdentityHash: string;
   organizationId: string;
@@ -531,6 +543,32 @@ export async function purgeEvidenceRaw(token: string, bundleId: string): Promise
     token,
     method: "POST",
     body: {}
+  });
+}
+
+export async function getEvidenceRetentionSettings(token: string, organizationId: string): Promise<EvidenceRetentionSettingsResponse> {
+  return request<EvidenceRetentionSettingsResponse>(`/api/evidence/retention-settings?organizationId=${encodeURIComponent(organizationId)}`, { token });
+}
+
+export async function updateEvidenceRetentionSettings(
+  token: string,
+  body: { organizationId: string; retentionMode: EvidenceRetentionMode; retentionDays?: number | null }
+): Promise<EvidenceRetentionSettingsResponse> {
+  return request<EvidenceRetentionSettingsResponse>("/api/evidence/retention-settings", {
+    token,
+    method: "PATCH",
+    body
+  });
+}
+
+export async function purgeEvidenceRawScope(
+  token: string,
+  body: { organizationId: string; repositoryUrl?: string | null; purgeAll?: boolean }
+): Promise<RawPurgeResponse> {
+  return request<RawPurgeResponse>("/api/evidence/purge-raw", {
+    token,
+    method: "POST",
+    body
   });
 }
 

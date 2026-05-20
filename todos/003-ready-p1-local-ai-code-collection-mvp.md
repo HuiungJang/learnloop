@@ -1044,3 +1044,25 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Retention settings should model policy only; actual cleanup and purge execution stay in later bounded job phases.
+
+### 2026-05-20 - Post-MVP Phase 42 Retention Settings UI
+
+**By:** Codex
+
+**Actions:**
+- Added frontend API bindings for retention settings read/update and scoped raw purge.
+- Displayed the current raw evidence retention policy in Collection Status.
+- Added controls for default cleanup days, disabled cleanup, and immediate purge policy.
+- Added a purge-now action for all scoped raw evidence.
+- Kept user-facing copy explicit that metadata, generated cards, and practice progress remain after raw purge.
+- Checked off Post-MVP Phase 42 in the plan document.
+
+**Verification:**
+- Ran `./scripts/frontend-typecheck.sh`.
+- Ran `./scripts/frontend-build.sh`.
+- Ran `./scripts/test.sh`.
+- Ran `git diff --check`.
+- Manual checklist: current policy loads in Collection Status; default days can be updated; disabled cleanup hides the days input and saves; purge-now confirmation says metadata, generated cards, and practice progress remain; purge-now calls the scoped raw purge-all endpoint.
+
+**Learnings:**
+- Retention controls belong beside collection status because the policy affects raw evidence handling, while generated learning assets and progress remain part of the main learning surface.

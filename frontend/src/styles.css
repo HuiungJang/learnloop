@@ -539,6 +539,11 @@ h1 {
   background: var(--cream);
 }
 
+.danger-button {
+  border-color: rgba(138, 31, 17, 0.4);
+  color: #8a1f11;
+}
+
 .status-list,
 .tag-row,
 .problem-list {
@@ -1397,6 +1402,23 @@ h1 {
   gap: 10px;
 }
 
+.retention-policy-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, auto) minmax(96px, 120px) auto auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.retention-policy-row > div {
+  min-width: 0;
+}
+
+.retention-policy-row small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(28, 28, 28, 0.72);
+}
+
 .watcher-toolbar {
   display: grid;
   gap: 10px;
@@ -1422,7 +1444,9 @@ h1 {
   gap: 8px;
 }
 
-.repository-approval-row input {
+.repository-approval-row input,
+.retention-policy-row input,
+.retention-policy-row select {
   min-width: 0;
   min-height: 40px;
   padding: 8px 10px;
@@ -1634,6 +1658,7 @@ h1 {
   .evidence-browser,
   .evidence-meta-grid,
   .repository-approval-row,
+  .retention-policy-row,
   .repository-row {
     grid-template-columns: 1fr;
   }

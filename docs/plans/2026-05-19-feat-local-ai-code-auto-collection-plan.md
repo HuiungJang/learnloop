@@ -941,14 +941,15 @@ Verification:
 
 ### Post-MVP Phase 42: Add Retention Settings UI
 
-- [ ] Show current raw evidence retention policy.
-- [ ] Let the user change retention period.
-- [ ] Let the user trigger purge-now.
-- [ ] Explain whether metadata, generated cards, and practice progress remain.
+- [x] Show current raw evidence retention policy.
+- [x] Let the user change retention period.
+- [x] Let the user trigger purge-now.
+- [x] Explain whether metadata, generated cards, and practice progress remain.
 
 Verification:
 
-- [ ] Frontend test or manual checklist covers update, disabled cleanup, purge-now, and confirmation copy.
+- [x] Frontend test or manual checklist covers update, disabled cleanup, purge-now, and confirmation copy.
+  - Manual checklist: Collection Status loads the current policy, default days can be saved, disabled cleanup hides the days input and saves, purge-now asks for confirmation, and copy states metadata, generated cards, and practice progress remain.
 
 ### Post-MVP Phase 43: Add Retention Dry Run
 

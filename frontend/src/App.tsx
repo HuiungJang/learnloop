@@ -35,6 +35,7 @@ import {
   createSession,
   fetchHealth,
   getEvidenceDetail,
+  getEvidenceRetentionSettings,
   getLibrary,
   getPracticeProblem,
   getProgress,
@@ -46,6 +47,7 @@ import {
   listProviders,
   type PracticeAttemptFileRequest,
   purgeEvidenceRaw,
+  purgeEvidenceRawScope,
   runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
@@ -53,6 +55,8 @@ import {
   type EvidenceDetailResponse,
   type EvidenceItemResponse,
   type EvidenceListResponse,
+  type EvidenceRetentionMode,
+  type EvidenceRetentionSettingsResponse,
   type ConversionTraceResponse,
   type Membership,
   type PatternCardResponse,
@@ -64,6 +68,7 @@ import {
   type SessionResponse,
   type SourceBundleSummaryResponse,
   updateEvidenceAttribution,
+  updateEvidenceRetentionSettings,
   updateLocalRepository,
   type LocalRepositoryConsentResponse
 } from "./api/client";
@@ -380,6 +385,22 @@ function formatBytes(value: number | null): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function retentionSummary(settings: EvidenceRetentionSettingsResponse | null): string {
+  if (settings === null) return "Policy not loaded";
+  if (settings.retentionMode === "disabled") return "Automatic cleanup disabled";
+  if (settings.retentionMode === "immediate") return "Raw evidence purges immediately";
+  return `Raw evidence retained for ${settings.retentionDays ?? 30} days`;
+}
+
+function normalizeRetentionDays(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 30;
+}
+
+function retentionDaysFormValue(settings: EvidenceRetentionSettingsResponse): string {
+  return settings.retentionMode === "default" ? String(settings.retentionDays ?? 30) : "30";
+}
+
 function toLocalRepositoryConsent(repository: LocalRepositoryConsentResponse): LocalRepositoryConsent {
   return {
     repoIdentityHash: repository.repoIdentityHash,
@@ -601,6 +622,11 @@ export function App() {
   const [localAdapterStatuses, setLocalAdapterStatuses] = useState<LocalAdapterStatus[]>([]);
   const [localWatcherLoading, setLocalWatcherLoading] = useState(false);
   const [localWatcherError, setLocalWatcherError] = useState("");
+  const [retentionSettings, setRetentionSettings] = useState<EvidenceRetentionSettingsResponse | null>(null);
+  const [retentionMode, setRetentionMode] = useState<EvidenceRetentionMode>("default");
+  const [retentionDays, setRetentionDays] = useState("30");
+  const [retentionLoading, setRetentionLoading] = useState(false);
+  const [retentionMessage, setRetentionMessage] = useState("");
   const [repositoryLabel, setRepositoryLabel] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
@@ -663,6 +689,8 @@ export function App() {
       setLocalRepositories([]);
       setLocalWatcherStatus(null);
       setLocalAdapterStatuses([]);
+      setRetentionSettings(null);
+      setRetentionMessage("");
       setLocalWatcherError("");
     } else {
       void refreshLocalRepositories(session);
@@ -1360,6 +1388,42 @@ export function App() {
             ))}
           </div>
         ) : null}
+        <div className="retention-policy-row" aria-label="Raw evidence retention">
+          <div>
+            <strong>Raw Evidence Retention</strong>
+            <small>{retentionSummary(retentionSettings)} · metadata, generated cards, and practice progress remain after raw purge</small>
+          </div>
+          <select
+            aria-label="Retention mode"
+            disabled={retentionLoading}
+            onChange={(event) => setRetentionMode(event.target.value as EvidenceRetentionMode)}
+            value={retentionMode}
+          >
+            <option value="default">Default cleanup</option>
+            <option value="disabled">Disabled</option>
+            <option value="immediate">Immediate purge</option>
+          </select>
+          {retentionMode === "default" ? (
+            <input
+              aria-label="Retention days"
+              disabled={retentionLoading}
+              max={3650}
+              min={1}
+              onChange={(event) => setRetentionDays(event.target.value)}
+              type="number"
+              value={retentionDays}
+            />
+          ) : null}
+          <button className="secondary-button" disabled={retentionLoading} onClick={() => void saveRetentionSettings()} type="button">
+            <ShieldCheck aria-hidden="true" size={16} />
+            Save
+          </button>
+          <button className="secondary-button danger-button" disabled={retentionLoading} onClick={() => void purgeAllRawEvidenceNow()} type="button">
+            <Trash2 aria-hidden="true" size={16} />
+            Purge now
+          </button>
+        </div>
+        {retentionMessage.length > 0 ? <p className="muted-copy">{retentionMessage}</p> : null}
         <div className="watcher-list" aria-live="polite">
           {localWatcherStatus?.watchers.length === 0 ? <p className="muted-copy">No watcher registrations.</p> : null}
           {localWatcherStatus?.watchers.map((watcher) => (
@@ -1716,6 +1780,7 @@ export function App() {
     const currentMembership = primaryMembership(currentSession);
     if (currentMembership === null) {
       setLocalRepositories([]);
+      setRetentionSettings(null);
       return;
     }
 
@@ -1724,6 +1789,18 @@ export function App() {
       setLocalRepositories(repositories.map(toLocalRepositoryConsent));
     } catch {
       setLocalRepositories([]);
+    }
+    await refreshRetentionSettings(currentSession, currentMembership.organizationId);
+  }
+
+  async function refreshRetentionSettings(currentSession: SessionResponse, organizationId: string) {
+    try {
+      const settings = await getEvidenceRetentionSettings(currentSession.token, organizationId);
+      setRetentionSettings(settings);
+      setRetentionMode(settings.retentionMode);
+      setRetentionDays(retentionDaysFormValue(settings));
+    } catch {
+      setRetentionSettings(null);
     }
   }
 
@@ -1903,6 +1980,46 @@ export function App() {
       await selectEvidence(bundle.id);
     } catch (error) {
       setEvidenceActionMessage(error instanceof Error ? error.message : "Raw purge failed");
+    }
+  }
+
+  async function saveRetentionSettings() {
+    if (session === null || membership === null) return;
+    setRetentionLoading(true);
+    setRetentionMessage("");
+    try {
+      const settings = await updateEvidenceRetentionSettings(session.token, {
+        organizationId: membership.organizationId,
+        retentionMode,
+        retentionDays: retentionMode === "default" ? normalizeRetentionDays(retentionDays) : null
+      });
+      setRetentionSettings(settings);
+      setRetentionMode(settings.retentionMode);
+      setRetentionDays(retentionDaysFormValue(settings));
+      setRetentionMessage("Retention policy saved.");
+    } catch (error) {
+      setRetentionMessage(error instanceof Error ? error.message : "Retention policy update failed");
+    } finally {
+      setRetentionLoading(false);
+    }
+  }
+
+  async function purgeAllRawEvidenceNow() {
+    if (session === null || membership === null) return;
+    if (!window.confirm("Purge all raw evidence now? Metadata, generated cards, and practice progress remain.")) return;
+    setRetentionLoading(true);
+    setRetentionMessage("");
+    try {
+      const result = await purgeEvidenceRawScope(session.token, {
+        organizationId: membership.organizationId,
+        purgeAll: true
+      });
+      setRetentionMessage(`Purged ${result.purgedItems} raw items. Metadata, generated cards, and practice progress remain.`);
+      await refreshEvidence(session);
+    } catch (error) {
+      setRetentionMessage(error instanceof Error ? error.message : "Raw purge failed");
+    } finally {
+      setRetentionLoading(false);
     }
   }
 
