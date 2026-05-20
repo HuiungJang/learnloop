@@ -22,6 +22,8 @@ export class LocalAiWatcherRegistry {
     );
     this.setTimeout = options.setTimeoutFn ?? setTimeout;
     this.clearTimeout = options.clearTimeoutFn ?? clearTimeout;
+    this.reconcileRepository = options.reconcileRepository ?? null;
+    this.reconciliationPromises = new Set();
     this.registrations = new Map();
     this.activeReconciliations = 0;
   }
@@ -153,6 +155,10 @@ export class LocalAiWatcherRegistry {
     }
   }
 
+  async drainReconciliations() {
+    await Promise.allSettled([...this.reconciliationPromises]);
+  }
+
   counts() {
     return this.list().reduce(
       (counts, registration) => ({
@@ -189,6 +195,7 @@ export class LocalAiWatcherRegistry {
       registration.reconciliationActive = false;
       this.activeReconciliations = Math.max(0, this.activeReconciliations - 1);
     }
+    registration.reconciliationQueued = false;
     registration.pendingChanges.clear();
   }
 
@@ -219,6 +226,54 @@ export class LocalAiWatcherRegistry {
     registration.pendingChanges.clear();
     registration.lastSettledAt = this.clock().toISOString();
     registration.settledBatchCount += 1;
+    this.requestReconciliation(registration);
+  }
+
+  requestReconciliation(registration) {
+    if (!this.reconcileRepository) return;
+    if (!this.tryStartReconciliation(registration.repoIdentityHash)) {
+      registration.reconciliationQueued = true;
+      return;
+    }
+
+    const needsFullReconciliation = registration.needsFullReconciliation;
+    const payload = {
+      repoIdentityHash: registration.repoIdentityHash,
+      repoRoot: registration.repoRoot,
+      changedPaths: needsFullReconciliation ? [] : registration.settledChanges.map((change) => change.repoRelativePath),
+      needsFullReconciliation
+    };
+    const promise =
+      Promise.resolve()
+        .then(() => this.reconcileRepository(payload))
+        .then((result) => {
+          registration.lastReconciliationAt = this.clock().toISOString();
+          registration.lastReconciliationStatus = result?.status ?? "ok";
+          registration.lastReconciliationChangedFileCount = result?.changedFiles?.length ?? 0;
+          registration.lastReconciliationDiffCandidateCount = result?.diffCandidates?.length ?? 0;
+          if (result?.status === "degraded") {
+            registration.state = "degraded";
+            registration.reason = result.reason ?? "git_reconciliation_failed";
+          }
+          this.finishReconciliation(registration.repoIdentityHash, {
+            fullReconciliationCompleted: result?.status === "ok" && needsFullReconciliation
+          });
+        })
+        .catch(() => {
+          registration.lastReconciliationAt = this.clock().toISOString();
+          registration.lastReconciliationStatus = "failed";
+          registration.state = "degraded";
+          registration.reason = "git_reconciliation_failed";
+          this.finishReconciliation(registration.repoIdentityHash);
+        })
+        .finally(() => {
+          this.reconciliationPromises.delete(promise);
+          if (registration.reconciliationQueued) {
+            registration.reconciliationQueued = false;
+            this.requestReconciliation(registration);
+          }
+        });
+    this.reconciliationPromises.add(promise);
   }
 }
 
@@ -259,7 +314,12 @@ function changeState(existing) {
     settledBatchCount: existing?.settledBatchCount ?? 0,
     droppedEventCount: existing?.droppedEventCount ?? 0,
     needsFullReconciliation: existing?.needsFullReconciliation ?? false,
-    reconciliationActive: existing?.reconciliationActive ?? false
+    reconciliationActive: existing?.reconciliationActive ?? false,
+    reconciliationQueued: existing?.reconciliationQueued ?? false,
+    lastReconciliationAt: existing?.lastReconciliationAt ?? null,
+    lastReconciliationStatus: existing?.lastReconciliationStatus ?? null,
+    lastReconciliationChangedFileCount: existing?.lastReconciliationChangedFileCount ?? 0,
+    lastReconciliationDiffCandidateCount: existing?.lastReconciliationDiffCandidateCount ?? 0
   };
 }
 
@@ -282,6 +342,11 @@ function publicRegistration(registration) {
     droppedEventCount: registration.droppedEventCount,
     needsFullReconciliation: registration.needsFullReconciliation,
     reconciliationActive: registration.reconciliationActive,
+    reconciliationQueued: registration.reconciliationQueued,
+    lastReconciliationAt: registration.lastReconciliationAt,
+    lastReconciliationStatus: registration.lastReconciliationStatus,
+    lastReconciliationChangedFileCount: registration.lastReconciliationChangedFileCount,
+    lastReconciliationDiffCandidateCount: registration.lastReconciliationDiffCandidateCount,
     debounceMs: registration.watcher ? registration.debounceMs ?? null : null
   };
 }

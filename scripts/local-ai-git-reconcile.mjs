@@ -1,0 +1,215 @@
+import { spawn } from "node:child_process";
+import path from "node:path";
+
+const DEFAULT_TIMEOUT_MS = 2000;
+const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+const DEFAULT_CACHE_TTL_MS = 5000;
+
+export class GitReconciliationCache {
+  constructor(options = {}) {
+    this.ttlMs = positiveInteger(options.ttlMs, DEFAULT_CACHE_TTL_MS);
+    this.now = options.now ?? (() => Date.now());
+    this.entries = new Map();
+  }
+
+  get(repoRoot) {
+    const entry = this.entries.get(repoRoot);
+    if (!entry || entry.expiresAt <= this.now()) {
+      this.entries.delete(repoRoot);
+      return null;
+    }
+    return entry.value;
+  }
+
+  set(repoRoot, value) {
+    this.entries.set(repoRoot, { value, expiresAt: this.now() + this.ttlMs });
+  }
+}
+
+export async function reconcileGitRepository(input, options = {}) {
+  const repoRoot = safeAbsolutePath(input?.repoRoot);
+  if (!repoRoot) {
+    return { status: "unavailable", reason: "missing_repo_root", changedFiles: [], diffCandidates: [] };
+  }
+
+  const runner = options.commandRunner ?? runGitCommand;
+  const timeoutMs = positiveInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS);
+  const maxOutputBytes = positiveInteger(options.maxOutputBytes, DEFAULT_MAX_OUTPUT_BYTES);
+  const cache = options.cache ?? new GitReconciliationCache();
+  const commandCounts = { total: 0, status: 0, diff: 0 };
+  const run = async (name, args, commandOptions = {}) => {
+    commandCounts.total += 1;
+    if (name === "status" || name === "diff") commandCounts[name] += 1;
+    options.onGitCommand?.({ name, args: [...args] });
+    return await runner(args, { cwd: repoRoot, timeoutMs, maxOutputBytes, ...commandOptions });
+  };
+
+  const metadata = await readRepositoryMetadata(repoRoot, cache, run);
+  const statusResult = await run("status", ["status", "--porcelain=v1", "-z"]);
+  if (!statusResult.ok) {
+    return {
+      status: "degraded",
+      reason: statusResult.reason,
+      branchName: metadata.branchName,
+      remoteUrl: metadata.remoteUrl,
+      changedFiles: [],
+      diffCandidates: [],
+      commandCounts
+    };
+  }
+
+  const changedFiles = parsePorcelainStatus(statusResult.stdout);
+  const requestedPaths = new Set((input?.changedPaths ?? []).map(normalizeRepoRelativePath).filter(Boolean));
+  const diffCandidates = requestedPaths.size > 0
+    ? changedFiles.filter((file) => requestedPaths.has(file.repoRelativePath))
+    : changedFiles;
+  const diffArgs = ["diff", "--no-ext-diff", "--", ...diffCandidates.map((file) => file.repoRelativePath)];
+  const diffResult = diffCandidates.length > 0
+    ? await run("diff", diffArgs)
+    : { ok: true, stdout: "", outputTruncated: false };
+
+  return {
+    status: diffResult.ok ? "ok" : "degraded",
+    reason: diffResult.ok ? null : diffResult.reason,
+    repoRoot: metadata.repoRoot,
+    branchName: metadata.branchName,
+    remoteUrl: metadata.remoteUrl,
+    changedFiles,
+    diffCandidates,
+    diff: diffResult.stdout,
+    diffTruncated: diffResult.outputTruncated === true,
+    commandCounts
+  };
+}
+
+async function readRepositoryMetadata(repoRoot, cache, run) {
+  const cached = cache.get(repoRoot);
+  if (cached) return cached;
+
+  const rootResult = await run("rev-parse", ["rev-parse", "--show-toplevel"]);
+  const resolvedRoot = rootResult.ok ? safeAbsolutePath(rootResult.stdout.trim()) ?? repoRoot : repoRoot;
+  const branchResult = await run("branch", ["branch", "--show-current"]);
+  const remoteResult = await run("remote", ["remote", "get-url", "origin"], { allowFailure: true });
+  const metadata = {
+    repoRoot: resolvedRoot,
+    branchName: safeMetadataToken(branchResult.ok ? branchResult.stdout.trim() : "") ?? null,
+    remoteUrl: sanitizeRemoteUrl(remoteResult.ok ? remoteResult.stdout.trim() : "")
+  };
+  cache.set(repoRoot, metadata);
+  return metadata;
+}
+
+export function parsePorcelainStatus(output) {
+  const entries = String(output).split("\0");
+  const files = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (entry.length < 4) continue;
+    const statusCode = entry.slice(0, 2);
+    const repoRelativePath = normalizeRepoRelativePath(entry.slice(3));
+    if (!repoRelativePath) continue;
+    files.push({ repoRelativePath, statusCode });
+    if (statusCode.includes("R") || statusCode.includes("C")) {
+      index += 1;
+    }
+  }
+  return files;
+}
+
+export function sanitizeRemoteUrl(value) {
+  const raw = String(value).trim();
+  if (!raw || raw.startsWith("/") || raw.startsWith("file:") || raw.includes("\0")) return null;
+  if (/^[A-Za-z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "ssh:") return null;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString().slice(0, 240);
+  } catch {
+    if (/^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[A-Za-z0-9_.\/-]+$/.test(raw)) {
+      return raw.slice(0, 240);
+    }
+    return null;
+  }
+}
+
+export function runGitCommand(args, options) {
+  return new Promise((resolve) => {
+    const child = spawn("git", args, {
+      cwd: options.cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = Buffer.alloc(0);
+    let stderr = Buffer.alloc(0);
+    let outputTruncated = false;
+    let settled = false;
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish({ ok: false, reason: "git_timeout", stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), outputTruncated });
+    }, options.timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      const next = appendBounded(stdout, chunk, options.maxOutputBytes);
+      stdout = next.buffer;
+      outputTruncated = outputTruncated || next.truncated;
+      if (outputTruncated) child.kill("SIGKILL");
+    });
+    child.stderr.on("data", (chunk) => {
+      const next = appendBounded(stderr, chunk, 8192);
+      stderr = next.buffer;
+      outputTruncated = outputTruncated || next.truncated;
+    });
+    child.on("error", () => {
+      finish({ ok: false, reason: "git_spawn_failed", stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), outputTruncated });
+    });
+    child.on("close", (code) => {
+      finish({
+        ok: code === 0 || options.allowFailure === true,
+        reason: code === 0 || options.allowFailure === true ? null : "git_command_failed",
+        stdout: stdout.toString("utf8"),
+        stderr: stderr.toString("utf8"),
+        outputTruncated
+      });
+    });
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    }
+  });
+}
+
+function appendBounded(current, chunk, maxBytes) {
+  const combined = Buffer.concat([current, chunk]);
+  if (combined.length <= maxBytes) return { buffer: combined, truncated: false };
+  return { buffer: combined.subarray(0, maxBytes), truncated: true };
+}
+
+function normalizeRepoRelativePath(value) {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) return null;
+  const normalized = path.posix.normalize(value.replace(/\\/g, "/"));
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function safeAbsolutePath(value) {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  const trimmed = value.trim();
+  if (!path.isAbsolute(trimmed)) return null;
+  return path.resolve(trimmed);
+}
+
+function safeMetadataToken(value) {
+  return value && /^[A-Za-z0-9][A-Za-z0-9_.\/#@+-]{0,119}$/.test(value) ? value : null;
+}
+
+function positiveInteger(value, fallback) {
+  return Number.isFinite(value) ? Math.max(1, Math.round(value)) : fallback;
+}

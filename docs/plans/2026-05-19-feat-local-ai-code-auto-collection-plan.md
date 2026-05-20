@@ -741,15 +741,15 @@ Verification:
 
 ### Post-MVP Phase 24: Add Bounded Git Reconciliation
 
-- [ ] Implement one Git reconciliation function for branch, status, changed files, and diff candidates.
-- [ ] Prefer `git status --porcelain=v1 -z` for changed paths.
-- [ ] Cache repo root, branch, and sanitized remote metadata with short TTLs.
-- [ ] Add timeout and output-size caps for every Git command.
-- [ ] Track Git command count in tests.
+- [x] Implement one Git reconciliation function for branch, status, changed files, and diff candidates.
+- [x] Prefer `git status --porcelain=v1 -z` for changed paths.
+- [x] Cache repo root, branch, and sanitized remote metadata with short TTLs.
+- [x] Add timeout and output-size caps for every Git command.
+- [x] Track Git command count in tests.
 
 Verification:
 
-- [ ] Temp repo test proves 100 file events trigger at most one status pass and one final diff pass per debounce window.
+- [x] Temp repo test proves 100 file events trigger at most one status pass and one final diff pass per debounce window.
 
 ### Post-MVP Phase 25: Add Watcher Ignore And Path Safety
 

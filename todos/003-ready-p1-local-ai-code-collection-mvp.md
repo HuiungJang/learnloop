@@ -687,3 +687,25 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Backpressure should degrade toward one full Git reconciliation instead of attempting to preserve every OS watcher event under bursty saves.
+
+### 2026-05-20 - Post-MVP Phase 24 Bounded Git Reconciliation
+
+**By:** Codex
+
+**Actions:**
+- Added a bounded Git reconciliation module for repo metadata, branch, status, changed files, and diff candidates.
+- Used `git status --porcelain=v1 -z` for changed-path discovery.
+- Added short-lived metadata caching for resolved repo root, branch, and sanitized remote URL.
+- Applied timeout and output-size caps to every Git command.
+- Wired watcher debounce settlement into one reconciliation call per settled change batch.
+- Included the Git reconciliation module in release packaging.
+- Checked off Post-MVP Phase 24 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-git-reconcile.test.js`.
+- Ran bundled-Node `tests/local-ai-watcher-registry.test.js`.
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Temp repo test verifies 100 file events produce one `git status --porcelain=v1 -z` pass and one final `git diff` pass in the debounce window.
+
+**Learnings:**
+- Git reconciliation should run after debounce and backpressure, so watcher bursts collapse before any status or diff command executes.

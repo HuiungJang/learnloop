@@ -6,6 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
+import { GitReconciliationCache, reconcileGitRepository } from "./local-ai-git-reconcile.mjs";
 import { readHostProcessSnapshot } from "./local-ai-process-snapshot.mjs";
 import { LocalAiWatcherRegistry } from "./local-ai-watcher-registry.mjs";
 
@@ -39,11 +40,13 @@ const shimEvents = [];
 const maxShimEvents = 100;
 const consentActions = [];
 const rateLimitBuckets = new Map();
+const gitReconciliationCache = new GitReconciliationCache();
 const watcherRegistry =
   new LocalAiWatcherRegistry({
     debounceMs: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS"),
     maxPendingChanges: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_MAX_PENDING_CHANGES"),
-    maxConcurrentReconciliations: readNumericEnv("LEARNLOOP_LOCAL_AI_RECONCILE_CONCURRENCY")
+    maxConcurrentReconciliations: readNumericEnv("LEARNLOOP_LOCAL_AI_RECONCILE_CONCURRENCY"),
+    reconcileRepository: (input) => reconcileGitRepository(input, { cache: gitReconciliationCache })
   });
 
 const server = http.createServer(async (req, res) => {
