@@ -986,3 +986,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Runtime health events should carry only coarse status/problem codes so status surfaces stay useful without exposing local paths or output.
+
+### 2026-05-20 - Post-MVP Phase 39 Gemini Output Parser
+
+**By:** Codex
+
+**Actions:**
+- Added a Gemini-specific output parser module.
+- Parsed exact git-diff output into diff artifacts with `patch_output` capability.
+- Parsed edited `apply_patch` blocks from surrounding Gemini prose.
+- Accepted structured Gemini JSON only when `json` output format is explicitly marked.
+- Returned metadata-only adapter events for malformed, unsupported, no-match, and parser-exception cases.
+- Checked off Post-MVP Phase 39 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-gemini-output-parser.test.js`.
+- Parser tests cover exact match, edited match, stable JSON, malformed output, no match, and parser exception.
+
+**Learnings:**
+- Gemini parser failures should degrade to adapter metadata so CLI execution and collection health remain independent of parser quality.

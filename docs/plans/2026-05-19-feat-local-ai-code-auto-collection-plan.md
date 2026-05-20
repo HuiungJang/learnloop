@@ -908,14 +908,14 @@ Verification:
 
 ### Post-MVP Phase 39: Add Gemini Output Parser
 
-- [ ] Parse Gemini output in a Gemini-specific module.
-- [ ] Support patch-like and structured output only when stable.
-- [ ] Fall back to metadata-only attribution when parsing fails.
-- [ ] Do not let parser errors affect CLI exit behavior.
+- [x] Parse Gemini output in a Gemini-specific module.
+- [x] Support patch-like and structured output only when stable.
+- [x] Fall back to metadata-only attribution when parsing fails.
+- [x] Do not let parser errors affect CLI exit behavior.
 
 Verification:
 
-- [ ] Parser tests cover exact match, edited match, malformed output, no match, and parser exception.
+- [x] Parser tests cover exact match, edited match, malformed output, no match, and parser exception.
 
 ### Post-MVP Phase 40: Add Multi-Adapter Isolation And Status
 
