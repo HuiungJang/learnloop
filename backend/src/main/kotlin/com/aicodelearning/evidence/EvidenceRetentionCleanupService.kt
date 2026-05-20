@@ -43,8 +43,17 @@ class EvidenceRetentionCleanupService(
                 pageable = PageRequest.of(0, batchSize),
             )
         if (selectedItems.isEmpty()) {
+            val progress =
+                retentionSettingsService.recordCleanupProgress(
+                    currentUser = currentUser,
+                    organizationId = settings.organizationId,
+                    purgedItems = 0,
+                    reclaimedBytes = 0,
+                    remainingItems = 0,
+                    finishedAt = Instant.now(),
+                )
             return EvidenceRetentionCleanupRun.empty(
-                settings = settings,
+                settings = progress,
                 batchSize = batchSize,
                 cutoffAt = cutoffAt,
                 skippedReason = "no_candidates",
@@ -66,17 +75,31 @@ class EvidenceRetentionCleanupService(
         sourceBundleRepository.findExistingForUpdateSortedById(purgedBundleIds).forEach {
             auditService.append(currentUser, it.organizationId, "evidence.retention_raw_purged", "source_bundle", it.id, mapOf("status" to "raw_purged"))
         }
+        val remainingEligibleItems = (eligibleItemCount - selectedItems.size).coerceAtLeast(0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val progress =
+            retentionSettingsService.recordCleanupProgress(
+                currentUser = currentUser,
+                organizationId = settings.organizationId,
+                purgedItems = selectedItems.size,
+                reclaimedBytes = reclaimedBytes,
+                remainingItems = remainingEligibleItems,
+                finishedAt = Instant.now(),
+            )
 
         return EvidenceRetentionCleanupRun(
             organizationId = settings.organizationId,
             retentionMode = settings.retentionMode,
             retentionDays = settings.retentionDays,
             cutoffAt = cutoffAt,
+            lastCleanupAt = progress.lastCleanupAt,
+            lastCleanupPurgedItems = progress.lastCleanupPurgedItems,
+            lastCleanupReclaimedBytes = progress.lastCleanupReclaimedBytes,
+            lastCleanupRemainingItems = progress.lastCleanupRemainingItems,
             batchSize = batchSize,
             purgedBundles = purgedBundleIds.size,
             purgedItems = selectedItems.size,
             reclaimedBytes = reclaimedBytes,
-            remainingEligibleItems = (eligibleItemCount - selectedItems.size).coerceAtLeast(0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+            remainingEligibleItems = remainingEligibleItems,
             activeIngestionSkippedItems = activeSkippedItems,
             filesystemArtifactsDeleted = 0,
             skippedReason = null,
@@ -104,6 +127,10 @@ data class EvidenceRetentionCleanupRun(
     val retentionMode: String,
     val retentionDays: Int?,
     val cutoffAt: Instant?,
+    val lastCleanupAt: Instant?,
+    val lastCleanupPurgedItems: Int,
+    val lastCleanupReclaimedBytes: Long,
+    val lastCleanupRemainingItems: Int,
     val batchSize: Int,
     val purgedBundles: Int,
     val purgedItems: Int,
@@ -126,6 +153,10 @@ data class EvidenceRetentionCleanupRun(
                 retentionMode = settings.retentionMode,
                 retentionDays = settings.retentionDays,
                 cutoffAt = cutoffAt,
+                lastCleanupAt = settings.lastCleanupAt,
+                lastCleanupPurgedItems = settings.lastCleanupPurgedItems,
+                lastCleanupReclaimedBytes = settings.lastCleanupReclaimedBytes,
+                lastCleanupRemainingItems = settings.lastCleanupRemainingItems,
                 batchSize = batchSize,
                 purgedBundles = 0,
                 purgedItems = 0,

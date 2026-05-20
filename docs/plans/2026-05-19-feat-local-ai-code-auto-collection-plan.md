@@ -975,14 +975,14 @@ Verification:
 
 ### Post-MVP Phase 45: Add Retention Resume And Progress
 
-- [ ] Store cleanup progress metadata.
-- [ ] Make cleanup idempotent and resumable.
-- [ ] Report last cleanup time, deleted artifact count, and reclaimed bytes.
-- [ ] Treat already-purged artifacts as no-op.
+- [x] Store cleanup progress metadata.
+- [x] Make cleanup idempotent and resumable.
+- [x] Report last cleanup time, deleted artifact count, and reclaimed bytes.
+- [x] Treat already-purged artifacts as no-op.
 
 Verification:
 
-- [ ] Tests cover interrupted cleanup, rerun safety, and progress reporting.
+- [x] Tests cover interrupted cleanup, rerun safety, and progress reporting.
 
 ### Post-MVP Phase 46: Add Retention Schedule
 

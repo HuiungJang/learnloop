@@ -330,6 +330,10 @@ data class EvidenceRetentionSettingsResponse(
     val automaticCleanupEnabled: Boolean,
     val immediatePurge: Boolean,
     val updatedAt: Instant?,
+    val lastCleanupAt: Instant?,
+    val lastCleanupPurgedItems: Int,
+    val lastCleanupReclaimedBytes: Long,
+    val lastCleanupRemainingItems: Int,
 )
 
 data class EvidenceRetentionDryRunResponse(
@@ -361,6 +365,10 @@ data class EvidenceRetentionCleanupResponse(
     val retentionMode: String,
     val retentionDays: Int?,
     val cutoffAt: Instant?,
+    val lastCleanupAt: Instant?,
+    val lastCleanupPurgedItems: Int,
+    val lastCleanupReclaimedBytes: Long,
+    val lastCleanupRemainingItems: Int,
     val batchSize: Int,
     val purgedBundles: Int,
     val purgedItems: Int,
@@ -477,6 +485,10 @@ fun EvidenceRetentionSettings.toResponse(): EvidenceRetentionSettingsResponse =
         automaticCleanupEnabled = automaticCleanupEnabled,
         immediatePurge = immediatePurge,
         updatedAt = updatedAt,
+        lastCleanupAt = lastCleanupAt,
+        lastCleanupPurgedItems = lastCleanupPurgedItems,
+        lastCleanupReclaimedBytes = lastCleanupReclaimedBytes,
+        lastCleanupRemainingItems = lastCleanupRemainingItems,
     )
 
 fun EvidenceRetentionDryRun.toResponse(): EvidenceRetentionDryRunResponse =
@@ -511,6 +523,10 @@ fun EvidenceRetentionCleanupRun.toResponse(): EvidenceRetentionCleanupResponse =
         retentionMode = retentionMode,
         retentionDays = retentionDays,
         cutoffAt = cutoffAt,
+        lastCleanupAt = lastCleanupAt,
+        lastCleanupPurgedItems = lastCleanupPurgedItems,
+        lastCleanupReclaimedBytes = lastCleanupReclaimedBytes,
+        lastCleanupRemainingItems = lastCleanupRemainingItems,
         batchSize = batchSize,
         purgedBundles = purgedBundles,
         purgedItems = purgedItems,

@@ -37,17 +37,30 @@ class EvidenceRetentionSettingsService(
         requireOwnerAccess(currentUser, organizationId)
         val normalized = normalize(request)
         val now = Instant.now()
-        val entity =
-            repository.findByOrganizationIdAndOwnerUserId(organizationId, currentUser.id)
-                ?: EvidenceRetentionSettingsEntity(
-                    id = settingsId(organizationId, currentUser.id),
-                    organizationId = organizationId,
-                    ownerUserId = currentUser.id,
-                    createdAt = now,
-                )
+        val entity = findOrCreate(organizationId, currentUser.id, now)
         entity.retentionMode = normalized.mode
         entity.retentionDays = normalized.retentionDays
         entity.updatedAt = now
+        return repository.save(entity).toSettings()
+    }
+
+    @Transactional
+    fun recordCleanupProgress(
+        currentUser: CurrentUser,
+        organizationId: String,
+        purgedItems: Int,
+        reclaimedBytes: Long,
+        remainingItems: Int,
+        finishedAt: Instant,
+    ): EvidenceRetentionSettings {
+        val normalizedOrganizationId = requireOrganizationId(organizationId)
+        requireOwnerAccess(currentUser, normalizedOrganizationId)
+        val entity = findOrCreate(normalizedOrganizationId, currentUser.id, finishedAt)
+        entity.lastCleanupAt = finishedAt
+        entity.lastCleanupPurgedItems = purgedItems.coerceAtLeast(0)
+        entity.lastCleanupReclaimedBytes = reclaimedBytes.coerceAtLeast(0)
+        entity.lastCleanupRemainingItems = remainingItems.coerceAtLeast(0)
+        entity.updatedAt = finishedAt
         return repository.save(entity).toSettings()
     }
 
@@ -85,6 +98,10 @@ class EvidenceRetentionSettingsService(
             automaticCleanupEnabled = retentionMode != RETENTION_MODE_DISABLED,
             immediatePurge = retentionMode == RETENTION_MODE_IMMEDIATE,
             updatedAt = updatedAt,
+            lastCleanupAt = lastCleanupAt,
+            lastCleanupPurgedItems = lastCleanupPurgedItems,
+            lastCleanupReclaimedBytes = lastCleanupReclaimedBytes,
+            lastCleanupRemainingItems = lastCleanupRemainingItems,
         )
 
     private fun defaultSettings(
@@ -99,12 +116,32 @@ class EvidenceRetentionSettingsService(
             automaticCleanupEnabled = true,
             immediatePurge = false,
             updatedAt = null,
+            lastCleanupAt = null,
+            lastCleanupPurgedItems = 0,
+            lastCleanupReclaimedBytes = 0,
+            lastCleanupRemainingItems = 0,
         )
 
     private data class NormalizedRetentionSettings(
         val mode: String,
         val retentionDays: Int?,
     )
+
+    private fun findOrCreate(
+        organizationId: String,
+        ownerUserId: String,
+        now: Instant,
+    ): EvidenceRetentionSettingsEntity =
+        repository.findByOrganizationIdAndOwnerUserId(organizationId, ownerUserId)
+            ?: EvidenceRetentionSettingsEntity(
+                id = settingsId(organizationId, ownerUserId),
+                organizationId = organizationId,
+                ownerUserId = ownerUserId,
+                retentionMode = RETENTION_MODE_DEFAULT,
+                retentionDays = DEFAULT_RETENTION_DAYS,
+                createdAt = now,
+                updatedAt = now,
+            )
 
     companion object {
         const val RETENTION_MODE_DEFAULT = "default"
@@ -134,4 +171,8 @@ data class EvidenceRetentionSettings(
     val automaticCleanupEnabled: Boolean,
     val immediatePurge: Boolean,
     val updatedAt: Instant?,
+    val lastCleanupAt: Instant?,
+    val lastCleanupPurgedItems: Int,
+    val lastCleanupReclaimedBytes: Long,
+    val lastCleanupRemainingItems: Int,
 )

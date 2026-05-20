@@ -118,6 +118,10 @@ export type EvidenceRetentionSettingsResponse = {
   automaticCleanupEnabled: boolean;
   immediatePurge: boolean;
   updatedAt: string | null;
+  lastCleanupAt: string | null;
+  lastCleanupPurgedItems: number;
+  lastCleanupReclaimedBytes: number;
+  lastCleanupRemainingItems: number;
 };
 
 export type LocalRepositoryConsentResponse = {

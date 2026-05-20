@@ -58,6 +58,10 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
         assertEquals(true, json(defaultSettings)["automaticCleanupEnabled"].asBoolean())
         assertEquals(false, json(defaultSettings)["immediatePurge"].asBoolean())
         assertTrue(json(defaultSettings)["updatedAt"].isNull)
+        assertTrue(json(defaultSettings)["lastCleanupAt"].isNull)
+        assertEquals(0, json(defaultSettings)["lastCleanupPurgedItems"].asInt())
+        assertEquals(0, json(defaultSettings)["lastCleanupReclaimedBytes"].asLong())
+        assertEquals(0, json(defaultSettings)["lastCleanupRemainingItems"].asInt())
 
         val updated =
             patchJson(
@@ -237,6 +241,13 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
         assertTrue(json(firstRun)["reclaimedBytes"].asLong() >= 0)
         assertTrue(json(firstRun)["activeIngestionSkippedItems"].asInt() >= 1)
         assertEquals(0, json(firstRun)["filesystemArtifactsDeleted"].asInt())
+        assertFalse(json(firstRun)["lastCleanupAt"].isNull)
+        assertEquals(1, json(firstRun)["lastCleanupPurgedItems"].asInt())
+        assertTrue(json(firstRun)["lastCleanupRemainingItems"].asInt() >= 1)
+        val firstProgress = getJson("/api/evidence/retention-settings?organizationId=org-demo", owner.token)
+        assertEquals(HttpStatus.OK, firstProgress.statusCode)
+        assertEquals(1, json(firstProgress)["lastCleanupPurgedItems"].asInt())
+        assertTrue(json(firstProgress)["lastCleanupRemainingItems"].asInt() >= 1)
 
         val finalRun =
             postJson(
@@ -246,6 +257,7 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
             )
         assertEquals(HttpStatus.OK, finalRun.statusCode)
         assertTrue(json(finalRun)["purgedItems"].asInt() >= 1)
+        assertEquals(json(finalRun)["purgedItems"].asInt(), json(finalRun)["lastCleanupPurgedItems"].asInt())
 
         val afterItem = evidenceItemRepository.findByBundleId(fixture.codeBundleId).single()
         assertNull(afterItem.contentText)
@@ -263,6 +275,20 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
         val card = getJson("/api/pattern-cards/$cardId", owner.token)
         assertEquals(HttpStatus.OK, card.statusCode)
         assertEquals(cardId, json(card)["patternCard"]["id"].asText())
+
+        val repeated =
+            postJson(
+                "/api/evidence/retention-cleanup",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "batchSize" to 500),
+            )
+        assertEquals(HttpStatus.OK, repeated.statusCode)
+        assertEquals(0, json(repeated)["purgedItems"].asInt())
+        assertEquals("no_candidates", json(repeated)["skippedReason"].asText())
+        val repeatedProgress = getJson("/api/evidence/retention-settings?organizationId=org-demo", owner.token)
+        assertEquals(HttpStatus.OK, repeatedProgress.statusCode)
+        assertEquals(0, json(repeatedProgress)["lastCleanupPurgedItems"].asInt())
+        assertEquals(0, json(repeatedProgress)["lastCleanupRemainingItems"].asInt())
     }
 
     @Test

@@ -29,4 +29,16 @@ class EvidenceRetentionSettingsEntity(
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now(),
+
+    @Column(name = "last_cleanup_at")
+    var lastCleanupAt: Instant? = null,
+
+    @Column(name = "last_cleanup_purged_items", nullable = false)
+    var lastCleanupPurgedItems: Int = 0,
+
+    @Column(name = "last_cleanup_reclaimed_bytes", nullable = false)
+    var lastCleanupReclaimedBytes: Long = 0,
+
+    @Column(name = "last_cleanup_remaining_items", nullable = false)
+    var lastCleanupRemainingItems: Int = 0,
 )

@@ -1105,3 +1105,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Automatic retention cleanup must be narrower than manual purge: it removes raw item bodies while preserving database metadata so learning assets and traceability survive.
+
+### 2026-05-20 - Post-MVP Phase 45 Retention Resume And Progress
+
+**By:** Codex
+
+**Actions:**
+- Added retention cleanup progress columns to local retention settings.
+- Recorded last cleanup time, purged item count, reclaimed bytes, and remaining eligible item count after each cleanup run.
+- Returned progress metadata from retention settings and cleanup responses.
+- Preserved idempotent resume behavior by selecting only still-unpurged cleanup candidates.
+- Treated already-purged artifacts as no-op on rerun.
+- Checked off Post-MVP Phase 45 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.auth.LocalOwnerEvidenceRetentionIntegrationTest"`.
+- Backend tests cover interrupted one-item cleanup, progress reporting after the first batch, resumed cleanup, generated-card survival, and safe no-op reruns after all candidates are purged.
+
+**Learnings:**
+- Progress can stay on the local retention settings row until scheduling or history needs require a separate cleanup-run table.
