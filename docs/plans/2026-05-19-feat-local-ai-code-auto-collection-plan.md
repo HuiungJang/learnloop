@@ -864,14 +864,14 @@ Verification:
 
 ### Post-MVP Phase 35: Add Claude Code Runtime Capture
 
-- [ ] Forward interactive Claude Code sessions without changing behavior.
-- [ ] Capture bounded stdout/stderr only after redaction.
-- [ ] Treat stderr as sensitive by default.
-- [ ] Capture higher-confidence output only for safe non-interactive modes such as `--print`.
+- [x] Forward interactive Claude Code sessions without changing behavior.
+- [x] Capture bounded stdout/stderr only after redaction.
+- [x] Treat stderr as sensitive by default.
+- [x] Capture higher-confidence output only for safe non-interactive modes such as `--print`.
 
 Verification:
 
-- [ ] Fake `claude` tests cover interactive passthrough, `--print`, large output, stderr redaction, and companion-down behavior.
+- [x] Fake `claude` tests cover interactive passthrough, `--print`, large output, stderr redaction, and companion-down behavior.
 
 ### Post-MVP Phase 36: Add Claude Output Parser
 

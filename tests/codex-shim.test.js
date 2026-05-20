@@ -251,6 +251,92 @@ test("generic provider runtime preserves args and emits provider-specific events
   });
 });
 
+test("Claude shim runtime forwards interactive sessions and captures only redacted print output", async () => {
+  await withTempDir(async (dir) => {
+    const originalDir = path.join(dir, "original-bin");
+    const shimDir = path.join(dir, "learnloop-shims");
+    const pathEnv = `${shimDir}${path.delimiter}${originalDir}`;
+    await writeFakeClaude(path.join(originalDir, "claude"));
+    await installProviderShim("claude", { shimDir, pathEnv: originalDir });
+
+    const tty = { isTTY: true };
+    assert.equal(shouldCaptureProviderOutput({ stdin: tty, stdout: tty, stderr: tty }), false);
+
+    const interactiveEvents = [];
+    const interactive = await runProviderShim("claude", ["interactive"], {
+      shimDir,
+      pathEnv,
+      captureOutput: false,
+      eventSender: (event) => interactiveEvents.push(event)
+    });
+    assert.equal(interactive.exitCode, 0);
+    assert.equal(interactiveEvents.at(-1).stdoutExcerpt, null);
+
+    const printEvents = [];
+    const printStdout = captureStream();
+    const printStderr = captureStream();
+    const printed = await runProviderShim("claude", ["--print", "safe"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: printStdout,
+      stderr: printStderr,
+      eventSender: (event) => printEvents.push(event)
+    });
+    assert.equal(printed.exitCode, 0);
+    assert.match(printStdout.value(), /sk-claudeprintsecret/);
+    assert.match(printStderr.value(), /sk-claudestderrsecret/);
+    const printEnd = printEvents.find((event) => event.type === "shim_end");
+    assert.equal(printEnd.provider, "claude_code");
+    assert.match(printEnd.stdoutExcerpt, /token=\[redacted\]/);
+    assert.equal(printEnd.stderrExcerpt, null);
+    assert.equal(printEnd.stderrSuppressed, true);
+    assert.equal(printEnd.excerptLimitBytes, 4096);
+    assert.doesNotMatch(JSON.stringify(printEvents), /sk-claude(?:print|stderr)secret/);
+
+    const chatEvents = [];
+    const chat = await runProviderShim("claude", ["chat"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: captureStream(),
+      stderr: captureStream(),
+      eventSender: (event) => chatEvents.push(event)
+    });
+    assert.equal(chat.exitCode, 0);
+    const chatEnd = chatEvents.find((event) => event.type === "shim_end");
+    assert.equal(chatEnd.stdoutExcerpt, null);
+    assert.equal(chatEnd.stdoutSuppressed, true);
+
+    const largeEvents = [];
+    const largeStdout = captureStream();
+    const large = await runProviderShim("claude", ["--print", "large"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: largeStdout,
+      stderr: captureStream(),
+      eventSender: (event) => largeEvents.push(event)
+    });
+    assert.equal(large.exitCode, 0);
+    assert.match(largeStdout.value(), /line-799/);
+    const largeEnd = largeEvents.find((event) => event.type === "shim_end");
+    assert.ok(Buffer.byteLength(largeEnd.stdoutExcerpt, "utf8") <= 4096);
+    assert.equal(largeEnd.stdoutSuppressed, true);
+
+    const down = await runProviderShim("claude", ["--print", "safe"], {
+      shimDir,
+      pathEnv,
+      stdin: "ignore",
+      stdout: captureStream(),
+      stderr: captureStream(),
+      eventSender: () => new Promise(() => {}),
+      eventTimeoutMs: 1
+    });
+    assert.equal(down.exitCode, 0);
+  });
+});
+
 test("codex shim forwards large output and child signals", async () => {
   await withTempDir(async (dir) => {
     const originalDir = path.join(dir, "original-bin");
@@ -783,6 +869,41 @@ case "$1" in
     exit 0
     ;;
   noop)
+    exit 0
+    ;;
+esac
+exit 0
+`
+  );
+}
+
+async function writeFakeClaude(filePath) {
+  await writeExecutable(
+    filePath,
+    `#!/usr/bin/env sh
+case "$1" in
+  interactive)
+    exit 0
+    ;;
+  --print)
+    case "$2" in
+      safe)
+        printf 'summary token=sk-claudeprintsecret123456\\n'
+        printf 'diagnostic token=sk-claudestderrsecret123456\\n' >&2
+        exit 0
+        ;;
+      large)
+        i=0
+        while [ "$i" -lt 800 ]; do
+          printf 'line-%03d generated code context\\n' "$i"
+          i=$((i + 1))
+        done
+        exit 0
+        ;;
+    esac
+    ;;
+  chat)
+    printf 'chat output token=sk-claudechatsecret123456\\n'
     exit 0
     ;;
 esac

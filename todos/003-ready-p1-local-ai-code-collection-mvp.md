@@ -910,3 +910,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Provider-specific installer phases can stay small when generic installer behavior is already shared and tested through the provider config.
+
+### 2026-05-20 - Post-MVP Phase 35 Claude Code Runtime Capture
+
+**By:** Codex
+
+**Actions:**
+- Added Claude `--print` output capture policy for high-confidence non-interactive sessions.
+- Kept interactive Claude sessions on passthrough behavior without stdout/stderr interception.
+- Added bounded stdout excerpt storage after redaction only.
+- Kept stderr sensitive by default by recording bytes while suppressing stderr excerpts.
+- Suppressed low-confidence non-`--print` Claude stdout content.
+- Checked off Post-MVP Phase 35 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Fake Claude tests cover interactive passthrough, `--print`, large output truncation, stderr suppression, secret redaction, and companion-down behavior.
+
+**Learnings:**
+- Runtime capture should be provider-mode specific; shared forwarding can stay generic while excerpt policy stays narrow.

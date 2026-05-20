@@ -14,6 +14,7 @@ const LEGACY_CODEX_SHIM_MARKER = "LEARNLOOP_CODEX_SHIM";
 const GENERIC_SHIM_MARKER = "LEARNLOOP_LOCAL_AI_SHIM";
 const DEFAULT_PROVIDER = "codex";
 const DEFAULT_EVENT_TIMEOUT_MS = 20;
+const DEFAULT_OUTPUT_EXCERPT_LIMIT_BYTES = 4096;
 const FORWARDED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM", "SIGQUIT"];
 const MANAGED_DIRECTORY_MARKER = ".learnloop-managed";
 const DEFAULT_LOCAL_API_CONFIG_DIR = path.join(os.homedir(), ".learnloop");
@@ -220,7 +221,6 @@ export async function forwardProviderRuntime(providerName, args, options = {}) {
   const customEventSender = options.eventSender;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const output = createOutputCollector();
   const cwd = options.cwd ?? process.cwd();
   const stdin = options.stdin ?? "inherit";
   const captureOutput = shouldCaptureProviderOutput({
@@ -229,6 +229,7 @@ export async function forwardProviderRuntime(providerName, args, options = {}) {
     stderr,
     forceCapture: options.captureOutput
   });
+  const output = createOutputCollector(outputPolicyForProvider(provider.name, args, { captureOutput }));
 
   safeEmit(customEventSender ?? ((event) => sendCompanionEvent(event, { unref: true })), {
     type: "shim_start",
@@ -313,29 +314,111 @@ export function buildEndEvent({ provider, invocationId, cwd, command, startedAt,
     signal,
     stdoutBytes: snapshot.stdoutBytes,
     stderrBytes: snapshot.stderrBytes,
-    stdoutExcerpt: null,
-    stdoutSuppressed: snapshot.stdoutBytes > 0,
-    stderrExcerpt: null,
-    stderrSuppressed: snapshot.stderrBytes > 0,
-    excerptLimitBytes: 0
+    stdoutExcerpt: snapshot.stdoutExcerpt,
+    stdoutSuppressed: snapshot.stdoutBytes > 0 && (snapshot.stdoutExcerpt === null || snapshot.stdoutRedacted || snapshot.stdoutTruncated),
+    stderrExcerpt: snapshot.stderrExcerpt,
+    stderrSuppressed: snapshot.stderrBytes > 0 && (snapshot.stderrExcerpt === null || snapshot.stderrRedacted || snapshot.stderrTruncated),
+    excerptLimitBytes: Math.max(snapshot.stdoutExcerptLimitBytes, snapshot.stderrExcerptLimitBytes)
   };
 }
 
-export function createOutputCollector() {
+export function createOutputCollector(policy = {}) {
+  const stdoutExcerptLimitBytes = Math.max(0, policy.stdoutExcerptLimitBytes ?? 0);
+  const stderrExcerptLimitBytes = Math.max(0, policy.stderrExcerptLimitBytes ?? 0);
   let stdoutBytes = 0;
   let stderrBytes = 0;
+  let stdoutExcerpt = "";
+  let stderrExcerpt = "";
+  let stdoutRedacted = false;
+  let stderrRedacted = false;
+  let stdoutTruncated = false;
+  let stderrTruncated = false;
 
   return {
     pushStdout(chunk) {
       stdoutBytes += chunk.length;
+      const result = appendRedactedExcerpt(stdoutExcerpt, chunk, stdoutExcerptLimitBytes);
+      stdoutExcerpt = result.excerpt;
+      stdoutRedacted = stdoutRedacted || result.redacted;
+      stdoutTruncated = stdoutTruncated || result.truncated;
     },
     pushStderr(chunk) {
       stderrBytes += chunk.length;
+      const result = appendRedactedExcerpt(stderrExcerpt, chunk, stderrExcerptLimitBytes);
+      stderrExcerpt = result.excerpt;
+      stderrRedacted = stderrRedacted || result.redacted;
+      stderrTruncated = stderrTruncated || result.truncated;
     },
     snapshot() {
-      return { stdoutBytes, stderrBytes };
+      return {
+        stdoutBytes,
+        stderrBytes,
+        stdoutExcerpt: stdoutExcerptLimitBytes > 0 && stdoutExcerpt ? stdoutExcerpt : null,
+        stderrExcerpt: stderrExcerptLimitBytes > 0 && stderrExcerpt ? stderrExcerpt : null,
+        stdoutExcerptLimitBytes,
+        stderrExcerptLimitBytes,
+        stdoutRedacted,
+        stderrRedacted,
+        stdoutTruncated,
+        stderrTruncated
+      };
     }
   };
+}
+
+function outputPolicyForProvider(providerName, args, { captureOutput }) {
+  if (!captureOutput) {
+    return {};
+  }
+  if (providerName === "claude" && isClaudePrintMode(args)) {
+    return { stdoutExcerptLimitBytes: DEFAULT_OUTPUT_EXCERPT_LIMIT_BYTES };
+  }
+  return {};
+}
+
+function isClaudePrintMode(args) {
+  return args.includes("--print");
+}
+
+function appendRedactedExcerpt(current, chunk, limitBytes) {
+  if (limitBytes <= 0) {
+    return { excerpt: current, redacted: false, truncated: chunk.length > 0 };
+  }
+  const remainingBytes = limitBytes - Buffer.byteLength(current, "utf8");
+  if (remainingBytes <= 0) {
+    return { excerpt: current, redacted: false, truncated: chunk.length > 0 };
+  }
+  const redacted = redactProviderOutput(chunk.toString("utf8"));
+  const truncated = Buffer.byteLength(redacted.value, "utf8") > remainingBytes;
+  return {
+    excerpt: `${current}${takeUtf8Bytes(redacted.value, remainingBytes)}`,
+    redacted: redacted.redacted,
+    truncated
+  };
+}
+
+function redactProviderOutput(value) {
+  let redacted = value
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[redacted-private-key]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted-token]")
+    .replace(/\bghp_[A-Za-z0-9_]{8,}\b/g, "[redacted-token]")
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[redacted-token]");
+  redacted = redacted.replace(
+    /\b((?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|secret|token)(?:[_-][A-Za-z0-9]+)*\s*[:=]\s*["']?)[^"'\s]{8,}/gi,
+    "$1[redacted]"
+  );
+  return { value: redacted, redacted: redacted !== value };
+}
+
+function takeUtf8Bytes(value, limitBytes) {
+  if (limitBytes <= 0) return "";
+  const buffer = Buffer.from(value, "utf8");
+  if (buffer.length <= limitBytes) return value;
+  for (let end = limitBytes; end > 0; end -= 1) {
+    const result = buffer.subarray(0, end).toString("utf8");
+    if (!result.endsWith("\uFFFD")) return result;
+  }
+  return "";
 }
 
 export async function sendCompanionEvent(event, options = {}) {
