@@ -39,7 +39,12 @@ const shimEvents = [];
 const maxShimEvents = 100;
 const consentActions = [];
 const rateLimitBuckets = new Map();
-const watcherRegistry = new LocalAiWatcherRegistry({ debounceMs: readWatcherDebounceMs() });
+const watcherRegistry =
+  new LocalAiWatcherRegistry({
+    debounceMs: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS"),
+    maxPendingChanges: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_MAX_PENDING_CHANGES"),
+    maxConcurrentReconciliations: readNumericEnv("LEARNLOOP_LOCAL_AI_RECONCILE_CONCURRENCY")
+  });
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -597,12 +602,12 @@ function readAdditionalAllowedOrigins() {
   return readCsvEnv("LEARNLOOP_LOCAL_AI_ALLOWED_ORIGINS").map(normalizeLoopbackOrigin);
 }
 
-function readWatcherDebounceMs() {
-  const configured = process.env.LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS?.trim();
+function readNumericEnv(name) {
+  const configured = process.env[name]?.trim();
   if (!configured) return undefined;
   const parsed = Number(configured);
   if (!Number.isFinite(parsed)) {
-    throw new Error("LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS must be a number");
+    throw new Error(`${name} must be a number`);
   }
   return parsed;
 }

@@ -730,14 +730,14 @@ Verification:
 
 ### Post-MVP Phase 23: Add Watcher Backpressure
 
-- [ ] Add bounded per-repo event queues.
-- [ ] If a queue is full, drop individual events and mark the repo as needing full Git reconciliation.
-- [ ] Limit concurrent snapshot/diff work across repos.
-- [ ] Surface degraded state when OS watcher limits are hit.
+- [x] Add bounded per-repo event queues.
+- [x] If a queue is full, drop individual events and mark the repo as needing full Git reconciliation.
+- [x] Limit concurrent snapshot/diff work across repos.
+- [x] Surface degraded state when OS watcher limits are hit.
 
 Verification:
 
-- [ ] Stress test proves event queues do not grow without bound.
+- [x] Stress test proves event queues do not grow without bound.
 
 ### Post-MVP Phase 24: Add Bounded Git Reconciliation
 

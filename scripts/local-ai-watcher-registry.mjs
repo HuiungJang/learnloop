@@ -7,15 +7,23 @@ const REPO_IDENTITY_PATTERN = /^[A-Za-z0-9._:-]{3,128}$/;
 const DEFAULT_DEBOUNCE_MS = 750;
 const MIN_DEBOUNCE_MS = 250;
 const MAX_DEBOUNCE_MS = 5000;
+const DEFAULT_MAX_PENDING_CHANGES = 1000;
+const DEFAULT_MAX_CONCURRENT_RECONCILIATIONS = 2;
 
 export class LocalAiWatcherRegistry {
   constructor(options = {}) {
     this.watchFactory = options.watchFactory ?? defaultWatchFactory;
     this.clock = options.clock ?? (() => new Date());
     this.debounceMs = normalizeDebounceMs(options.debounceMs);
+    this.maxPendingChanges = normalizePositiveInteger(options.maxPendingChanges, DEFAULT_MAX_PENDING_CHANGES);
+    this.maxConcurrentReconciliations = normalizePositiveInteger(
+      options.maxConcurrentReconciliations,
+      DEFAULT_MAX_CONCURRENT_RECONCILIATIONS
+    );
     this.setTimeout = options.setTimeoutFn ?? setTimeout;
     this.clearTimeout = options.clearTimeoutFn ?? clearTimeout;
     this.registrations = new Map();
+    this.activeReconciliations = 0;
   }
 
   updateRepository(value) {
@@ -113,6 +121,38 @@ export class LocalAiWatcherRegistry {
     return registration ? [...registration.settledChanges] : [];
   }
 
+  tryStartReconciliation(repoIdentityHash) {
+    const registration = this.registrations.get(repoIdentityHash);
+    if (
+      !registration ||
+      registration.state === "stopped" ||
+      registration.state === "unavailable" ||
+      registration.reconciliationActive ||
+      this.activeReconciliations >= this.maxConcurrentReconciliations
+    ) {
+      return false;
+    }
+    registration.reconciliationActive = true;
+    this.activeReconciliations += 1;
+    return true;
+  }
+
+  finishReconciliation(repoIdentityHash, options = {}) {
+    const registration = this.registrations.get(repoIdentityHash);
+    if (!registration?.reconciliationActive) return;
+    registration.reconciliationActive = false;
+    this.activeReconciliations = Math.max(0, this.activeReconciliations - 1);
+    if (options.fullReconciliationCompleted === true) {
+      registration.pendingChanges.clear();
+      registration.settledChanges = [];
+      registration.needsFullReconciliation = false;
+      if (registration.state === "degraded" && registration.reason === "pending_queue_full") {
+        registration.state = "active";
+        registration.reason = null;
+      }
+    }
+  }
+
   counts() {
     return this.list().reduce(
       (counts, registration) => ({
@@ -145,12 +185,23 @@ export class LocalAiWatcherRegistry {
       this.clearTimeout(registration.debounceTimer);
       registration.debounceTimer = null;
     }
+    if (registration.reconciliationActive) {
+      registration.reconciliationActive = false;
+      this.activeReconciliations = Math.max(0, this.activeReconciliations - 1);
+    }
     registration.pendingChanges.clear();
   }
 
   recordFileEvent(registration, eventType, filename, changedAt) {
     const repoRelativePath = normalizeEventPath(filename);
     if (!repoRelativePath) return;
+    if (!registration.pendingChanges.has(repoRelativePath) && registration.pendingChanges.size >= this.maxPendingChanges) {
+      registration.droppedEventCount += 1;
+      registration.needsFullReconciliation = true;
+      registration.state = "degraded";
+      registration.reason = "pending_queue_full";
+      return;
+    }
     registration.pendingChanges.set(repoRelativePath, {
       repoRelativePath,
       eventType: eventType === "rename" ? "rename" : "change",
@@ -205,7 +256,10 @@ function changeState(existing) {
     settledChanges: existing?.settledChanges ?? [],
     debounceTimer: null,
     lastSettledAt: existing?.lastSettledAt ?? null,
-    settledBatchCount: existing?.settledBatchCount ?? 0
+    settledBatchCount: existing?.settledBatchCount ?? 0,
+    droppedEventCount: existing?.droppedEventCount ?? 0,
+    needsFullReconciliation: existing?.needsFullReconciliation ?? false,
+    reconciliationActive: existing?.reconciliationActive ?? false
   };
 }
 
@@ -225,7 +279,10 @@ function publicRegistration(registration) {
     settledChangeCount: registration.settledChanges.length,
     lastSettledAt: registration.lastSettledAt,
     settledBatchCount: registration.settledBatchCount,
-    debounceMs: registration.state === "active" ? registration.debounceMs ?? null : null
+    droppedEventCount: registration.droppedEventCount,
+    needsFullReconciliation: registration.needsFullReconciliation,
+    reconciliationActive: registration.reconciliationActive,
+    debounceMs: registration.watcher ? registration.debounceMs ?? null : null
   };
 }
 
@@ -257,6 +314,11 @@ function scheduleDebounce(registry, registration) {
 function normalizeDebounceMs(value) {
   if (!Number.isFinite(value)) return DEFAULT_DEBOUNCE_MS;
   return Math.min(MAX_DEBOUNCE_MS, Math.max(MIN_DEBOUNCE_MS, Math.round(value)));
+}
+
+function normalizePositiveInteger(value, fallback) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.round(value));
 }
 
 function normalizeEventPath(value) {

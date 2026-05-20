@@ -668,3 +668,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Debounce belongs before Git reconciliation so rapid editor saves collapse into one bounded change set before any expensive Git commands run.
+
+### 2026-05-20 - Post-MVP Phase 23 Watcher Backpressure
+
+**By:** Codex
+
+**Actions:**
+- Added a bounded pending-change queue per watched repository.
+- Marked repositories as degraded and requiring full Git reconciliation when pending file paths exceed the queue limit.
+- Added dropped event counters and full-reconciliation recovery semantics.
+- Added a cross-repository reconciliation concurrency guard for later snapshot/diff work.
+- Added companion environment knobs for max pending changes and reconciliation concurrency.
+- Checked off Post-MVP Phase 23 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-registry.test.js`.
+- Ran bundled-Node `tests/codex-shim.test.js`.
+
+**Learnings:**
+- Backpressure should degrade toward one full Git reconciliation instead of attempting to preserve every OS watcher event under bursty saves.

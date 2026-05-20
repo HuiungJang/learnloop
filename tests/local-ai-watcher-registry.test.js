@@ -116,6 +116,55 @@ test("watcher registry clamps debounce configuration between 250ms and 5s", () =
   assertDebounceDelay(9000, 5000);
 });
 
+test("watcher registry bounds pending changes and marks full reconciliation when the queue is full", () => {
+  let listener = null;
+  const registry = new LocalAiWatcherRegistry({
+    maxPendingChanges: 3,
+    watchFactory: (_repoRoot, nextListener) => {
+      listener = nextListener;
+      return { close: () => {} };
+    },
+    setTimeoutFn: (callback) => ({ callback, unref: () => {} }),
+    clearTimeoutFn: () => {},
+    clock: fixedClock()
+  });
+
+  registry.updateRepository(repository());
+  for (let index = 0; index < 20; index += 1) {
+    listener("change", `src/file-${index}.ts`);
+  }
+
+  const [status] = registry.list();
+  assert.equal(status.state, "degraded");
+  assert.equal(status.reason, "pending_queue_full");
+  assert.equal(status.pendingChangeCount, 3);
+  assert.equal(status.droppedEventCount, 17);
+  assert.equal(status.needsFullReconciliation, true);
+  assert.equal(registry.settledChangesFor("repo-123").length, 0);
+
+  assert.equal(registry.tryStartReconciliation("repo-123"), true);
+  registry.finishReconciliation("repo-123", { fullReconciliationCompleted: true });
+  const [recovered] = registry.list();
+  assert.equal(recovered.state, "active");
+  assert.equal(recovered.needsFullReconciliation, false);
+  assert.equal(recovered.pendingChangeCount, 0);
+});
+
+test("watcher registry limits concurrent reconciliation work across repositories", () => {
+  const registry = new LocalAiWatcherRegistry({
+    maxConcurrentReconciliations: 1,
+    watchFactory: () => ({ close: () => {} }),
+    clock: fixedClock()
+  });
+  registry.updateRepository(repository({ repoIdentityHash: "repo-a" }));
+  registry.updateRepository(repository({ repoIdentityHash: "repo-b" }));
+
+  assert.equal(registry.tryStartReconciliation("repo-a"), true);
+  assert.equal(registry.tryStartReconciliation("repo-b"), false);
+  registry.finishReconciliation("repo-a", { fullReconciliationCompleted: true });
+  assert.equal(registry.tryStartReconciliation("repo-b"), true);
+});
+
 function repository(overrides = {}) {
   return {
     repoIdentityHash: overrides.repoIdentityHash ?? "repo-123",
