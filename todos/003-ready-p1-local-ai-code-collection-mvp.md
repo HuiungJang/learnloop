@@ -1066,3 +1066,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Retention controls belong beside collection status because the policy affects raw evidence handling, while generated learning assets and progress remain part of the main learning surface.
+
+### 2026-05-20 - Post-MVP Phase 43 Retention Dry Run
+
+**By:** Codex
+
+**Actions:**
+- Added a retention dry-run service that reuses local-owner retention settings.
+- Added `GET /api/evidence/retention-dry-run` for automatic cleanup preview.
+- Reported eligible bundle/item counts, raw metadata bundle count, artifact categories, and estimated reclaimed bytes.
+- Reported quarantined evidence counts and behavior without returning secret details.
+- Kept raw content, prompt text, diff text, absolute paths, provenance, and secret values out of the response model.
+- Checked off Post-MVP Phase 43 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.auth.LocalOwnerEvidenceRetentionIntegrationTest"`.
+- Backend tests cover default cleanup dry-run counts, category bytes, metadata-only aggregation, quarantined behavior, disabled cleanup, and response body non-disclosure for raw content, diff content, absolute paths, provenance, and secret values.
+
+**Learnings:**
+- The dry-run should be a reporting surface only; purge selection and mutation stay separate so Phase 44 can add bounded execution without changing the preview contract.

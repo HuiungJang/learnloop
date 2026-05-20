@@ -953,14 +953,14 @@ Verification:
 
 ### Post-MVP Phase 43: Add Retention Dry Run
 
-- [ ] Add dry-run endpoint for automatic cleanup.
-- [ ] Return counts, artifact categories, and estimated reclaimed bytes.
-- [ ] Do not return raw content, prompts, diffs, absolute paths, or secret fingerprints.
-- [ ] Include quarantined evidence behavior in the report.
+- [x] Add dry-run endpoint for automatic cleanup.
+- [x] Return counts, artifact categories, and estimated reclaimed bytes.
+- [x] Do not return raw content, prompts, diffs, absolute paths, or secret fingerprints.
+- [x] Include quarantined evidence behavior in the report.
 
 Verification:
 
-- [ ] Backend tests prove dry-run reports counts and bytes without raw content.
+- [x] Backend tests prove dry-run reports counts and bytes without raw content.
 
 ### Post-MVP Phase 44: Add Bounded Retention Purge Job
 

@@ -22,6 +22,7 @@ import java.time.Instant
 class EvidenceController(
     private val evidenceService: EvidenceService,
     private val evidenceRetentionSettingsService: EvidenceRetentionSettingsService,
+    private val evidenceRetentionDryRunService: EvidenceRetentionDryRunService,
 ) {
     @PostMapping("/api/ingest/manual")
     @ResponseStatus(HttpStatus.CREATED)
@@ -148,6 +149,15 @@ class EvidenceController(
     ): EvidenceRetentionSettingsResponse =
         evidenceRetentionSettingsService
             .update(currentUser, request)
+            .toResponse()
+
+    @GetMapping("/api/evidence/retention-dry-run")
+    fun previewRetentionCleanup(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestParam organizationId: String,
+    ): EvidenceRetentionDryRunResponse =
+        evidenceRetentionDryRunService
+            .preview(currentUser, organizationId)
             .toResponse()
 }
 
@@ -312,6 +322,30 @@ data class EvidenceRetentionSettingsResponse(
     val updatedAt: Instant?,
 )
 
+data class EvidenceRetentionDryRunResponse(
+    val organizationId: String,
+    val retentionMode: String,
+    val retentionDays: Int?,
+    val automaticCleanupEnabled: Boolean,
+    val immediatePurge: Boolean,
+    val cutoffAt: Instant?,
+    val eligibleBundles: Int,
+    val eligibleItems: Int,
+    val rawMetadataBundles: Int,
+    val estimatedReclaimedBytes: Long,
+    val artifactCategories: List<EvidenceRetentionDryRunArtifactCategoryResponse>,
+    val quarantinedBundles: Int,
+    val quarantinedItems: Int,
+    val quarantinedEstimatedBytes: Long,
+    val quarantinedBehavior: String,
+)
+
+data class EvidenceRetentionDryRunArtifactCategoryResponse(
+    val itemType: String,
+    val itemCount: Int,
+    val estimatedBytes: Long,
+)
+
 data class SourceBundleResponse(
     val id: String,
     val organizationId: String,
@@ -418,6 +452,32 @@ fun EvidenceRetentionSettings.toResponse(): EvidenceRetentionSettingsResponse =
         automaticCleanupEnabled = automaticCleanupEnabled,
         immediatePurge = immediatePurge,
         updatedAt = updatedAt,
+    )
+
+fun EvidenceRetentionDryRun.toResponse(): EvidenceRetentionDryRunResponse =
+    EvidenceRetentionDryRunResponse(
+        organizationId = organizationId,
+        retentionMode = retentionMode,
+        retentionDays = retentionDays,
+        automaticCleanupEnabled = automaticCleanupEnabled,
+        immediatePurge = immediatePurge,
+        cutoffAt = cutoffAt,
+        eligibleBundles = eligibleBundles,
+        eligibleItems = eligibleItems,
+        rawMetadataBundles = rawMetadataBundles,
+        estimatedReclaimedBytes = estimatedReclaimedBytes,
+        artifactCategories = artifactCategories.map { it.toResponse() },
+        quarantinedBundles = quarantinedBundles,
+        quarantinedItems = quarantinedItems,
+        quarantinedEstimatedBytes = quarantinedEstimatedBytes,
+        quarantinedBehavior = quarantinedBehavior,
+    )
+
+fun EvidenceRetentionDryRunArtifactCategory.toResponse(): EvidenceRetentionDryRunArtifactCategoryResponse =
+    EvidenceRetentionDryRunArtifactCategoryResponse(
+        itemType = itemType,
+        itemCount = itemCount,
+        estimatedBytes = estimatedBytes,
     )
 
 fun EvidenceItemEntity.toResponse(

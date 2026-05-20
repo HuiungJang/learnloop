@@ -49,6 +49,7 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
     @Test
     fun `local owner retention settings support default update disabled immediate and invalid values`() {
         val owner = login()
+        clearRetentionSettings(owner)
 
         val defaultSettings = getJson("/api/evidence/retention-settings?organizationId=org-demo", owner.token)
         assertEquals(HttpStatus.OK, defaultSettings.statusCode)
@@ -106,6 +107,86 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
                 mapOf("organizationId" to "org-demo", "retentionMode" to "default", "retentionDays" to 0),
             )
         assertEquals(HttpStatus.BAD_REQUEST, invalidDays.statusCode)
+    }
+
+    @Test
+    fun `retention dry run reports counts categories bytes and quarantined behavior without raw details`() {
+        val owner = login()
+        val marker = "retention-dry-run-${System.nanoTime()}"
+        val codeContent = "class RetentionDryRunFixture { val marker = \"$marker-code\" }"
+        val diffContent = "diff --git a/src/$marker.kt b/src/$marker.kt\n+$marker-diff"
+        val secret = "sk-testtesttesttesttesttesttesttest"
+        patchJson(
+            "/api/evidence/retention-settings",
+            owner.token,
+            mapOf("organizationId" to "org-demo", "retentionMode" to "default", "retentionDays" to 30),
+        )
+
+        val code =
+            createEvidence(
+                owner.token,
+                "Retention dry run code",
+                "code",
+                codeContent,
+                filePaths = listOf("/Users/local/$marker.kt"),
+                provenance = mapOf("stdout" to "$marker-output"),
+            )
+        val diff = createEvidence(owner.token, "Retention dry run diff", "diff", diffContent)
+        val quarantined =
+            createEvidence(
+                owner.token,
+                "Retention dry run quarantined",
+                "supporting_context",
+                "Do not retain $secret",
+            )
+        listOf(code, diff, quarantined).forEach(::ageEvidenceForRetention)
+
+        val preview = getJson("/api/evidence/retention-dry-run?organizationId=org-demo", owner.token)
+
+        assertEquals(HttpStatus.OK, preview.statusCode)
+        val body = json(preview)
+        assertEquals("default", body["retentionMode"].asText())
+        assertEquals(30, body["retentionDays"].asInt())
+        assertEquals(true, body["automaticCleanupEnabled"].asBoolean())
+        assertFalse(body["cutoffAt"].isNull)
+        assertTrue(body["eligibleBundles"].asInt() >= 3)
+        assertTrue(body["eligibleItems"].asInt() >= 3)
+        assertTrue(body["rawMetadataBundles"].asInt() >= 1)
+        val expectedContentBytes = (codeContent.toByteArray(Charsets.UTF_8).size + diffContent.toByteArray(Charsets.UTF_8).size).toLong()
+        val expectedCodeBytes = codeContent.toByteArray(Charsets.UTF_8).size.toLong()
+        assertTrue(body["estimatedReclaimedBytes"].asLong() >= expectedContentBytes)
+        assertTrue(
+            body["artifactCategories"].any {
+                it["itemType"].asText() == "code" &&
+                    it["itemCount"].asInt() >= 1 &&
+                    it["estimatedBytes"].asLong() >= expectedCodeBytes
+            },
+        )
+        assertTrue(body["artifactCategories"].any { it["itemType"].asText() == "diff" && it["itemCount"].asInt() >= 1 })
+        assertTrue(body["quarantinedBundles"].asInt() >= 1)
+        assertTrue(body["quarantinedItems"].asInt() >= 1)
+        assertEquals("included_without_secret_details", body["quarantinedBehavior"].asText())
+        val response = preview.body.orEmpty()
+        assertFalse(response.contains(codeContent))
+        assertFalse(response.contains(diffContent))
+        assertFalse(response.contains(secret))
+        assertFalse(response.contains("/Users/local"))
+        assertFalse(response.contains("$marker-output"))
+
+        val disabled =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "disabled"),
+            )
+        assertEquals(HttpStatus.OK, disabled.statusCode)
+        val disabledPreview = getJson("/api/evidence/retention-dry-run?organizationId=org-demo", owner.token)
+        assertEquals(HttpStatus.OK, disabledPreview.statusCode)
+        val disabledBody = json(disabledPreview)
+        assertEquals(false, disabledBody["automaticCleanupEnabled"].asBoolean())
+        assertTrue(disabledBody["cutoffAt"].isNull)
+        assertEquals(0, disabledBody["eligibleItems"].asInt())
+        assertEquals("not_scanned_while_cleanup_disabled", disabledBody["quarantinedBehavior"].asText())
     }
 
     @Test
@@ -384,6 +465,15 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
             codeBundleId = code,
             conversationBundleId = conversation,
         )
+    }
+
+    private fun ageEvidenceForRetention(bundleId: String) {
+        jdbcTemplate.update("UPDATE source_bundles SET created_at = created_at - INTERVAL '45 days' WHERE id = ?", bundleId)
+        jdbcTemplate.update("UPDATE evidence_items SET created_at = created_at - INTERVAL '45 days' WHERE bundle_id = ?", bundleId)
+    }
+
+    private fun clearRetentionSettings(owner: SessionResponse) {
+        jdbcTemplate.update("DELETE FROM local_evidence_retention_settings WHERE organization_id = ? AND owner_user_id = ?", "org-demo", owner.user.id)
     }
 
     private fun postJson(
