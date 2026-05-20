@@ -564,3 +564,18 @@ Initial Phase 1 files:
 **Learnings:**
 - `ps` must run outside the local sandbox for the manual host check, but the module itself degrades safely when the command is denied or times out.
 - Using `ps -axo pid=,ppid=,comm=` avoids shell arguments and environment variables, which keeps snapshot status safe for local companion responses.
+
+### 2026-05-20 - Post-MVP Phase 17 Codex App Presence Adapter
+
+**By:** Codex
+
+**Actions:**
+- Added a Codex App adapter that reads sanitized process snapshots and reports `running`, `frontmost`, `recently_active`, or `unavailable`.
+- Matched Codex App processes by `Codex.app` executable paths or Codex App process names while ignoring lowercase `codex` CLI processes.
+- Added a token-protected companion `/adapters/codex-app/status` endpoint and included the adapter module in release packaging.
+- Added fake process tests for running, frontmost, recently active, unavailable, injected snapshot, and process-name mismatch cases.
+- Checked off Post-MVP Phase 17 in the plan document.
+
+**Learnings:**
+- The Codex App adapter should use tool/app identity from sanitized process metadata only; CLI process names are intentionally not enough to identify the GUI app.
+- `recently_active` is best modeled as a separate hint layered on top of snapshots, so the process reader does not need to collect window text or app cache data.

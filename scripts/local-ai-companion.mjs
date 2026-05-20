@@ -5,6 +5,7 @@ import { chmod, lstat, mkdir, open, readFile, stat, writeFile } from "node:fs/pr
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
 import { readHostProcessSnapshot } from "./local-ai-process-snapshot.mjs";
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), ".learnloop");
@@ -113,6 +114,13 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       sendJson(res, 200, await readHostProcessSnapshot());
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/adapters/codex-app/status") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      sendJson(res, 200, await readCodexAppPresence());
       return;
     }
 

@@ -663,14 +663,14 @@ Verification:
 
 ### Post-MVP Phase 17: Detect Codex App Presence
 
-- [ ] Add a Codex App adapter that reads process snapshots.
-- [ ] Report `running`, `frontmost`, `recently_active`, or `unavailable`.
-- [ ] Keep the adapter optional and degraded when OS process data is unavailable.
-- [ ] Do not collect window text, terminal scrollback, environment variables, or app cache files.
+- [x] Add a Codex App adapter that reads process snapshots.
+- [x] Report `running`, `frontmost`, `recently_active`, or `unavailable`.
+- [x] Keep the adapter optional and degraded when OS process data is unavailable.
+- [x] Do not collect window text, terminal scrollback, environment variables, or app cache files.
 
 Verification:
 
-- [ ] Fake process tests cover running, frontmost, unavailable, and process-name mismatch cases.
+- [x] Fake process tests cover running, frontmost, unavailable, and process-name mismatch cases.
 
 ### Post-MVP Phase 18: Correlate GUI Activity Windows
 

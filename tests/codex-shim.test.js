@@ -384,6 +384,21 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
     assert.ok(Array.isArray(processSnapshot.processes));
     assert.equal(JSON.stringify(processSnapshot).includes("sk-"), false);
 
+    const unauthenticatedCodexApp = await httpRequest(port, "/adapters/codex-app/status", {
+      host: goodHost
+    });
+    assert.equal(unauthenticatedCodexApp.status, 401);
+
+    const acceptedCodexApp = await httpRequest(port, "/adapters/codex-app/status", {
+      host: goodHost,
+      token
+    });
+    assert.equal(acceptedCodexApp.status, 200);
+    const codexAppStatus = JSON.parse(acceptedCodexApp.body);
+    assert.equal(codexAppStatus.provider, "codex_app");
+    assert.ok(["running", "frontmost", "recently_active", "unavailable"].includes(codexAppStatus.status));
+    assert.equal(JSON.stringify(codexAppStatus).includes("sk-"), false);
+
     const acceptedRevoke = await httpRequest(port, "/consent/revoke", {
       method: "POST",
       host: goodHost,
