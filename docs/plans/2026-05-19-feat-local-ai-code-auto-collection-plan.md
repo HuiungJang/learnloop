@@ -1008,16 +1008,19 @@ Verification:
 
 ### Post-MVP Phase 48: Write Hosted/Team Re-Evaluation Decision
 
-- [ ] Decide whether hosted/team mode is still a product goal after the personal local loop is validated.
-- [ ] Decide whether local data should be exportable, importable, or local-only.
-- [ ] Define non-goals before adding any team tables or role surfaces.
-- [ ] Keep this phase as a decision checkpoint, not an implementation commitment.
+- [x] Decide whether hosted/team mode is still a product goal after the personal local loop is validated.
+- [x] Decide whether local data should be exportable, importable, or local-only.
+- [x] Define non-goals before adding any team tables or role surfaces.
+- [x] Keep this phase as a decision checkpoint, not an implementation commitment.
 
 Verification:
 
-- [ ] Decision document states go/no-go, scope, migration assumptions, and explicit non-goals.
+- [x] Decision document states go/no-go, scope, migration assumptions, and explicit non-goals.
+  - Decision: hosted/team mode is no-go for this cycle; local data remains local-only by default.
 
 ### Post-MVP Phase 49: Add Local Export Manifest If Hosted/Team Is Approved
+
+Deferred by Phase 48: hosted/team mode is not approved for this cycle.
 
 - [ ] Define export manifest format for metadata, hashes, generated assets, and optional raw evidence.
 - [ ] Make raw evidence export opt-in.
@@ -1030,6 +1033,8 @@ Verification:
 
 ### Post-MVP Phase 50: Add Hosted Import Prototype If Approved
 
+Deferred by Phase 48: hosted/team mode is not approved for this cycle.
+
 - [ ] Validate exported metadata into a separate hosted/team import path.
 - [ ] Detect id collisions using workspace namespace and dedupe keys.
 - [ ] Import generated cards and practice progress without requiring raw evidence.
@@ -1040,6 +1045,8 @@ Verification:
 - [ ] Prototype import test covers metadata-only import, duplicate import, and rejected quarantined payload.
 
 ### Post-MVP Phase 51: Reintroduce Team Roles Only Behind Separate Mode
+
+Deferred by Phase 48: hosted/team mode is not approved for this cycle.
 
 - [ ] Add team roles only if the hosted/team decision approves it.
 - [ ] Keep team surfaces outside the local personal primary UI.

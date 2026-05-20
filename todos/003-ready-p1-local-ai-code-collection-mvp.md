@@ -1165,3 +1165,21 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Cleanup throughput is bounded by the configured batch size while normal evidence reads remain available between batches.
+
+### 2026-05-20 - Post-MVP Phase 48 Hosted/Team Re-Evaluation Decision
+
+**By:** Codex
+
+**Actions:**
+- Added `docs/decisions/2026-05-20-hosted-team-re-evaluation.md`.
+- Decided hosted/team mode is no-go for the current local learning loop.
+- Decided local data remains local-only by default.
+- Deferred export/import and team-role implementation until a future hosted/team approval decision.
+- Defined explicit non-goals for admin screens, team role management, default raw evidence portability, hosted import prototypes, and weakened local-owner authorization.
+- Checked off Post-MVP Phase 48 in the plan document.
+
+**Verification:**
+- Decision document states go/no-go, scope, migration assumptions, and explicit non-goals.
+
+**Learnings:**
+- Conditional hosted/team phases should not become implicit implementation work after the product direction has shifted to a personal local tool.
