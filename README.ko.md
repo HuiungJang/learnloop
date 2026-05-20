@@ -63,7 +63,10 @@ http://localhost:8080
 ./scripts/status.sh
 ./scripts/stop.sh
 ./scripts/local-ai-companion.sh
+./scripts/local-ai-shim.sh codex install
 ```
+
+Codex shim 관리자는 LearnLoop가 관리하는 shim 디렉터리에만 설치하고 PATH 안내를 출력합니다. 실제 Codex binary는 덮어쓰지 않으며, 원본 `codex` 경로와 hash를 기록하고 `./scripts/local-ai-shim.sh codex status`로 repair 또는 PATH 우선순위 문제를 확인할 수 있습니다.
 
 브라우저 포트를 바꾸려면 `.env`의 `AI_CODE_WEB_PORT`를 수정한 뒤 다시 시작합니다.
 

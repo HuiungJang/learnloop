@@ -421,3 +421,21 @@ Initial Phase 1 files:
 
 **Learnings:**
 - A local personal app still needs API-side consent and scope checks because stale browser state and compatibility users can otherwise bypass UI-only controls.
+
+### 2026-05-20 - Phase 11 Codex CLI Shim
+
+**By:** Codex
+
+**Actions:**
+- Added `scripts/local-ai-shim.mjs` and `scripts/local-ai-shim.sh` with Codex shim install, uninstall, repair, status, and runtime forwarding commands.
+- Kept shim files in a LearnLoop-managed directory, recorded original `codex` path/hash metadata, detected recursive shim candidates, and reported PATH precedence or original-path drift.
+- Forwarded args, stdin, stdout, stderr, cwd, signals, and exit code to the original Codex binary while emitting bounded best-effort shim events.
+- Omitted env vars and local shell/config/cache data from shim events; redacted stdout excerpts and suppressed stderr content by default.
+- Added Node tests for fake PATH handling, fake Codex passthrough, large output, signal forwarding, companion-down behavior, event redaction, and latency budgets.
+- Added release-bundle wrappers and status/docs references for the Codex shim manager.
+- Replaced stale installed-app demo-role command output with local-owner credential guidance.
+- Checked off Phase 11 in the plan document.
+
+**Learnings:**
+- The shim should use stored original-binary metadata for runtime behavior, while status/repair owns warnings about PATH drift.
+- End events need a very short flush window; otherwise fast Codex invocations can exit before the companion receives the final bounded event.

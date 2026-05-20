@@ -63,7 +63,10 @@ Common installed-app commands:
 ./scripts/status.sh
 ./scripts/stop.sh
 ./scripts/local-ai-companion.sh
+./scripts/local-ai-shim.sh codex install
 ```
+
+The Codex shim manager installs only into a LearnLoop-managed shim directory and prints PATH guidance. It records the original `codex` path and hash, and `./scripts/local-ai-shim.sh codex status` reports repair or PATH precedence issues without modifying the real Codex binary.
 
 To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
 

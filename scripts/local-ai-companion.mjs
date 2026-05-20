@@ -22,6 +22,8 @@ const providers = {
   }
 };
 const providerState = new Map();
+const shimEvents = [];
+const maxShimEvents = 100;
 
 const server = http.createServer(async (req, res) => {
   setCorsHeaders(req, res);
@@ -50,6 +52,23 @@ const server = http.createServer(async (req, res) => {
       const provider = readProvider(body.provider);
       await startOAuth(provider);
       sendJson(res, 202, stateFor(provider));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/shim/events") {
+      const body = await readJson(req);
+      recordShimEvent(body);
+      sendJson(res, 202, { status: "accepted" });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/shim/events/status") {
+      const lastEvent = shimEvents.at(-1);
+      sendJson(res, 200, {
+        queued: shimEvents.length,
+        lastEventType: lastEvent?.type ?? null,
+        lastProvider: lastEvent?.provider ?? null
+      });
       return;
     }
 
@@ -242,6 +261,42 @@ function stateFor(provider) {
     credentialLabel: current.credentialLabel,
     message: current.message
   };
+}
+
+function recordShimEvent(value) {
+  const event = sanitizeShimEvent(value);
+  shimEvents.push(event);
+  if (shimEvents.length > maxShimEvents) {
+    shimEvents.splice(0, shimEvents.length - maxShimEvents);
+  }
+}
+
+function sanitizeShimEvent(value) {
+  const input = typeof value === "object" && value !== null ? value : {};
+  return {
+    type: safeString(input.type, 40),
+    provider: safeString(input.provider, 40),
+    invocationId: safeString(input.invocationId, 80),
+    command: safeString(input.command, 40),
+    argvCount: safeNumber(input.argvCount),
+    startedAt: safeString(input.startedAt, 40),
+    endedAt: safeString(input.endedAt, 40),
+    durationMs: safeNumber(input.durationMs),
+    exitCode: safeNumber(input.exitCode),
+    signal: safeString(input.signal, 20),
+    stdoutBytes: safeNumber(input.stdoutBytes),
+    stderrBytes: safeNumber(input.stderrBytes),
+    stdoutSuppressed: input.stdoutSuppressed === true,
+    stderrSuppressed: input.stderrSuppressed === true
+  };
+}
+
+function safeString(value, maxLength) {
+  return typeof value === "string" ? value.slice(0, maxLength) : null;
+}
+
+function safeNumber(value) {
+  return Number.isFinite(value) ? value : null;
 }
 
 function appendOutput(state, chunk) {

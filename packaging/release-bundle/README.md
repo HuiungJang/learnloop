@@ -94,6 +94,16 @@ Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments
 
 The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on `127.0.0.1`, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
 
+## Codex CLI Shim
+
+Install the first automatic collection path with:
+
+```sh
+./local-ai-shim.sh codex install
+```
+
+The shim is written only to the LearnLoop-managed shim directory. It records the original `codex` path and hash, preserves stdin/stdout/stderr/exit behavior, and emits bounded best-effort collection events to the local companion. Run `./local-ai-shim.sh codex status`, `repair`, or `uninstall` to inspect or change the shim without overwriting the real Codex binary.
+
 ## License
 
 LearnLoop is licensed under the GNU Affero General Public License, Version 3. See `LICENSE` and `NOTICE`.

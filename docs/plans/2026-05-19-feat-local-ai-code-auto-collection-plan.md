@@ -564,25 +564,25 @@ Verification:
 
 ### Phase 11: Add Codex CLI Shim As First Automatic Collection Path
 
-- [ ] Add install/uninstall/repair commands for the Codex shim.
-- [ ] Install shims only in a LearnLoop-managed directory; do not overwrite the real provider binary.
-- [ ] Resolve original `codex` path before installing and detect recursive shim chains.
-- [ ] Record original binary path and hash where practical.
-- [ ] Warn if original binary path changes unexpectedly.
-- [ ] Preserve args, stdin, stdout, stderr, cwd, signal behavior, and exit code.
-- [ ] Start the original CLI immediately after lightweight start-event enqueue.
-- [ ] Send collection events asynchronously with short timeouts.
-- [ ] Never block stdout/stderr passthrough on upload, diffing, attribution, or companion availability.
-- [ ] Do not capture environment variables, shell history, terminal scrollback, config files, auth files, or provider cache directories.
-- [ ] Redact stdout/stderr before durable storage and treat stderr as sensitive by default.
-- [ ] Fail open to original Codex if companion or backend is down.
+- [x] Add install/uninstall/repair commands for the Codex shim.
+- [x] Install shims only in a LearnLoop-managed directory; do not overwrite the real provider binary.
+- [x] Resolve original `codex` path before installing and detect recursive shim chains.
+- [x] Record original binary path and hash where practical.
+- [x] Warn if original binary path changes unexpectedly.
+- [x] Preserve args, stdin, stdout, stderr, cwd, signal behavior, and exit code.
+- [x] Start the original CLI immediately after lightweight start-event enqueue.
+- [x] Send collection events asynchronously with short timeouts.
+- [x] Never block stdout/stderr passthrough on upload, diffing, attribution, or companion availability.
+- [x] Do not capture environment variables, shell history, terminal scrollback, config files, auth files, or provider cache directories.
+- [x] Redact stdout/stderr before durable storage and treat stderr as sensitive by default.
+- [x] Fail open to original Codex if companion or backend is down.
 
 Verification:
 
-- [ ] Fake PATH tests prove install, uninstall, repair, no recursion, and PATH precedence failure handling.
-- [ ] Fake `codex` binary tests cover success, failure, large output, stdin passthrough, signal handling, companion-down behavior, and unchanged exit code.
-- [ ] Latency tests prove shim startup overhead is under 100ms p95 when companion is healthy and under 50ms p95 when companion is down.
-- [ ] Tests prove env vars are not captured and fake secrets in stdout/stderr are quarantined or redacted.
+- [x] Fake PATH tests prove install, uninstall, repair, no recursion, and PATH precedence failure handling.
+- [x] Fake `codex` binary tests cover success, failure, large output, stdin passthrough, signal handling, companion-down behavior, and unchanged exit code.
+- [x] Latency tests prove shim startup overhead is under 100ms p95 when companion is healthy and under 50ms p95 when companion is down.
+- [x] Tests prove env vars are not captured and fake secrets in stdout/stderr are quarantined or redacted.
 
 ### Phase 12: Package Companion And Prove Installed-App E2E
 

@@ -53,6 +53,13 @@ print_companion_status() {
   fi
 }
 
+print_shim_status() {
+  shim_status=$(./scripts/local-ai-shim.sh codex status 2>/dev/null || true)
+  if [ -n "$shim_status" ]; then
+    echo "$shim_status"
+  fi
+}
+
 if [ "$WAIT" = "--wait" ]; then
   i=0
   while [ "$i" -lt 90 ]; do
@@ -61,6 +68,7 @@ if [ "$WAIT" = "--wait" ]; then
       echo "Ready: $URL"
       print_runner_status
       print_companion_status
+      print_shim_status
       exit 0
     fi
     i=$((i + 1))
@@ -78,9 +86,11 @@ if check_health; then
   echo "Ready: $URL"
   print_runner_status
   print_companion_status
+  print_shim_status
 else
   echo
   echo "Not healthy yet: $URL"
   print_runner_status
   print_companion_status
+  print_shim_status
 fi
