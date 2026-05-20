@@ -853,14 +853,14 @@ Verification:
 
 ### Post-MVP Phase 34: Add Claude Code Shim Installer
 
-- [ ] Add provider config for the `claude` binary.
-- [ ] Resolve original `claude` path before installing.
-- [ ] Add PATH guidance for shells where the shim directory is not first.
-- [ ] Add uninstall and repair behavior.
+- [x] Add provider config for the `claude` binary.
+- [x] Resolve original `claude` path before installing.
+- [x] Add PATH guidance for shells where the shim directory is not first.
+- [x] Add uninstall and repair behavior.
 
 Verification:
 
-- [ ] Fake PATH tests cover healthy install, missing binary, existing shim, PATH precedence failure, repair, and uninstall.
+- [x] Fake PATH tests cover healthy install, missing binary, existing shim, PATH precedence failure, repair, and uninstall.
 
 ### Post-MVP Phase 35: Add Claude Code Runtime Capture
 

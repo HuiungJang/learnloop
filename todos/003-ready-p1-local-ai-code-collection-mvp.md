@@ -891,3 +891,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Runtime forwarding should take an already-resolved original path so install/status resolution stays separate from process behavior.
+
+### 2026-05-20 - Post-MVP Phase 34 Claude Code Shim Installer
+
+**By:** Codex
+
+**Actions:**
+- Added and verified the `claude` provider config for the generic shim installer.
+- Resolved the original `claude` binary before installing the shim.
+- Preserved PATH guidance when the shim directory is not first.
+- Verified Claude uninstall and repair behavior.
+- Verified recursive existing-shim detection for Claude installs.
+- Checked off Post-MVP Phase 34 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Fake PATH tests cover healthy Claude install, missing binary, existing shim recursion, PATH precedence failure, repair, and uninstall.
+
+**Learnings:**
+- Provider-specific installer phases can stay small when generic installer behavior is already shared and tested through the provider config.

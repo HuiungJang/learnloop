@@ -126,6 +126,42 @@ test("generic shim installer detects recursive shim chains for every provider", 
   });
 });
 
+test("Claude shim installer handles install, status, repair, missing binary, recursion, and uninstall", async () => {
+  await withTempDir(async (dir) => {
+    const originalDir = path.join(dir, "original-bin");
+    const shimDir = path.join(dir, "learnloop-shims");
+    const originalPath = path.join(originalDir, "claude");
+    await writeExecutable(originalPath, "#!/usr/bin/env sh\necho claude\n");
+
+    await assert.rejects(
+      installProviderShim("claude", { shimDir: path.join(dir, "missing-shims"), pathEnv: path.join(dir, "missing-bin") }),
+      /Original claude was not found in PATH/
+    );
+
+    const install = await installProviderShim("claude", { shimDir, pathEnv: originalDir });
+    assert.equal(install.command, "claude");
+    assert.equal(install.active, false);
+    assert.match(install.pathGuidance, /real claude directory/);
+
+    const inactiveStatus = await statusProviderShim("claude", { shimDir, pathEnv: `${originalDir}${path.delimiter}${shimDir}` });
+    assert.ok(inactiveStatus.problems.includes("path_precedence"));
+
+    await assert.rejects(
+      installProviderShim("claude", { shimDir: path.join(dir, "recursive-shims"), pathEnv: shimDir }),
+      /Original claude resolves to a LearnLoop shim/
+    );
+
+    await rm(path.join(shimDir, "claude"), { force: true });
+    const repaired = await repairProviderShim("claude", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` });
+    assert.equal(repaired.command, "claude");
+    assert.equal(repaired.originalPath, await realpath(originalPath));
+
+    const removed = await uninstallProviderShim("claude", { shimDir });
+    assert.equal(removed.removed, true);
+    assert.equal((await statusProviderShim("claude", { shimDir })).installed, false);
+  });
+});
+
 test("codex shim refuses unmanaged directories, symlink targets, and non-marker uninstall targets", async () => {
   await withTempDir(async (dir) => {
     const realBinDir = path.join(dir, "real-bin");
