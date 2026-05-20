@@ -369,6 +369,21 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
     });
     assert.equal(unauthenticatedPurge.status, 401);
 
+    const unauthenticatedProcesses = await httpRequest(port, "/host/processes", {
+      host: goodHost
+    });
+    assert.equal(unauthenticatedProcesses.status, 401);
+
+    const acceptedProcesses = await httpRequest(port, "/host/processes", {
+      host: goodHost,
+      token
+    });
+    assert.equal(acceptedProcesses.status, 200);
+    const processSnapshot = JSON.parse(acceptedProcesses.body);
+    assert.ok(["ok", "degraded", "unavailable"].includes(processSnapshot.status));
+    assert.ok(Array.isArray(processSnapshot.processes));
+    assert.equal(JSON.stringify(processSnapshot).includes("sk-"), false);
+
     const acceptedRevoke = await httpRequest(port, "/consent/revoke", {
       method: "POST",
       host: goodHost,

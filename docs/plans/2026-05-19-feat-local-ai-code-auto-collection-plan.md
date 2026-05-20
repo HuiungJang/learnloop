@@ -651,15 +651,15 @@ Verification:
 
 ### Post-MVP Phase 16: Add Host Process Snapshot Reader
 
-- [ ] Add a host-side process snapshot interface behind the companion boundary.
-- [ ] Implement macOS process listing with bounded command timeouts.
-- [ ] Normalize process names, pids, executable paths, and frontmost/app-active indicators where available.
-- [ ] Redact absolute home paths from status responses.
+- [x] Add a host-side process snapshot interface behind the companion boundary.
+- [x] Implement macOS process listing with bounded command timeouts.
+- [x] Normalize process names, pids, executable paths, and frontmost/app-active indicators where available.
+- [x] Redact absolute home paths from status responses.
 
 Verification:
 
-- [ ] Unit tests use fake process snapshots.
-- [ ] Manual macOS check shows process metadata without raw file contents or environment variables.
+- [x] Unit tests use fake process snapshots.
+- [x] Manual macOS check shows process metadata without raw file contents or environment variables.
 
 ### Post-MVP Phase 17: Detect Codex App Presence
 

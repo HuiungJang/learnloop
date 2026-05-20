@@ -548,3 +548,19 @@ Initial Phase 1 files:
 **Learnings:**
 - Fixture replay should produce the same local session ingest shape as later live adapters, while keeping external process and OS discovery dependencies out of the test path.
 - Synthetic diffs give the bundle generation-relevant evidence without storing real user code in fixtures.
+
+### 2026-05-20 - Post-MVP Phase 16 Host Process Snapshot Reader
+
+**By:** Codex
+
+**Actions:**
+- Added a host process snapshot module that reads bounded macOS `ps` metadata without command-line arguments, environment variables, file contents, or provider cache data.
+- Added fake snapshot normalization tests for pids, parent pids, process names, executable paths, frontmost/app-active flags, timeout degradation, max process limits, and home-path redaction.
+- Added a token-protected companion `/host/processes` endpoint and covered missing-token rejection in the companion HTTP tests.
+- Updated release packaging to include the process snapshot module with the companion runtime.
+- Ran a bounded macOS metadata check with `maxProcesses: 5`; it returned process metadata only.
+- Checked off Post-MVP Phase 16 in the plan document.
+
+**Learnings:**
+- `ps` must run outside the local sandbox for the manual host check, but the module itself degrades safely when the command is denied or times out.
+- Using `ps -axo pid=,ppid=,comm=` avoids shell arguments and environment variables, which keeps snapshot status safe for local companion responses.
