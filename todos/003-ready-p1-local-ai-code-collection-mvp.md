@@ -948,3 +948,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Provider output parsing should be fail-open: attribution can degrade, but the original CLI command and event flow must not fail.
+
+### 2026-05-20 - Post-MVP Phase 37 Gemini CLI Shim Installer
+
+**By:** Codex
+
+**Actions:**
+- Added Gemini-specific installer verification on top of the generic provider shim implementation.
+- Verified original `gemini` path resolution before shim installation.
+- Verified PATH guidance, PATH precedence status, repair, and uninstall behavior.
+- Verified broken Gemini metadata can be repaired from the current original binary path.
+- Verified uninstalling Gemini does not remove Codex or Claude shims in the same managed directory.
+- Checked off Post-MVP Phase 37 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Fake PATH tests cover healthy Gemini install, missing binary, broken metadata, PATH precedence failure, repair, uninstall, and provider independence.
+
+**Learnings:**
+- Provider-specific installer phases should test isolation explicitly when multiple shims share one managed directory.

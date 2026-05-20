@@ -162,6 +162,51 @@ test("Claude shim installer handles install, status, repair, missing binary, rec
   });
 });
 
+test("Gemini shim installer handles broken metadata and stays independent from other shims", async () => {
+  await withTempDir(async (dir) => {
+    const originalDir = path.join(dir, "original-bin");
+    const shimDir = path.join(dir, "learnloop-shims");
+    const geminiPath = path.join(originalDir, "gemini");
+    await writeExecutable(geminiPath, "#!/usr/bin/env sh\necho gemini\n");
+    await writeExecutable(path.join(originalDir, "codex"), "#!/usr/bin/env sh\necho codex\n");
+    await writeExecutable(path.join(originalDir, "claude"), "#!/usr/bin/env sh\necho claude\n");
+
+    await assert.rejects(
+      installProviderShim("gemini", { shimDir: path.join(dir, "missing-shims"), pathEnv: path.join(dir, "missing-bin") }),
+      /Original gemini was not found in PATH/
+    );
+
+    const install = await installProviderShim("gemini", { shimDir, pathEnv: originalDir });
+    assert.equal(install.provider, "gemini");
+    assert.equal(install.command, "gemini");
+    assert.equal(install.active, false);
+    assert.match(install.pathGuidance, /real gemini directory/);
+
+    const inactiveStatus = await statusProviderShim("gemini", { shimDir, pathEnv: `${originalDir}${path.delimiter}${shimDir}` });
+    assert.ok(inactiveStatus.problems.includes("path_precedence"));
+
+    await installProviderShim("codex", { shimDir, pathEnv: originalDir });
+    await installProviderShim("claude", { shimDir, pathEnv: originalDir });
+    await writeFile(path.join(shimDir, ".metadata", "gemini.json"), "{broken json\n");
+
+    const brokenStatus = await statusProviderShim("gemini", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` });
+    assert.equal(brokenStatus.installed, false);
+    assert.ok(brokenStatus.problems.includes("not_installed"));
+
+    await rm(path.join(shimDir, "gemini"), { force: true });
+    const repaired = await repairProviderShim("gemini", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` });
+    assert.equal(repaired.provider, "gemini");
+    assert.equal(repaired.originalPath, await realpath(geminiPath));
+    assert.match(await readFile(path.join(shimDir, "gemini"), "utf8"), /LEARNLOOP_LOCAL_AI_SHIM/);
+
+    const removed = await uninstallProviderShim("gemini", { shimDir });
+    assert.equal(removed.removed, true);
+    assert.equal((await statusProviderShim("gemini", { shimDir })).installed, false);
+    assert.equal((await statusProviderShim("codex", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` })).installed, true);
+    assert.equal((await statusProviderShim("claude", { shimDir, pathEnv: `${shimDir}${path.delimiter}${originalDir}` })).installed, true);
+  });
+});
+
 test("codex shim refuses unmanaged directories, symlink targets, and non-marker uninstall targets", async () => {
   await withTempDir(async (dir) => {
     const realBinDir = path.join(dir, "real-bin");

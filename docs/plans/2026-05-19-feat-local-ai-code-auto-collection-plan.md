@@ -886,14 +886,14 @@ Verification:
 
 ### Post-MVP Phase 37: Add Gemini CLI Shim Installer
 
-- [ ] Add provider config for the `gemini` binary.
-- [ ] Resolve original `gemini` path before installing.
-- [ ] Add PATH guidance, uninstall, and repair behavior.
-- [ ] Keep Gemini setup independent from Codex and Claude shims.
+- [x] Add provider config for the `gemini` binary.
+- [x] Resolve original `gemini` path before installing.
+- [x] Add PATH guidance, uninstall, and repair behavior.
+- [x] Keep Gemini setup independent from Codex and Claude shims.
 
 Verification:
 
-- [ ] Fake PATH tests cover healthy, missing, broken metadata, PATH precedence failure, repair, and uninstall.
+- [x] Fake PATH tests cover healthy, missing, broken metadata, PATH precedence failure, repair, and uninstall.
 
 ### Post-MVP Phase 38: Add Gemini Runtime Capture
 
