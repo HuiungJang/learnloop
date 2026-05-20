@@ -748,3 +748,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Before snapshots should come from Git's clean baseline, not the filesystem at reconciliation time, otherwise pre-existing dirty files can create false before/after pairs.
+
+### 2026-05-20 - Post-MVP Phase 27 After Snapshot And Diff Capture
+
+**By:** Codex
+
+**Actions:**
+- Captured after snapshots from the filesystem after the watcher debounce quiet period.
+- Limited path-scoped diffs to files that passed ignore and after-snapshot size checks.
+- Added diff truncation metadata when output is capped.
+- Kept ignored, binary/archive, and oversized files as metadata-only entries.
+- Checked off Post-MVP Phase 27 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-git-reconcile.test.js`, `tests/local-ai-before-snapshot-cache.test.js`, and `tests/local-ai-watcher-registry.test.js`.
+- Temp repo rapid-save test proves final after content and diff match the settled file state after 100 rapid edits.
+- Tests cover oversized after snapshots and capped diff metadata.
+
+**Learnings:**
+- After snapshots should be captured before diff generation so size filtering can prevent large changed files from entering `git diff`.

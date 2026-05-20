@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_TIMEOUT_MS = 2000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_CACHE_TTL_MS = 5000;
+const DEFAULT_MAX_AFTER_SNAPSHOT_BYTES = 200 * 1024;
 
 export class GitReconciliationCache {
   constructor(options = {}) {
@@ -36,6 +38,7 @@ export async function reconcileGitRepository(input, options = {}) {
   const runner = options.commandRunner ?? runGitCommand;
   const timeoutMs = positiveInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS);
   const maxOutputBytes = positiveInteger(options.maxOutputBytes, DEFAULT_MAX_OUTPUT_BYTES);
+  const maxAfterSnapshotBytes = positiveInteger(options.maxAfterSnapshotBytes, DEFAULT_MAX_AFTER_SNAPSHOT_BYTES);
   const cache = options.cache ?? new GitReconciliationCache();
   const commandCounts = { total: 0, status: 0, diff: 0 };
   const run = async (name, args, commandOptions = {}) => {
@@ -89,10 +92,18 @@ export async function reconcileGitRepository(input, options = {}) {
         readSnapshot: (repoRelativePath) => readHeadSnapshot(repoRelativePath, run, options.beforeSnapshotCache.maxSnapshotBytes)
       })
     : [];
-  const diffArgs = ["diff", "--no-ext-diff", "--", ...diffCandidates.map((file) => file.repoRelativePath)];
-  const diffResult = diffCandidates.length > 0
-    ? await run("diff", diffArgs)
+  const afterSnapshots = await captureAfterSnapshots(metadata.repoRoot, diffCandidates, maxAfterSnapshotBytes);
+  const diffCandidatePaths = new Set(
+    afterSnapshots
+      .filter((snapshot) => snapshot.status === "captured" || snapshot.reason === "deleted_after_snapshot")
+      .map((snapshot) => snapshot.repoRelativePath)
+  );
+  const finalDiffCandidates = diffCandidates.filter((file) => diffCandidatePaths.has(file.repoRelativePath));
+  const diffArgs = ["diff", "--no-ext-diff", "--", ...finalDiffCandidates.map((file) => file.repoRelativePath)];
+  const diffResult = finalDiffCandidates.length > 0
+    ? await run("diff", diffArgs, { allowTruncated: true })
     : { ok: true, stdout: "", outputTruncated: false };
+  const diffSizeBytes = Buffer.byteLength(diffResult.stdout ?? "", "utf8");
 
   return {
     status: diffResult.ok ? "ok" : "degraded",
@@ -101,11 +112,29 @@ export async function reconcileGitRepository(input, options = {}) {
     branchName: metadata.branchName,
     remoteUrl: metadata.remoteUrl,
     changedFiles,
-    diffCandidates,
+    diffCandidates: finalDiffCandidates,
     ignoredFiles,
     beforeSnapshots,
+    afterSnapshots,
+    metadataOnlyFiles: [
+      ...ignoredFiles,
+      ...afterSnapshots
+        .filter((snapshot) => snapshot.status === "metadata_only")
+        .map((snapshot) => ({
+          repoRelativePath: snapshot.repoRelativePath,
+          reason: snapshot.reason,
+          sizeBytes: snapshot.sizeBytes,
+          contentHash: snapshot.contentHash
+        }))
+    ],
     diff: diffResult.stdout,
     diffTruncated: diffResult.outputTruncated === true,
+    diffMetadata: {
+      sizeBytes: diffSizeBytes,
+      limitBytes: maxOutputBytes,
+      contentTruncated: diffResult.outputTruncated === true,
+      limitReason: diffResult.outputTruncated === true ? "diff_output_limit" : null
+    },
     commandCounts
   };
 }
@@ -122,6 +151,71 @@ async function readHeadSnapshot(repoRelativePath, run, maxSnapshotBytes) {
 
 function repoIdentityHash(input, metadata) {
   return input?.repoIdentityHash || metadata.repoRoot;
+}
+
+async function captureAfterSnapshots(repoRoot, files, maxAfterSnapshotBytes) {
+  const snapshots = [];
+  for (const file of files) {
+    const absolutePath = path.resolve(repoRoot, file.repoRelativePath);
+    const stats = await lstat(absolutePath).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (stats === null) {
+      snapshots.push({
+        repoRelativePath: file.repoRelativePath,
+        status: "unavailable",
+        reason: "deleted_after_snapshot",
+        contentText: null,
+        sizeBytes: null,
+        contentHash: null
+      });
+      continue;
+    }
+    if (!stats.isFile()) {
+      snapshots.push({
+        repoRelativePath: file.repoRelativePath,
+        status: "unavailable",
+        reason: "after_snapshot_unavailable",
+        contentText: null,
+        sizeBytes: stats.size,
+        contentHash: null
+      });
+      continue;
+    }
+    if (stats.size > maxAfterSnapshotBytes) {
+      snapshots.push({
+        repoRelativePath: file.repoRelativePath,
+        status: "metadata_only",
+        reason: "oversized_after_snapshot",
+        contentText: null,
+        sizeBytes: stats.size,
+        contentHash: null
+      });
+      continue;
+    }
+    const content = await readFile(absolutePath, "utf8").catch(() => null);
+    if (content === null) {
+      snapshots.push({
+        repoRelativePath: file.repoRelativePath,
+        status: "metadata_only",
+        reason: "after_snapshot_unreadable",
+        contentText: null,
+        sizeBytes: stats.size,
+        contentHash: null
+      });
+      continue;
+    }
+    snapshots.push({
+      repoRelativePath: file.repoRelativePath,
+      status: "captured",
+      reason: null,
+      contentText: content,
+      sizeBytes: Buffer.byteLength(content, "utf8"),
+      contentHash: createHash("sha256").update(content).digest("hex")
+    });
+  }
+  return snapshots;
 }
 
 async function filterSafeDiffCandidates(repoRoot, files) {
@@ -243,7 +337,12 @@ export function runGitCommand(args, options) {
       const next = appendBounded(stdout, chunk, options.maxOutputBytes);
       stdout = next.buffer;
       outputTruncated = outputTruncated || next.truncated;
-      if (outputTruncated) child.kill("SIGKILL");
+      if (outputTruncated) {
+        child.kill("SIGKILL");
+        if (options.allowTruncated === true) {
+          finish({ ok: true, reason: "output_truncated", stdout: stdout.toString("utf8"), stderr: stderr.toString("utf8"), outputTruncated });
+        }
+      }
     });
     child.stderr.on("data", (chunk) => {
       const next = appendBounded(stderr, chunk, 8192);

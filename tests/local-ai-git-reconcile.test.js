@@ -45,6 +45,7 @@ test("watcher debounce triggers one bounded status pass and one final diff pass 
   await withTempDir(async (repoRoot) => {
     await initRepo(repoRoot);
     const commandLog = [];
+    const reconciliationResults = [];
     const cache = new GitReconciliationCache({ ttlMs: 5000 });
     let listener = null;
     const scheduled = [];
@@ -67,6 +68,9 @@ test("watcher debounce triggers one bounded status pass and one final diff pass 
             timeoutMs: 5000,
             maxOutputBytes: 1024 * 1024,
             onGitCommand: (event) => commandLog.push(event)
+          }).then((result) => {
+            reconciliationResults.push(result);
+            return result;
           })
       });
 
@@ -92,6 +96,13 @@ test("watcher debounce triggers one bounded status pass and one final diff pass 
     assert.equal(status.lastReconciliationStatus, "ok");
     assert.equal(status.lastReconciliationChangedFileCount, 100);
     assert.equal(status.lastReconciliationDiffCandidateCount, 100);
+    const [result] = reconciliationResults;
+    assert.equal(result.afterSnapshots.length, 100);
+    assert.equal(
+      result.afterSnapshots.find((snapshot) => snapshot.repoRelativePath === "src/file-99.txt").contentText,
+      "changed-99\n"
+    );
+    assert.match(result.diff, /changed-99/);
   });
 });
 
@@ -145,6 +156,54 @@ test("git reconciliation filters ignored, sensitive, binary, and symlink-escape 
     assertIgnored(result.ignoredFiles, "assets/logo.png", "binary_or_archive");
     assertIgnored(result.ignoredFiles, "dist/generated.js", "ignored_directory");
     assertIgnored(result.ignoredFiles, "link-outside.txt", "symlink_escape");
+    assertIgnored(result.metadataOnlyFiles, "assets/logo.png", "binary_or_archive");
+  });
+});
+
+test("git reconciliation keeps oversized after snapshots metadata-only and excludes them from diff", async () => {
+  await withTempDir(async (repoRoot) => {
+    await initSingleFileRepo(repoRoot, "src/large.ts", "small\n");
+    await writeFile(path.join(repoRoot, "src", "large.ts"), "x".repeat(20));
+
+    const result = await reconcileGitRepository(
+      { repoRoot },
+      {
+        timeoutMs: 5000,
+        maxAfterSnapshotBytes: 5
+      }
+    );
+
+    assert.deepEqual(result.diffCandidates, []);
+    const [snapshot] = result.afterSnapshots;
+    assert.equal(snapshot.repoRelativePath, "src/large.ts");
+    assert.equal(snapshot.status, "metadata_only");
+    assert.equal(snapshot.reason, "oversized_after_snapshot");
+    assert.equal(snapshot.contentText, null);
+    assert.equal(snapshot.sizeBytes, 20);
+    assertIgnored(result.metadataOnlyFiles, "src/large.ts", "oversized_after_snapshot");
+    assert.equal(result.diff, "");
+  });
+});
+
+test("git reconciliation reports diff truncation metadata when capped", async () => {
+  await withTempDir(async (repoRoot) => {
+    await initSingleFileRepo(repoRoot, "src/noisy.ts", "initial\n");
+    await writeFile(path.join(repoRoot, "src", "noisy.ts"), `${"changed\n".repeat(400)}`);
+
+    const result = await reconcileGitRepository(
+      { repoRoot },
+      {
+        timeoutMs: 5000,
+        maxOutputBytes: 200
+      }
+    );
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.diffTruncated, true);
+    assert.equal(result.diffMetadata.contentTruncated, true);
+    assert.equal(result.diffMetadata.limitReason, "diff_output_limit");
+    assert.equal(result.diffMetadata.limitBytes, 200);
+    assert.ok(result.diffMetadata.sizeBytes <= 200);
   });
 });
 
@@ -175,6 +234,16 @@ async function initPathSafetyRepo(repoRoot) {
   await writeFile(path.join(repoRoot, "secrets", "private.key"), "initial-key\n");
   await writeFile(path.join(repoRoot, "assets", "logo.png"), "initial-png\n");
   await writeFile(path.join(repoRoot, "dist", "generated.js"), "initial-generated\n");
+  await runGit(repoRoot, ["add", "-A"]);
+  await runGit(repoRoot, ["commit", "-m", "init"]);
+}
+
+async function initSingleFileRepo(repoRoot, repoRelativePath, content) {
+  await runGit(repoRoot, ["init"]);
+  await runGit(repoRoot, ["config", "user.email", "learnloop@example.local"]);
+  await runGit(repoRoot, ["config", "user.name", "LearnLoop"]);
+  await mkdir(path.dirname(path.join(repoRoot, repoRelativePath)), { recursive: true });
+  await writeFile(path.join(repoRoot, repoRelativePath), content);
   await runGit(repoRoot, ["add", "-A"]);
   await runGit(repoRoot, ["commit", "-m", "init"]);
 }

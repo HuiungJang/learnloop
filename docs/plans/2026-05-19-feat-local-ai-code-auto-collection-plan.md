@@ -776,14 +776,14 @@ Verification:
 
 ### Post-MVP Phase 27: Add After Snapshot And Diff Capture
 
-- [ ] Capture after snapshots after the quiet period.
-- [ ] Use path-scoped diffs only for files that pass ignore and size checks.
-- [ ] Add diff truncation metadata when capped.
-- [ ] Keep binary, ignored, and oversized files metadata-only.
+- [x] Capture after snapshots after the quiet period.
+- [x] Use path-scoped diffs only for files that pass ignore and size checks.
+- [x] Add diff truncation metadata when capped.
+- [x] Keep binary, ignored, and oversized files metadata-only.
 
 Verification:
 
-- [ ] Temp repo tests prove final after content and diff match the settled file state after rapid edits.
+- [x] Temp repo tests prove final after content and diff match the settled file state after rapid edits.
 
 ### Post-MVP Phase 28: Add Watcher Session Bundler
 
