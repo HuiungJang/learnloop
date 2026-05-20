@@ -930,14 +930,14 @@ Verification:
 
 ### Post-MVP Phase 41: Add Retention Policy Settings Model
 
-- [ ] Add settings for raw evidence retention period.
-- [ ] Support disabled automatic cleanup, default cleanup, and immediate purge.
-- [ ] Store settings under local owner/workspace.
-- [ ] Keep manual raw purge behavior unchanged.
+- [x] Add settings for raw evidence retention period.
+- [x] Support disabled automatic cleanup, default cleanup, and immediate purge.
+- [x] Store settings under local owner/workspace.
+- [x] Keep manual raw purge behavior unchanged.
 
 Verification:
 
-- [ ] Backend tests cover default value, update, disabled cleanup, and invalid values.
+- [x] Backend tests cover default value, update, disabled cleanup, and invalid values.
 
 ### Post-MVP Phase 42: Add Retention Settings UI
 

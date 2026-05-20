@@ -21,6 +21,7 @@ import java.time.Instant
 @RestController
 class EvidenceController(
     private val evidenceService: EvidenceService,
+    private val evidenceRetentionSettingsService: EvidenceRetentionSettingsService,
 ) {
     @PostMapping("/api/ingest/manual")
     @ResponseStatus(HttpStatus.CREATED)
@@ -130,6 +131,24 @@ class EvidenceController(
             repositoryUrl = request.repositoryUrl,
             purgeAll = request.purgeAll,
         )
+
+    @GetMapping("/api/evidence/retention-settings")
+    fun readRetentionSettings(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestParam organizationId: String,
+    ): EvidenceRetentionSettingsResponse =
+        evidenceRetentionSettingsService
+            .read(currentUser, organizationId)
+            .toResponse()
+
+    @PatchMapping("/api/evidence/retention-settings")
+    fun updateRetentionSettings(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestBody request: UpdateEvidenceRetentionSettingsRequest,
+    ): EvidenceRetentionSettingsResponse =
+        evidenceRetentionSettingsService
+            .update(currentUser, request)
+            .toResponse()
 }
 
 data class ManualIngestRequest(
@@ -283,6 +302,16 @@ data class RawPurgeResponse(
     val purgedItems: Int,
 )
 
+data class EvidenceRetentionSettingsResponse(
+    val organizationId: String,
+    val ownerUserId: String,
+    val retentionMode: String,
+    val retentionDays: Int?,
+    val automaticCleanupEnabled: Boolean,
+    val immediatePurge: Boolean,
+    val updatedAt: Instant?,
+)
+
 data class SourceBundleResponse(
     val id: String,
     val organizationId: String,
@@ -377,6 +406,17 @@ fun LocalRepositoryConsentEntity.toResponse(): LocalRepositoryConsentResponse =
         organizationId = organizationId,
         displayLabel = displayLabel,
         status = status,
+        updatedAt = updatedAt,
+    )
+
+fun EvidenceRetentionSettings.toResponse(): EvidenceRetentionSettingsResponse =
+    EvidenceRetentionSettingsResponse(
+        organizationId = organizationId,
+        ownerUserId = ownerUserId,
+        retentionMode = retentionMode,
+        retentionDays = retentionDays,
+        automaticCleanupEnabled = automaticCleanupEnabled,
+        immediatePurge = immediatePurge,
         updatedAt = updatedAt,
     )
 

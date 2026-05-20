@@ -70,3 +70,10 @@ interface LocalRepositoryConsentRepository : JpaRepository<LocalRepositoryConsen
 
     fun findByOrganizationIdOrderByUpdatedAtDesc(organizationId: String): List<LocalRepositoryConsentEntity>
 }
+
+interface EvidenceRetentionSettingsRepository : JpaRepository<EvidenceRetentionSettingsEntity, String> {
+    fun findByOrganizationIdAndOwnerUserId(
+        organizationId: String,
+        ownerUserId: String,
+    ): EvidenceRetentionSettingsEntity?
+}

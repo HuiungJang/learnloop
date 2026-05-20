@@ -1025,3 +1025,22 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Adapter status should be an operational signal layer, not a content layer; it must never retain raw prompts, code, stdout, or stderr.
+
+### 2026-05-20 - Post-MVP Phase 41 Retention Policy Settings Model
+
+**By:** Codex
+
+**Actions:**
+- Added a local evidence retention settings table scoped by organization and local owner.
+- Added owner-gated GET/PATCH APIs for raw evidence retention settings.
+- Supported `default`, `disabled`, and `immediate` retention modes.
+- Normalized default retention days, disabled cleanup, and immediate purge semantics.
+- Kept existing manual raw purge APIs unchanged.
+- Checked off Post-MVP Phase 41 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.auth.LocalOwnerEvidenceRetentionIntegrationTest"`.
+- Backend tests cover default value, update, disabled cleanup, immediate mode, invalid mode, invalid days, and existing manual raw purge behavior.
+
+**Learnings:**
+- Retention settings should model policy only; actual cleanup and purge execution stay in later bounded job phases.

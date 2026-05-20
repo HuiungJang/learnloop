@@ -47,6 +47,68 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
     private lateinit var objectMapper: ObjectMapper
 
     @Test
+    fun `local owner retention settings support default update disabled immediate and invalid values`() {
+        val owner = login()
+
+        val defaultSettings = getJson("/api/evidence/retention-settings?organizationId=org-demo", owner.token)
+        assertEquals(HttpStatus.OK, defaultSettings.statusCode)
+        assertEquals("default", json(defaultSettings)["retentionMode"].asText())
+        assertEquals(30, json(defaultSettings)["retentionDays"].asInt())
+        assertEquals(true, json(defaultSettings)["automaticCleanupEnabled"].asBoolean())
+        assertEquals(false, json(defaultSettings)["immediatePurge"].asBoolean())
+        assertTrue(json(defaultSettings)["updatedAt"].isNull)
+
+        val updated =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "default", "retentionDays" to 90),
+            )
+        assertEquals(HttpStatus.OK, updated.statusCode)
+        assertEquals("default", json(updated)["retentionMode"].asText())
+        assertEquals(90, json(updated)["retentionDays"].asInt())
+        assertFalse(json(updated)["updatedAt"].isNull)
+
+        val disabled =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "disabled", "retentionDays" to 90),
+            )
+        assertEquals(HttpStatus.OK, disabled.statusCode)
+        assertEquals("disabled", json(disabled)["retentionMode"].asText())
+        assertTrue(json(disabled)["retentionDays"].isNull)
+        assertEquals(false, json(disabled)["automaticCleanupEnabled"].asBoolean())
+
+        val immediate =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "immediate", "retentionDays" to 365),
+            )
+        assertEquals(HttpStatus.OK, immediate.statusCode)
+        assertEquals("immediate", json(immediate)["retentionMode"].asText())
+        assertEquals(0, json(immediate)["retentionDays"].asInt())
+        assertEquals(true, json(immediate)["immediatePurge"].asBoolean())
+
+        val invalidMode =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "forever"),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, invalidMode.statusCode)
+
+        val invalidDays =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "default", "retentionDays" to 0),
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, invalidDays.statusCode)
+    }
+
+    @Test
     fun `local owner delete tombstones bundle and excludes it from reads and generation`() {
         val owner = login()
         val fixture = createConfirmedAccessibleSourceLinkFixture(owner.token)
@@ -329,6 +391,12 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
         token: String,
         body: Any,
     ) = restTemplate.exchange(path, HttpMethod.POST, HttpEntity(body, bearerHeaders(token)), String::class.java)
+
+    private fun patchJson(
+        path: String,
+        token: String,
+        body: Any,
+    ) = restTemplate.exchange(path, HttpMethod.PATCH, HttpEntity(body, bearerHeaders(token)), String::class.java)
 
     private fun getJson(
         path: String,
