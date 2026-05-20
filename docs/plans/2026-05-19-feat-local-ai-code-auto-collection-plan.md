@@ -787,14 +787,14 @@ Verification:
 
 ### Post-MVP Phase 28: Add Watcher Session Bundler
 
-- [ ] Group settled file changes into one local session window.
-- [ ] Attach tool activity when available.
-- [ ] Add safe reason codes such as `repo_changed`, `gui_activity_window`, `cli_shim`, and `patch_match`.
-- [ ] Drop artifacts that failed path, ignore, size, or secret checks.
+- [x] Group settled file changes into one local session window.
+- [x] Attach tool activity when available.
+- [x] Add safe reason codes such as `repo_changed`, `gui_activity_window`, `cli_shim`, and `patch_match`.
+- [x] Drop artifacts that failed path, ignore, size, or secret checks.
 
 Verification:
 
-- [ ] Tests cover single-file session, multi-file session, no tool signal, and competing tool signals.
+- [x] Tests cover single-file session, multi-file session, no tool signal, and competing tool signals.
 
 ### Post-MVP Phase 29: Add Watcher Upload Queue And Retry
 

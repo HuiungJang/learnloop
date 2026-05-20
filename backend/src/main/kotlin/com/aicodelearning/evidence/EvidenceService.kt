@@ -793,6 +793,8 @@ class EvidenceService(
                 "user_deleted",
                 "gui_activity_window",
                 "repo_changed",
+                "cli_shim",
+                "patch_match",
                 "single_ai_tool",
                 "competing_ai_tools",
             )

@@ -393,7 +393,15 @@ class LocalSessionArtifactPreflight(
         private val metadataSlugPattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.+#-]{0,63}$")
         private val metadataIdentityPattern = Regex("^[A-Za-z0-9._:-]{3,128}$")
         private val metadataReasonCodePattern = Regex("^[A-Za-z0-9][A-Za-z0-9_.:#@+-]{0,119}$")
-        private val allowedMetadataReasonCodes = setOf("gui_activity_window", "repo_changed", "single_ai_tool", "competing_ai_tools")
+        private val allowedMetadataReasonCodes =
+            setOf(
+                "gui_activity_window",
+                "repo_changed",
+                "cli_shim",
+                "patch_match",
+                "single_ai_tool",
+                "competing_ai_tools",
+            )
         private val sha256Pattern = Regex("^[a-fA-F0-9]{64}$")
         private val windowsDrivePattern = Regex("^[A-Za-z]:.*")
         private val embeddedAbsolutePathPattern = Regex("""(^|[^A-Za-z0-9._-])/[^\s]+""")

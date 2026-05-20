@@ -767,3 +767,25 @@ Initial Phase 1 files:
 
 **Learnings:**
 - After snapshots should be captured before diff generation so size filtering can prevent large changed files from entering `git diff`.
+
+### 2026-05-20 - Post-MVP Phase 28 Watcher Session Bundler
+
+**By:** Codex
+
+**Actions:**
+- Added a watcher session bundler that turns settled reconciliation output into one `local_ai_session` payload.
+- Grouped before snapshots, after snapshots, and per-file diffs into one local session window.
+- Attached metadata-only tool activity artifacts when Codex, Claude, Gemini, or GUI signals are available.
+- Added safe attribution reason codes for `repo_changed`, `gui_activity_window`, `cli_shim`, `patch_match`, `single_ai_tool`, and `competing_ai_tools`.
+- Dropped unsafe, ignored, oversized, and secret-like code artifacts before payload creation.
+- Updated backend reason-code allowlists so watcher payloads survive local-session preflight.
+- Checked off Post-MVP Phase 28 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-session-bundler.test.js`.
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.evidence.LocalSessionArtifactPreflightTest"`.
+- Ran `./scripts/test.sh`.
+- Tests cover single-file session, multi-file session, no tool signal, competing tool signals, unsafe/oversized/secret artifact dropping, and no-safe-code rejection.
+
+**Learnings:**
+- The watcher bundler should require at least one safe code artifact so tool-only activity does not become a code-learning session.
