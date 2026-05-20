@@ -1124,3 +1124,24 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Progress can stay on the local retention settings row until scheduling or history needs require a separate cleanup-run table.
+
+### 2026-05-20 - Post-MVP Phase 46 Retention Schedule
+
+**By:** Codex
+
+**Actions:**
+- Enabled Spring scheduling for app-running-only retention cleanup.
+- Added documented retention cleanup schedule configuration.
+- Added deterministic org-level startup and recurring jitter.
+- Added schedule policy decisions for due, not due, disabled cleanup, and degraded backend/companion health.
+- Added scheduled local-owner cleanup wiring that runs bounded cleanup batches only when the policy is due.
+- Kept explicit purge-now/raw purge independent of scheduled cleanup policy.
+- Checked off Post-MVP Phase 46 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.evidence.EvidenceRetentionSchedulePolicyTest" --tests "com.aicodelearning.auth.LocalOwnerEvidenceRetentionIntegrationTest"`.
+- Scheduler tests cover due, not due, startup jitter, degraded health, and disabled cleanup.
+- Integration coverage proves explicit purge-all still works when automatic cleanup is disabled.
+
+**Learnings:**
+- The schedule should be a decision layer over bounded cleanup, not a second cleanup implementation.

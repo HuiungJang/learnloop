@@ -463,6 +463,13 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
     @Test
     fun `local owner purge all clears active raw content and skips already purged rows on repeat`() {
         val owner = login()
+        val disabled =
+            patchJson(
+                "/api/evidence/retention-settings",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "retentionMode" to "disabled"),
+            )
+        assertEquals(HttpStatus.OK, disabled.statusCode)
         val first = createEvidence(owner.token, "Purge all one", "code", "const purgeAllOne = true")
         val second = createEvidence(owner.token, "Purge all two", "conversation", "Use the purge all path")
         val deleted =

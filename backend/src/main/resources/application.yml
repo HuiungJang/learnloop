@@ -42,3 +42,12 @@ app:
     require-limits: ${APP_RUNNER_REQUIRE_LIMITS:true}
     workspace-container-root: ${APP_RUNNER_WORKSPACE_CONTAINER_ROOT:}
     workspace-host-root: ${APP_RUNNER_WORKSPACE_HOST_ROOT:}
+  retention:
+    cleanup:
+      scheduler-enabled: ${APP_RETENTION_CLEANUP_SCHEDULER_ENABLED:true}
+      schedule-interval-ms: ${APP_RETENTION_CLEANUP_SCHEDULE_INTERVAL_MS:86400000}
+      check-interval-ms: ${APP_RETENTION_CLEANUP_CHECK_INTERVAL_MS:900000}
+      tick-initial-delay-ms: ${APP_RETENTION_CLEANUP_TICK_INITIAL_DELAY_MS:300000}
+      startup-jitter-ms: ${APP_RETENTION_CLEANUP_STARTUP_JITTER_MS:300000}
+      recurring-jitter-ms: ${APP_RETENTION_CLEANUP_RECURRING_JITTER_MS:300000}
+      batch-size: ${APP_RETENTION_CLEANUP_BATCH_SIZE:100}

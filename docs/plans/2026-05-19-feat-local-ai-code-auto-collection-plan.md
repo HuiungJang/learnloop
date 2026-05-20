@@ -986,14 +986,14 @@ Verification:
 
 ### Post-MVP Phase 46: Add Retention Schedule
 
-- [ ] Run cleanup on a documented schedule only when the app is running.
-- [ ] Add jitter so cleanup does not always run at startup.
-- [ ] Skip scheduled cleanup when companion/backend health is degraded.
-- [ ] Keep purge-now available independently of the schedule.
+- [x] Run cleanup on a documented schedule only when the app is running.
+- [x] Add jitter so cleanup does not always run at startup.
+- [x] Skip scheduled cleanup when companion/backend health is degraded.
+- [x] Keep purge-now available independently of the schedule.
 
 Verification:
 
-- [ ] Scheduler tests cover due, not due, degraded health, disabled cleanup, and purge-now.
+- [x] Scheduler tests cover due, not due, degraded health, disabled cleanup, and purge-now.
 
 ### Post-MVP Phase 47: Add Retention Performance Gate
 
