@@ -9,6 +9,7 @@ import { BeforeSnapshotCache } from "./local-ai-before-snapshot-cache.mjs";
 import { readCodexAppPresence } from "./local-ai-codex-app-adapter.mjs";
 import { GitReconciliationCache, reconcileGitRepository } from "./local-ai-git-reconcile.mjs";
 import { readHostProcessSnapshot } from "./local-ai-process-snapshot.mjs";
+import { LocalAiSessionUploadQueue } from "./local-ai-session-upload-queue.mjs";
 import { LocalAiWatcherRegistry } from "./local-ai-watcher-registry.mjs";
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), ".learnloop");
@@ -43,6 +44,9 @@ const consentActions = [];
 const rateLimitBuckets = new Map();
 const gitReconciliationCache = new GitReconciliationCache();
 const beforeSnapshotCache = new BeforeSnapshotCache();
+const sessionUploadQueue = await LocalAiSessionUploadQueue.open({
+  storeFile: path.join(configDir, "local-ai-session-upload-queue.json")
+});
 const watcherRegistry =
   new LocalAiWatcherRegistry({
     debounceMs: readNumericEnv("LEARNLOOP_LOCAL_AI_WATCH_DEBOUNCE_MS"),
@@ -81,7 +85,9 @@ const server = http.createServer(async (req, res) => {
         tokenRequired: true,
         shimEventsQueued: shimEvents.length,
         consentActionsQueued: consentActions.length,
-        watcherCounts: watcherRegistry.counts()
+        watcherCollectionEnabled: watcherRegistry.isCollectionEnabled(),
+        watcherCounts: watcherRegistry.counts(),
+        uploadQueue: sessionUploadQueue.stats()
       });
       return;
     }
@@ -147,6 +153,8 @@ const server = http.createServer(async (req, res) => {
       assertLocalApiToken(req);
       sendJson(res, 200, {
         status: "ok",
+        collectionEnabled: watcherRegistry.isCollectionEnabled(),
+        uploadQueue: sessionUploadQueue.stats(),
         watcherCounts: watcherRegistry.counts(),
         watchers: watcherRegistry.list()
       });
@@ -157,9 +165,31 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       const body = await readJson(req);
+      const watcher = updateWatcherRepository(body);
+      if (body?.status !== "approved") {
+        await sessionUploadQueue.cancelRepository(watcher.repoIdentityHash);
+      }
       sendJson(res, 200, {
         status: "ok",
-        watcher: updateWatcherRepository(body)
+        collectionEnabled: watcherRegistry.isCollectionEnabled(),
+        uploadQueue: sessionUploadQueue.stats(),
+        watcher
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/watchers/settings") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      const body = await readJson(req);
+      const enabled = body.enabled === true;
+      const result = watcherRegistry.setCollectionEnabled(enabled);
+      sendJson(res, 200, {
+        status: "ok",
+        collectionEnabled: result.collectionEnabled,
+        uploadQueue: sessionUploadQueue.stats(),
+        watcherCounts: watcherRegistry.counts(),
+        watchers: result.watchers
       });
       return;
     }
@@ -176,7 +206,7 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       const body = await readJson(req);
-      recordConsentAction("revoke", body);
+      await recordConsentAction("revoke", body);
       sendJson(res, 202, { status: "accepted" });
       return;
     }
@@ -185,7 +215,7 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       const body = await readJson(req);
-      recordConsentAction("purge_raw", body);
+      await recordConsentAction("purge_raw", body);
       sendJson(res, 202, { status: "accepted" });
       return;
     }
@@ -490,16 +520,20 @@ function recordShimEvent(value) {
   }
 }
 
-function recordConsentAction(action, value) {
+async function recordConsentAction(action, value) {
   const input = typeof value === "object" && value !== null ? value : {};
+  const repoIdentityHash = safeString(input.repoIdentityHash, 128);
   consentActions.push({
     action,
-    repoIdentityHash: safeString(input.repoIdentityHash, 128),
+    repoIdentityHash,
     repositoryDisplayLabel: safeString(input.repositoryDisplayLabel, 120),
     requestedAt: new Date().toISOString()
   });
   if (consentActions.length > 100) {
     consentActions.splice(0, consentActions.length - 100);
+  }
+  if (action === "revoke" && repoIdentityHash) {
+    await sessionUploadQueue.cancelRepository(repoIdentityHash);
   }
 }
 

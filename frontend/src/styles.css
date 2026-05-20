@@ -1397,6 +1397,31 @@ h1 {
   gap: 10px;
 }
 
+.watcher-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.watcher-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.watcher-summary span {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: rgba(28, 28, 28, 0.82);
+  background: var(--surface-tint);
+  font-size: 13px;
+}
+
+.watcher-list {
+  display: grid;
+  gap: 8px;
+}
+
 .repository-approval-row input {
   min-width: 0;
   min-height: 40px;
@@ -1416,14 +1441,28 @@ h1 {
   border-radius: 8px;
 }
 
+.watcher-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
 .repository-row strong,
-.repository-row small {
+.repository-row small,
+.watcher-row strong,
+.watcher-row small {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.repository-row small {
+.repository-row small,
+.watcher-row small {
   color: var(--muted);
 }
 

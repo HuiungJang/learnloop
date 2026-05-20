@@ -481,7 +481,30 @@ test("local companion watcher registry updates approved repositories and resets 
       assert.equal(approved.status, 200);
       const approvedBody = JSON.parse(approved.body);
       assert.equal(approvedBody.watcher.state, "active");
+      assert.equal(approvedBody.collectionEnabled, true);
+      assert.equal(approvedBody.uploadQueue.queued, 0);
       assert.equal(JSON.stringify(approvedBody).includes(repoRoot), false);
+
+      const disabled = await httpRequest(port, "/watchers/settings", {
+        method: "POST",
+        host: goodHost,
+        token,
+        body: JSON.stringify({ enabled: false })
+      });
+      assert.equal(disabled.status, 200);
+      const disabledBody = JSON.parse(disabled.body);
+      assert.equal(disabledBody.collectionEnabled, false);
+      assert.equal(disabledBody.watchers[0].state, "stopped");
+      assert.equal(disabledBody.watchers[0].reason, "collection_disabled");
+
+      const enabled = await httpRequest(port, "/watchers/settings", {
+        method: "POST",
+        host: goodHost,
+        token,
+        body: JSON.stringify({ enabled: true })
+      });
+      assert.equal(enabled.status, 200);
+      assert.equal(JSON.parse(enabled.body).collectionEnabled, true);
 
       const revoked = await httpRequest(port, "/watchers/repositories", {
         method: "POST",
@@ -502,6 +525,8 @@ test("local companion watcher registry updates approved repositories and resets 
       });
       assert.equal(status.status, 200);
       const statusBody = JSON.parse(status.body);
+      assert.equal(statusBody.collectionEnabled, true);
+      assert.equal(statusBody.uploadQueue.queued, 0);
       assert.equal(statusBody.watcherCounts.stopped, 1);
       assert.equal(statusBody.watcherCounts.active, 0);
     });

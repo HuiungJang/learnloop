@@ -808,3 +808,25 @@ Initial Phase 1 files:
 
 **Learnings:**
 - The queue needs to keep raw payloads only inside the private retry store, while public status should expose hashes and counts only.
+
+### 2026-05-20 - Post-MVP Phase 30 Watcher Settings And Status UI
+
+**By:** Codex
+
+**Actions:**
+- Added companion watcher status fields for collection enabled state and upload queue metadata.
+- Added companion watcher settings to disable and re-enable collection without removing CLI shims.
+- Cancelled queued uploads when watcher repository approval is revoked.
+- Added frontend watcher status cards with active, degraded, disabled, queued, last reconciliation, and upload queue counts.
+- Synced repository approval changes to the local companion when available.
+- Kept status responses and UI limited to labels, counts, hashes, and timestamps, without raw code or absolute repo roots.
+- Checked off Post-MVP Phase 30 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/local-ai-watcher-registry.test.js` and `tests/codex-shim.test.js`.
+- Ran `./scripts/frontend-typecheck.sh`.
+- Ran `./scripts/frontend-build.sh`.
+- Manual checklist coverage: active watcher row, degraded count, disabled watcher state, queued upload count, and revoked repository state are represented in the status UI.
+
+**Learnings:**
+- Watcher disablement belongs in the registry, not only the UI, because approved repositories should stay approved while filesystem watchers are stopped.

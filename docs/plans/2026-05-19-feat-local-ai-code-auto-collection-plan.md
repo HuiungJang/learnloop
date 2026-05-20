@@ -809,14 +809,14 @@ Verification:
 
 ### Post-MVP Phase 30: Add Watcher Settings And Status UI
 
-- [ ] Show watcher state per approved repo.
-- [ ] Show queue size, last reconciliation time, and degraded states.
-- [ ] Let the user disable watcher collection without uninstalling CLI shims.
-- [ ] Do not expose raw prompt/code or absolute local paths in status views.
+- [x] Show watcher state per approved repo.
+- [x] Show queue size, last reconciliation time, and degraded states.
+- [x] Let the user disable watcher collection without uninstalling CLI shims.
+- [x] Do not expose raw prompt/code or absolute local paths in status views.
 
 Verification:
 
-- [ ] Frontend test or manual checklist covers active, degraded, disabled, queued, and revoked states.
+- [x] Frontend test or manual checklist covers active, degraded, disabled, queued, and revoked states.
 
 ### Post-MVP Phase 31: Add Watcher Performance Gate
 

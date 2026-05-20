@@ -133,6 +133,42 @@ type LocalRepositoryConsent = {
   status: RepositoryConsentStatus;
   updatedAt: string;
 };
+type LocalWatcherState = "active" | "stopped" | "degraded" | "unavailable";
+type LocalWatcherRegistration = {
+  repoIdentityHash: string;
+  repositoryDisplayLabel: string;
+  repositoryStatus: RepositoryConsentStatus;
+  state: LocalWatcherState;
+  reason: string | null;
+  lastReconciliationAt: string | null;
+  lastReconciliationStatus: string | null;
+  lastReconciliationChangedFileCount: number;
+  lastReconciliationDiffCandidateCount: number;
+  pendingChangeCount: number;
+  settledChangeCount: number;
+  droppedEventCount: number;
+  reconciliationQueued: boolean;
+};
+type LocalWatcherCounts = Record<LocalWatcherState, number>;
+type LocalUploadQueueStatus = {
+  queued: number;
+  discardedCount: number;
+  nextAttemptAt: string | null;
+};
+type LocalWatcherStatus = {
+  collectionEnabled: boolean;
+  uploadQueue: LocalUploadQueueStatus;
+  watcherCounts: LocalWatcherCounts;
+  watchers: LocalWatcherRegistration[];
+};
+type CompanionWatcherStatusResponse = {
+  status?: string;
+  collectionEnabled?: boolean;
+  uploadQueue?: Partial<LocalUploadQueueStatus>;
+  watcherCounts?: Partial<LocalWatcherCounts>;
+  watchers?: Partial<LocalWatcherRegistration>[];
+  message?: string;
+};
 
 const workflowCards = [
   {
@@ -221,6 +257,19 @@ function repositoryStatusCounts(repositories: LocalRepositoryConsent[]): Record<
 function repositoryStatusLabel(status: RepositoryConsentStatus): string {
   if (status === "always_ignored") return "ignored";
   return status;
+}
+
+function watcherStateLabel(watcher: LocalWatcherRegistration): string {
+  if (watcher.reason === "collection_disabled") return "disabled";
+  if (watcher.reconciliationQueued) return "queued";
+  return watcher.state;
+}
+
+function watcherStatusClass(watcher: LocalWatcherRegistration): string {
+  if (watcher.state === "active") return "status-success";
+  if (watcher.state === "degraded") return "status-warning";
+  if (watcher.reason === "collection_disabled") return "status-neutral";
+  return "status-danger";
 }
 
 function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
@@ -316,6 +365,57 @@ function toLocalRepositoryConsent(repository: LocalRepositoryConsentResponse): L
     status: repository.status,
     updatedAt: repository.updatedAt
   };
+}
+
+function toLocalWatcherStatus(payload: CompanionWatcherStatusResponse): LocalWatcherStatus {
+  const counts = payload.watcherCounts ?? {};
+  const queue = payload.uploadQueue ?? {};
+  return {
+    collectionEnabled: payload.collectionEnabled !== false,
+    uploadQueue: {
+      queued: safeNumber(queue.queued),
+      discardedCount: safeNumber(queue.discardedCount),
+      nextAttemptAt: typeof queue.nextAttemptAt === "string" ? queue.nextAttemptAt : null
+    },
+    watcherCounts: {
+      active: safeNumber(counts.active),
+      stopped: safeNumber(counts.stopped),
+      degraded: safeNumber(counts.degraded),
+      unavailable: safeNumber(counts.unavailable)
+    },
+    watchers: Array.isArray(payload.watchers) ? payload.watchers.map(toLocalWatcherRegistration) : []
+  };
+}
+
+function toLocalWatcherRegistration(value: Partial<LocalWatcherRegistration>): LocalWatcherRegistration {
+  const state = isLocalWatcherState(value.state) ? value.state : "unavailable";
+  return {
+    repoIdentityHash: typeof value.repoIdentityHash === "string" ? value.repoIdentityHash : "",
+    repositoryDisplayLabel: typeof value.repositoryDisplayLabel === "string" ? value.repositoryDisplayLabel : "repository",
+    repositoryStatus: isRepositoryConsentStatus(value.repositoryStatus) ? value.repositoryStatus : "missing",
+    state,
+    reason: typeof value.reason === "string" ? value.reason : null,
+    lastReconciliationAt: typeof value.lastReconciliationAt === "string" ? value.lastReconciliationAt : null,
+    lastReconciliationStatus: typeof value.lastReconciliationStatus === "string" ? value.lastReconciliationStatus : null,
+    lastReconciliationChangedFileCount: safeNumber(value.lastReconciliationChangedFileCount),
+    lastReconciliationDiffCandidateCount: safeNumber(value.lastReconciliationDiffCandidateCount),
+    pendingChangeCount: safeNumber(value.pendingChangeCount),
+    settledChangeCount: safeNumber(value.settledChangeCount),
+    droppedEventCount: safeNumber(value.droppedEventCount),
+    reconciliationQueued: value.reconciliationQueued === true
+  };
+}
+
+function isLocalWatcherState(value: unknown): value is LocalWatcherState {
+  return value === "active" || value === "stopped" || value === "degraded" || value === "unavailable";
+}
+
+function isRepositoryConsentStatus(value: unknown): value is RepositoryConsentStatus {
+  return value === "approved" || value === "revoked" || value === "always_ignored" || value === "missing";
+}
+
+function safeNumber(value: unknown): number {
+  return Number.isFinite(value) ? Number(value) : 0;
 }
 
 function repositoryDisplayLabel(value: string): string {
@@ -454,6 +554,9 @@ export function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
   const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
+  const [localWatcherStatus, setLocalWatcherStatus] = useState<LocalWatcherStatus | null>(null);
+  const [localWatcherLoading, setLocalWatcherLoading] = useState(false);
+  const [localWatcherError, setLocalWatcherError] = useState("");
   const [repositoryLabel, setRepositoryLabel] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
@@ -514,10 +617,17 @@ export function App() {
     storeSession(session);
     if (session === null) {
       setLocalRepositories([]);
+      setLocalWatcherStatus(null);
+      setLocalWatcherError("");
     } else {
       void refreshLocalRepositories(session);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (session === null || !showOnboarding) return;
+    void refreshLocalWatcherStatus();
+  }, [session, showOnboarding]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -1143,6 +1253,14 @@ export function App() {
 
   function renderRepositorySettings() {
     const counts = repositoryStatusCounts(localRepositories);
+    const watcherCounts = localWatcherStatus?.watcherCounts ?? { active: 0, stopped: 0, degraded: 0, unavailable: 0 };
+    const uploadQueue = localWatcherStatus?.uploadQueue ?? { queued: 0, discardedCount: 0, nextAttemptAt: null };
+    const latestReconciliationAt =
+      localWatcherStatus?.watchers
+        .map((watcher) => watcher.lastReconciliationAt)
+        .filter((value): value is string => typeof value === "string")
+        .sort()
+        .at(-1) ?? null;
 
     return (
       <section className="settings-section" aria-label="Collection status">
@@ -1155,6 +1273,49 @@ export function App() {
           <span>{counts.revoked} revoked</span>
           <span>{counts.always_ignored} ignored</span>
           <span>{counts.missing} missing</span>
+        </div>
+        <div className="watcher-toolbar">
+          <div className="watcher-summary">
+            <span>{localWatcherStatus?.collectionEnabled === false ? "disabled" : "enabled"}</span>
+            <span>{watcherCounts.active} active</span>
+            <span>{watcherCounts.degraded} degraded</span>
+            <span>{uploadQueue.queued} queued</span>
+            <span>{latestReconciliationAt === null ? "no reconciliation" : `last ${formatShortDate(latestReconciliationAt)}`}</span>
+          </div>
+          <div className="mini-action-row">
+            <button className="secondary-button" disabled={localWatcherLoading} onClick={() => void refreshLocalWatcherStatus()} type="button">
+              <RefreshCw aria-hidden="true" size={16} />
+              Refresh
+            </button>
+            <button
+              className="secondary-button"
+              disabled={localWatcherLoading}
+              onClick={() => void setWatcherCollectionEnabled(!(localWatcherStatus?.collectionEnabled ?? true))}
+              type="button"
+            >
+              <ShieldCheck aria-hidden="true" size={16} />
+              {localWatcherStatus?.collectionEnabled === false ? "Enable watcher" : "Disable watcher"}
+            </button>
+          </div>
+        </div>
+        {localWatcherError.length > 0 ? <p className="form-error">{localWatcherError}</p> : null}
+        <div className="watcher-list" aria-live="polite">
+          {localWatcherStatus?.watchers.length === 0 ? <p className="muted-copy">No watcher registrations.</p> : null}
+          {localWatcherStatus?.watchers.map((watcher) => (
+            <div className="watcher-row" key={watcher.repoIdentityHash}>
+              <div>
+                <strong>{watcher.repositoryDisplayLabel}</strong>
+                <small>
+                  {watcher.lastReconciliationAt === null ? "not reconciled" : formatShortDate(watcher.lastReconciliationAt)}
+                  {" · "}
+                  {watcher.lastReconciliationStatus ?? "status unknown"}
+                  {" · "}
+                  {watcher.lastReconciliationDiffCandidateCount} diff candidates
+                </small>
+              </div>
+              <span className={`status-badge ${watcherStatusClass(watcher)}`}>{watcherStateLabel(watcher)}</span>
+            </div>
+          ))}
         </div>
         <div className="repository-approval-row">
           <input
@@ -1505,6 +1666,71 @@ export function App() {
     }
   }
 
+  async function refreshLocalWatcherStatus() {
+    setLocalWatcherLoading(true);
+    setLocalWatcherError("");
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/status`, {
+        headers: { "x-learnloop-local-token": localToken }
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher status is unavailable");
+      setLocalWatcherStatus(toLocalWatcherStatus(payload));
+    } catch (error) {
+      setLocalWatcherStatus(null);
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher status is unavailable");
+    } finally {
+      setLocalWatcherLoading(false);
+    }
+  }
+
+  async function setWatcherCollectionEnabled(enabled: boolean) {
+    setLocalWatcherLoading(true);
+    setLocalWatcherError("");
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
+        body: JSON.stringify({ enabled })
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher setting update failed");
+      setLocalWatcherStatus(toLocalWatcherStatus(payload));
+    } catch (error) {
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher setting update failed");
+    } finally {
+      setLocalWatcherLoading(false);
+    }
+  }
+
+  async function syncCompanionWatcherRepository(
+    repoIdentityHash: string,
+    displayLabel: string,
+    status: RepositoryConsentStatus,
+    repoRoot?: string
+  ) {
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/repositories`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
+        body: JSON.stringify({
+          repoIdentityHash,
+          repositoryDisplayLabel: displayLabel,
+          repoRoot,
+          status
+        })
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher repository sync failed");
+      await refreshLocalWatcherStatus();
+    } catch (error) {
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher repository sync failed");
+    }
+  }
+
   async function approveRepository() {
     if (session === null || membership === null) return;
     const label = repositoryLabel.trim();
@@ -1517,6 +1743,7 @@ export function App() {
         displayLabel: repositoryDisplayLabel(label),
         status: "approved"
       });
+      await syncCompanionWatcherRepository(repoIdentityHash, repositoryDisplayLabel(label), "approved", label);
       await refreshLocalRepositories(session);
       setRepositoryLabel("");
     } catch (error) {
@@ -1533,6 +1760,7 @@ export function App() {
         displayLabel: repository.displayLabel,
         status
       });
+      await syncCompanionWatcherRepository(repository.repoIdentityHash, repository.displayLabel, status);
       await refreshLocalRepositories(session);
     } catch (error) {
       setOnboardingError(error instanceof Error ? error.message : "Repository status update failed");

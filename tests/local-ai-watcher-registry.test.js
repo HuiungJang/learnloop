@@ -116,6 +116,33 @@ test("watcher registry clamps debounce configuration between 250ms and 5s", () =
   assertDebounceDelay(9000, 5000);
 });
 
+test("watcher registry disables and re-enables collection without removing repository approval", () => {
+  const closed = [];
+  const registry = new LocalAiWatcherRegistry({
+    watchFactory: (repoRoot) => ({ close: () => closed.push(repoRoot) }),
+    clock: fixedClock()
+  });
+
+  const approved = registry.updateRepository(repository());
+  assert.equal(approved.state, "active");
+  assert.equal(registry.isCollectionEnabled(), true);
+
+  const disabled = registry.setCollectionEnabled(false);
+  assert.equal(disabled.collectionEnabled, false);
+  assert.equal(disabled.watchers[0].state, "stopped");
+  assert.equal(disabled.watchers[0].reason, "collection_disabled");
+  assert.equal(disabled.watchers[0].repositoryStatus, "approved");
+  assert.equal(closed.length, 1);
+
+  const approvedWhileDisabled = registry.updateRepository(repository({ repoIdentityHash: "repo-disabled" }));
+  assert.equal(approvedWhileDisabled.state, "stopped");
+  assert.equal(approvedWhileDisabled.reason, "collection_disabled");
+
+  const enabled = registry.setCollectionEnabled(true);
+  assert.equal(enabled.collectionEnabled, true);
+  assert.deepEqual(enabled.watchers.map((watcher) => watcher.state), ["active", "active"]);
+});
+
 test("watcher registry bounds pending changes and marks full reconciliation when the queue is full", () => {
   let listener = null;
   const registry = new LocalAiWatcherRegistry({

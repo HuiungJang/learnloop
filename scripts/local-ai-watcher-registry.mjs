@@ -24,6 +24,7 @@ export class LocalAiWatcherRegistry {
     this.clearTimeout = options.clearTimeoutFn ?? clearTimeout;
     this.reconcileRepository = options.reconcileRepository ?? null;
     this.initialReconciliation = options.initialReconciliation === true;
+    this.collectionEnabled = options.collectionEnabled !== false;
     this.reconciliationPromises = new Set();
     this.registrations = new Map();
     this.activeReconciliations = 0;
@@ -43,6 +44,26 @@ export class LocalAiWatcherRegistry {
         debounceMs: this.debounceMs,
         state: "stopped",
         reason: `repository_${input.status}`,
+        startedAt: existing?.startedAt ?? null,
+        stoppedAt: now,
+        eventCount: existing?.eventCount ?? 0,
+        lastEventAt: existing?.lastEventAt ?? null,
+        ...changeState(existing),
+        watcher: null
+      };
+      this.registrations.set(input.repoIdentityHash, registration);
+      return publicRegistration(registration);
+    }
+
+    if (!this.collectionEnabled) {
+      if (existing) {
+        this.stopActiveWatcher(existing);
+      }
+      const registration = {
+        ...baseRegistration(input, now),
+        debounceMs: this.debounceMs,
+        state: "stopped",
+        reason: "collection_disabled",
         startedAt: existing?.startedAt ?? null,
         stoppedAt: now,
         eventCount: existing?.eventCount ?? 0,
@@ -120,6 +141,43 @@ export class LocalAiWatcherRegistry {
 
   list() {
     return [...this.registrations.values()].map(publicRegistration);
+  }
+
+  isCollectionEnabled() {
+    return this.collectionEnabled;
+  }
+
+  setCollectionEnabled(enabled) {
+    const nextEnabled = enabled === true;
+    if (this.collectionEnabled === nextEnabled) {
+      return { collectionEnabled: this.collectionEnabled, watchers: this.list() };
+    }
+
+    this.collectionEnabled = nextEnabled;
+    if (!nextEnabled) {
+      const now = this.clock().toISOString();
+      for (const registration of this.registrations.values()) {
+        this.stopActiveWatcher(registration);
+        if (registration.repositoryStatus === APPROVED_STATUS) {
+          registration.state = "stopped";
+          registration.reason = "collection_disabled";
+          registration.stoppedAt = now;
+          registration.updatedAt = now;
+        }
+      }
+      return { collectionEnabled: this.collectionEnabled, watchers: this.list() };
+    }
+
+    const approvedRegistrations = [...this.registrations.values()]
+      .filter((registration) => registration.repositoryStatus === APPROVED_STATUS)
+      .map((registration) => ({
+        repoIdentityHash: registration.repoIdentityHash,
+        repositoryDisplayLabel: registration.repositoryDisplayLabel,
+        repoRoot: registration.repoRoot,
+        status: APPROVED_STATUS
+      }));
+    const watchers = approvedRegistrations.map((registration) => this.updateRepository(registration));
+    return { collectionEnabled: this.collectionEnabled, watchers };
   }
 
   settledChangesFor(repoIdentityHash) {
