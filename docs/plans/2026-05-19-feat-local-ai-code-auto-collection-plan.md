@@ -641,13 +641,13 @@ Verification:
 
 ### Post-MVP Phase 15: Add Adapter Fixture Harness
 
-- [ ] Add fake adapter fixtures that produce deterministic process, CLI, patch, and stream events.
-- [ ] Add fixture replay into the local session bundler without requiring Codex, Claude, Gemini, or macOS process APIs.
-- [ ] Store fixtures without raw secrets or real local paths.
+- [x] Add fake adapter fixtures that produce deterministic process, CLI, patch, and stream events.
+- [x] Add fixture replay into the local session bundler without requiring Codex, Claude, Gemini, or macOS process APIs.
+- [x] Store fixtures without raw secrets or real local paths.
 
 Verification:
 
-- [ ] Fixture test can generate one local session bundle from fake adapter events.
+- [x] Fixture test can generate one local session bundle from fake adapter events.
 
 ### Post-MVP Phase 16: Add Host Process Snapshot Reader
 

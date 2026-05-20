@@ -533,3 +533,18 @@ Initial Phase 1 files:
 **Learnings:**
 - Keeping the common contract metadata-only makes future provider parsers responsible for interpreting patch/json/transcript content without leaking raw provider output into shared adapter status.
 - Confidence should be derived from declared capabilities rather than provider names, so future Codex, Claude, and Gemini adapters can share one attribution path.
+
+### 2026-05-20 - Post-MVP Phase 15 Adapter Fixture Harness
+
+**By:** Codex
+
+**Actions:**
+- Added deterministic adapter fixtures for process, CLI transcript, patch output, and JSON stream signals.
+- Added fixture replay into a local session bundle payload with tool-event metadata and a safe synthetic diff artifact.
+- Kept fixture paths under a synthetic fixture root, omitted `repositoryUrl`, and added tests that reject real `/Users` paths and secret-like content in serialized fixture bundles.
+- Verified the harness can generate one local session bundle from fake adapter events without Codex, Claude, Gemini, or macOS process APIs.
+- Checked off Post-MVP Phase 15 in the plan document.
+
+**Learnings:**
+- Fixture replay should produce the same local session ingest shape as later live adapters, while keeping external process and OS discovery dependencies out of the test path.
+- Synthetic diffs give the bundle generation-relevant evidence without storing real user code in fixtures.
