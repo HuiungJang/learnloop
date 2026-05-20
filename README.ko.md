@@ -68,6 +68,8 @@ http://localhost:8080
 
 Codex shim 관리자는 LearnLoop가 관리하는 shim 디렉터리에만 설치하고 PATH 안내를 출력합니다. 실제 Codex binary는 덮어쓰지 않으며, 원본 `codex` 경로와 hash를 기록하고 `./scripts/local-ai-shim.sh codex status`로 repair 또는 PATH 우선순위 문제를 확인할 수 있습니다.
 
+local AI companion은 loopback에서만 listen합니다. 변경을 일으키는 companion endpoint는 repository 밖에 owner 전용 권한으로 저장되는 random local API token을 요구합니다. 브라우저 OAuth는 설치 앱 origin에만 허용되는 짧은 수명의 OAuth start token을 사용합니다.
+
 브라우저 포트를 바꾸려면 `.env`의 `AI_CODE_WEB_PORT`를 수정한 뒤 다시 시작합니다.
 
 ```sh

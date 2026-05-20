@@ -68,6 +68,8 @@ Common installed-app commands:
 
 The Codex shim manager installs only into a LearnLoop-managed shim directory and prints PATH guidance. It records the original `codex` path and hash, and `./scripts/local-ai-shim.sh codex status` reports repair or PATH precedence issues without modifying the real Codex binary.
 
+The local AI companion listens only on loopback. Mutating companion endpoints use a random local API token stored outside repository directories with owner-only permissions. Browser OAuth uses a short-lived OAuth-start token scoped to the installed app origin.
+
 To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
 
 ```sh

@@ -92,7 +92,7 @@ Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments
 
 ## Local AI OAuth
 
-The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on `127.0.0.1`, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
+The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on loopback, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. Mutating companion endpoints require a random local API token stored outside repository directories with owner-only permissions; browser OAuth uses a short-lived OAuth-start token scoped to the installed app origin. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
 
 ## Codex CLI Shim
 

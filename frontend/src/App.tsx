@@ -121,6 +121,11 @@ type CompanionOAuthResponse = {
   credentialLabel?: string;
   message?: string;
 };
+type CompanionTokenResponse = {
+  status?: string;
+  token?: string;
+  message?: string;
+};
 type RepositoryConsentStatus = "approved" | "revoked" | "always_ignored" | "missing";
 type LocalRepositoryConsent = {
   repoIdentityHash: string;
@@ -349,6 +354,15 @@ async function readCompanionResponse(response: Response): Promise<CompanionOAuth
     credentialLabel: payload.credentialLabel,
     message: payload.message
   };
+}
+
+async function readLocalCompanionToken(): Promise<string> {
+  const response = await fetch(`${LOCAL_AI_COMPANION_URL}/auth/token`);
+  const payload = (await response.json().catch(() => ({}))) as CompanionTokenResponse;
+  if (!response.ok || typeof payload.token !== "string" || payload.token.length === 0) {
+    throw new Error(payload.message || "Local companion token is unavailable.");
+  }
+  return payload.token;
 }
 
 function primaryMembership(session: SessionResponse | null): Membership | null {
@@ -2061,9 +2075,10 @@ export function App() {
     setOauthConnection({ status: "starting", message: "Opening local OAuth connection." });
 
     try {
+      const localToken = await readLocalCompanionToken();
       const response = await fetch(`${LOCAL_AI_COMPANION_URL}/oauth/start`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
         body: JSON.stringify({ provider: selectedAiProvider })
       });
       const payload = await readCompanionResponse(response);

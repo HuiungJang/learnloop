@@ -229,22 +229,57 @@ test("codex shim only posts companion events to loopback receivers", async () =>
   assert.deepEqual(received, ["/shim/events"]);
 });
 
-test("local companion accepts shim events on the real receiver path", async () => {
-  const port = await findOpenPort();
-  const child = spawn(process.execPath, ["scripts/local-ai-companion.mjs"], {
-    env: { ...process.env, LEARNLOOP_LOCAL_AI_PORT: String(port) },
-    stdio: ["ignore", "ignore", "pipe"]
+test("codex shim default companion URL honors IPv6 loopback host settings", async () => {
+  const received = [];
+  const server = http.createServer((req, res) => {
+    received.push(req.url);
+    req.resume();
+    res.writeHead(202, { "content-type": "application/json" });
+    res.end('{"status":"accepted"}\n');
   });
-  let stderr = "";
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString("utf8");
-  });
-
+  await new Promise((resolve) => server.listen(0, "::1", resolve));
+  const { port } = server.address();
+  const previousHost = process.env.LEARNLOOP_LOCAL_AI_HOST;
+  const previousPort = process.env.LEARNLOOP_LOCAL_AI_PORT;
   try {
-    await waitForHealth(`http://127.0.0.1:${port}/health`);
-    const post = await fetch(`http://127.0.0.1:${port}/shim/events`, {
+    process.env.LEARNLOOP_LOCAL_AI_HOST = "::1";
+    process.env.LEARNLOOP_LOCAL_AI_PORT = String(port);
+    await sendCompanionEvent({ type: "shim_start", provider: "codex_cli" }, { unref: false });
+  } finally {
+    if (previousHost === undefined) {
+      delete process.env.LEARNLOOP_LOCAL_AI_HOST;
+    } else {
+      process.env.LEARNLOOP_LOCAL_AI_HOST = previousHost;
+    }
+    if (previousPort === undefined) {
+      delete process.env.LEARNLOOP_LOCAL_AI_PORT;
+    } else {
+      process.env.LEARNLOOP_LOCAL_AI_PORT = previousPort;
+    }
+    await new Promise((resolve) => server.close(resolve));
+  }
+  assert.deepEqual(received, ["/shim/events"]);
+});
+
+test("local companion accepts shim events on the real receiver path", async () => {
+  await withCompanion(async ({ baseUrl, token, stderr }) => {
+    const tokenResponse = await fetch(`${baseUrl}/auth/token`, {
+      headers: { Origin: "http://localhost:8080" }
+    });
+    assert.equal(tokenResponse.status, 200);
+    const oauthStartToken = (await tokenResponse.json()).token;
+    assert.equal(typeof oauthStartToken, "string");
+    assert.notEqual(oauthStartToken, token);
+
+    const tokenWithoutOrigin = await fetch(`${baseUrl}/auth/token`);
+    assert.equal(tokenWithoutOrigin.status, 403);
+
+    const post = await fetch(`${baseUrl}/shim/events`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-learnloop-local-token": token
+      },
       body: JSON.stringify({
         type: "shim_start",
         provider: "codex_cli",
@@ -255,18 +290,139 @@ test("local companion accepts shim events on the real receiver path", async () =
     });
     assert.equal(post.status, 202);
 
-    const status = await fetch(`http://127.0.0.1:${port}/shim/events/status`).then((response) => response.json());
+    const status = await fetch(`${baseUrl}/shim/events/status`).then((response) => response.json());
     assert.deepEqual(status, {
       queued: 1,
       lastEventType: "shim_start",
       lastProvider: "codex_cli"
     });
-  } finally {
-    child.kill("SIGTERM");
-    await new Promise((resolve) => child.once("close", resolve));
-  }
+    assert.equal(stderr(), "");
+  });
+});
 
-  assert.equal(stderr, "");
+test("local companion rejects unsafe host, origin, token, size, control, and bind cases", async () => {
+  await withCompanion(async ({ baseUrl, port, token }) => {
+    const goodHost = `127.0.0.1:${port}`;
+    const badHost = await httpRequest(port, "/status", { host: "example.com" });
+    assert.equal(badHost.status, 403);
+
+    const nonLoopbackHost = await httpRequest(port, "/status", { host: `192.168.1.20:${port}` });
+    assert.equal(nonLoopbackHost.status, 403);
+
+    const badOrigin = await httpRequest(port, "/status", {
+      host: goodHost,
+      headers: { Origin: "http://evil.example" }
+    });
+    assert.equal(badOrigin.status, 403);
+
+    const missingToken = await httpRequest(port, "/shim/events", {
+      method: "POST",
+      host: goodHost,
+      body: "{}"
+    });
+    assert.equal(missingToken.status, 401);
+
+    const unauthenticatedOauth = await httpRequest(port, "/oauth/start", {
+      method: "POST",
+      host: goodHost,
+      body: JSON.stringify({ provider: "codex" })
+    });
+    assert.equal(unauthenticatedOauth.status, 401);
+
+    const oauthToken = await fetch(`${baseUrl}/auth/token`, {
+      headers: { Origin: "http://localhost:8080" }
+    }).then((response) => response.json()).then((payload) => payload.token);
+    const acceptedOauth = await httpRequest(port, "/oauth/start", {
+      method: "POST",
+      host: goodHost,
+      token: oauthToken,
+      body: JSON.stringify({ provider: "codex" })
+    });
+    assert.equal(acceptedOauth.status, 202);
+    const reusedOauth = await httpRequest(port, "/oauth/start", {
+      method: "POST",
+      host: goodHost,
+      token: oauthToken,
+      body: JSON.stringify({ provider: "codex" })
+    });
+    assert.equal(reusedOauth.status, 401);
+
+    const oversized = await httpRequest(port, "/shim/events", {
+      method: "POST",
+      host: goodHost,
+      token,
+      body: JSON.stringify({ payload: "x".repeat(11_000) })
+    });
+    assert.equal(oversized.status, 413);
+
+    const unauthenticatedRevoke = await httpRequest(port, "/consent/revoke", {
+      method: "POST",
+      host: goodHost,
+      body: "{}"
+    });
+    assert.equal(unauthenticatedRevoke.status, 401);
+
+    const unauthenticatedPurge = await httpRequest(port, "/consent/purge-raw", {
+      method: "POST",
+      host: goodHost,
+      body: "{}"
+    });
+    assert.equal(unauthenticatedPurge.status, 401);
+
+    const acceptedRevoke = await httpRequest(port, "/consent/revoke", {
+      method: "POST",
+      host: goodHost,
+      token,
+      body: JSON.stringify({ repoIdentityHash: "a".repeat(64), repositoryDisplayLabel: "repo" })
+    });
+    assert.equal(acceptedRevoke.status, 202);
+  });
+
+  await withTempDir(async (dir) => {
+    const port = await findOpenPort();
+    const badHost = await companionStartupFailure({
+      LEARNLOOP_LOCAL_AI_PORT: String(port),
+      LEARNLOOP_LOCAL_AI_HOST: "0.0.0.0",
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: path.join(dir, ".learnloop")
+    });
+    assert.notEqual(badHost.code, 0);
+    assert.match(badHost.stderr, /LEARNLOOP_LOCAL_AI_HOST must be/);
+
+    const unsafeOrigin = await companionStartupFailure({
+      LEARNLOOP_LOCAL_AI_PORT: String(await findOpenPort()),
+      LEARNLOOP_LOCAL_AI_ALLOWED_ORIGINS: "https://example.com",
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: path.join(dir, ".learnloop")
+    });
+    assert.notEqual(unsafeOrigin.code, 0);
+    assert.match(unsafeOrigin.stderr, /ALLOWED_ORIGINS may only contain loopback/);
+
+    const outsideConfigToken = await companionStartupFailure({
+      LEARNLOOP_LOCAL_AI_PORT: String(await findOpenPort()),
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: path.join(dir, ".learnloop"),
+      LEARNLOOP_LOCAL_AI_TOKEN_FILE: path.join(dir, "token")
+    });
+    assert.notEqual(outsideConfigToken.code, 0);
+    assert.match(outsideConfigToken.stderr, /inside the LearnLoop config directory/);
+
+    const unmanagedDir = path.join(dir, "existing-config");
+    await mkdirp(unmanagedDir);
+    const unmanagedTokenDirectory = await companionStartupFailure({
+      LEARNLOOP_LOCAL_AI_PORT: String(await findOpenPort()),
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: unmanagedDir,
+      LEARNLOOP_LOCAL_AI_TOKEN_FILE: path.join(unmanagedDir, "token")
+    });
+    assert.notEqual(unmanagedTokenDirectory.code, 0);
+    assert.match(unmanagedTokenDirectory.stderr, /parent must be a LearnLoop-managed directory/);
+
+    const repoRoot = path.join(dir, "repo");
+    await mkdirp(path.join(repoRoot, ".git"));
+    const repoToken = await companionStartupFailure({
+      LEARNLOOP_LOCAL_AI_PORT: String(await findOpenPort()),
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: path.join(repoRoot, ".learnloop")
+    });
+    assert.notEqual(repoToken.code, 0);
+    assert.match(repoToken.stderr, /outside application and repository directories/);
+  });
 });
 
 test("codex shim inherits TTY streams for interactive provider sessions", () => {
@@ -454,6 +610,53 @@ function spawnAndSignal(filePath, args, options = {}) {
   });
 }
 
+async function withCompanion(fn) {
+  await withTempDir(async (dir) => {
+    const port = await findOpenPort();
+    const configDir = path.join(dir, ".learnloop");
+    const tokenFile = path.join(configDir, "local-api-token");
+    const child = spawn(process.execPath, ["scripts/local-ai-companion.mjs"], {
+      env: {
+        ...process.env,
+        LEARNLOOP_LOCAL_AI_PORT: String(port),
+        LEARNLOOP_LOCAL_AI_CONFIG_DIR: configDir,
+        LEARNLOOP_CODEX_STATUS_COMMAND: "/usr/bin/false",
+        LEARNLOOP_CODEX_LOGIN_COMMAND: "/usr/bin/true"
+      },
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    try {
+      const baseUrl = `http://127.0.0.1:${port}`;
+      await waitForHealth(`${baseUrl}/health`);
+      const token = (await readFile(tokenFile, "utf8")).trim();
+      await fn({ baseUrl, port, token, stderr: () => stderr });
+    } finally {
+      child.kill("SIGTERM");
+      await new Promise((resolve) => child.once("close", resolve));
+    }
+  });
+}
+
+function companionStartupFailure(env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["scripts/local-ai-companion.mjs"], {
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", reject);
+    child.once("close", (code) => resolve({ code, stderr }));
+  });
+}
+
 function findOpenPort() {
   return new Promise((resolve, reject) => {
     const server = http.createServer();
@@ -462,6 +665,35 @@ function findOpenPort() {
       const { port } = server.address();
       server.close(() => resolve(port));
     });
+  });
+}
+
+function httpRequest(port, requestPath, options = {}) {
+  const body = options.body ?? "";
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: requestPath,
+        method: options.method ?? "GET",
+        headers: {
+          Host: options.host ?? `127.0.0.1:${port}`,
+          ...(body ? { "content-type": "application/json", "content-length": Buffer.byteLength(body) } : {}),
+          ...(options.token ? { "x-learnloop-local-token": options.token } : {}),
+          ...(options.headers ?? {})
+        }
+      },
+      (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => {
+          responseBody += chunk.toString("utf8");
+        });
+        res.on("end", () => resolve({ status: res.statusCode, body: responseBody }));
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
   });
 }
 

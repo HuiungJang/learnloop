@@ -15,6 +15,8 @@ const DEFAULT_PROVIDER = "codex";
 const DEFAULT_EVENT_TIMEOUT_MS = 20;
 const FORWARDED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM", "SIGQUIT"];
 const MANAGED_DIRECTORY_MARKER = ".learnloop-managed";
+const DEFAULT_LOCAL_API_CONFIG_DIR = path.join(os.homedir(), ".learnloop");
+const DEFAULT_LOCAL_API_TOKEN_FILE_NAME = "local-api-token";
 
 const providerConfigs = {
   codex: {
@@ -293,13 +295,14 @@ export function createOutputCollector() {
   };
 }
 
-export function sendCompanionEvent(event, options = {}) {
-  const baseUrl = options.baseUrl ?? process.env.LEARNLOOP_LOCAL_AI_COMPANION_URL ?? `http://127.0.0.1:${process.env.LEARNLOOP_LOCAL_AI_PORT || 4317}`;
+export async function sendCompanionEvent(event, options = {}) {
+  const baseUrl = options.baseUrl ?? process.env.LEARNLOOP_LOCAL_AI_COMPANION_URL ?? defaultCompanionBaseUrl();
   const timeoutMs = Number(options.timeoutMs ?? process.env.LEARNLOOP_SHIM_EVENT_TIMEOUT_MS ?? DEFAULT_EVENT_TIMEOUT_MS);
   const payload = `${JSON.stringify(event)}\n`;
   const url = companionEventUrl(baseUrl);
   if (url === null) return Promise.resolve();
   const client = url.protocol === "https:" ? https : http;
+  const token = options.token ?? (await readLocalApiToken(options.tokenFile));
 
   return new Promise((resolve) => {
     const request = client.request(
@@ -308,7 +311,8 @@ export function sendCompanionEvent(event, options = {}) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "content-length": Buffer.byteLength(payload)
+          "content-length": Buffer.byteLength(payload),
+          ...(token ? { "x-learnloop-local-token": token } : {})
         },
         timeout: timeoutMs
       },
@@ -345,6 +349,47 @@ function isLoopbackHost(hostname) {
   const match = /^127(?:\.(\d{1,3})){3}$/.exec(host);
   if (!match) return false;
   return host.split(".").every((part) => Number(part) >= 0 && Number(part) <= 255);
+}
+
+async function readLocalApiToken(tokenFile = resolveLocalApiTokenFile(process.env.LEARNLOOP_LOCAL_AI_TOKEN_FILE)) {
+  if (!tokenFile) return "";
+  try {
+    const tokenStats = await lstat(tokenFile);
+    if (tokenStats.isSymbolicLink() || !tokenStats.isFile()) return "";
+    return (await readFile(tokenFile, "utf8")).trim();
+  } catch {
+    return "";
+  }
+}
+
+function resolveLocalApiTokenFile(configuredTokenFile) {
+  const configDir = resolveLocalApiConfigDir(process.env.LEARNLOOP_LOCAL_AI_CONFIG_DIR);
+  if (!configDir || isPathInside(configDir, process.cwd())) return null;
+  const trimmed = configuredTokenFile?.trim();
+  if (!trimmed) return path.join(configDir, DEFAULT_LOCAL_API_TOKEN_FILE_NAME);
+  if (!path.isAbsolute(trimmed)) return null;
+  const resolved = path.resolve(trimmed);
+  if (!isPathInside(resolved, configDir) || isPathInside(resolved, process.cwd())) return null;
+  return resolved;
+}
+
+function resolveLocalApiConfigDir(configuredConfigDir) {
+  const trimmed = configuredConfigDir?.trim();
+  if (!trimmed) return DEFAULT_LOCAL_API_CONFIG_DIR;
+  if (!path.isAbsolute(trimmed)) return null;
+  return path.resolve(trimmed);
+}
+
+function defaultCompanionBaseUrl() {
+  const host = process.env.LEARNLOOP_LOCAL_AI_HOST || "127.0.0.1";
+  const port = process.env.LEARNLOOP_LOCAL_AI_PORT || 4317;
+  const formattedHost = host === "::1" ? "[::1]" : host;
+  return `http://${formattedHost}:${port}`;
+}
+
+function isPathInside(candidate, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === "" || (relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function safeEmit(eventSender, event) {

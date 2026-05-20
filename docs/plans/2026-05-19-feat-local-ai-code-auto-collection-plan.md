@@ -586,23 +586,23 @@ Verification:
 
 ### Phase 12: Package Companion And Prove Installed-App E2E
 
-- [ ] Keep existing OAuth helper behavior in `scripts/local-ai-companion.mjs`.
-- [ ] Add only the companion modules needed by MVP; extract modules only when imported by both runtime and tests or when the file becomes hard to follow.
-- [ ] Add loopback-only status and consent endpoints.
-- [ ] Bind only to `127.0.0.1` and `::1`; never `0.0.0.0`.
-- [ ] Require a random per-install local API token for mutating companion endpoints.
-- [ ] Store the token outside repo directories with owner-only permissions.
-- [ ] Validate `Origin` and `Host`; reject DNS rebinding-style hosts.
-- [ ] Use strict CORS allowlist for the app origin only.
-- [ ] Disable caching for evidence/status responses.
-- [ ] Add request body limits and rate limits for ingestion and control endpoints.
-- [ ] Update `scripts/install.sh`, `scripts/start.sh`, `scripts/status.sh`, and `scripts/stop.sh`.
-- [ ] Ensure stop/uninstall does not leave orphan companion processes.
+- [x] Keep existing OAuth helper behavior in `scripts/local-ai-companion.mjs`.
+- [x] Add only the companion modules needed by MVP; extract modules only when imported by both runtime and tests or when the file becomes hard to follow.
+- [x] Add loopback-only status and consent endpoints.
+- [x] Bind only to `127.0.0.1` and `::1`; never `0.0.0.0`.
+- [x] Require a random per-install local API token for mutating companion endpoints.
+- [x] Store the token outside repo directories with owner-only permissions.
+- [x] Validate `Origin` and `Host`; reject DNS rebinding-style hosts.
+- [x] Use strict CORS allowlist for the app origin only.
+- [x] Disable caching for evidence/status responses.
+- [x] Add request body limits and rate limits for ingestion and control endpoints.
+- [x] Update `scripts/install.sh`, `scripts/start.sh`, `scripts/status.sh`, and `scripts/stop.sh`.
+- [x] Ensure stop/uninstall does not leave orphan companion processes.
 
 Verification:
 
-- [ ] Node HTTP tests reject bad Host, bad Origin, missing token, oversized request, unauthenticated purge/revoke, and non-loopback access.
-- [ ] Release bundle includes companion scripts and can start/stop cleanly.
+- [x] Node HTTP tests reject bad Host, bad Origin, missing token, oversized request, unauthenticated purge/revoke, and non-loopback access.
+- [x] Release bundle includes companion scripts and can start/stop cleanly.
 - [ ] `./scripts/e2e-installed.sh` proves no role selector, local collection/ingestion, curation, generation, and practice.
 
 ### Phase 13: Run Regression, Security, Data, And Performance Gates

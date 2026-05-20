@@ -430,7 +430,7 @@ Initial Phase 1 files:
 - Added `scripts/local-ai-shim.mjs` and `scripts/local-ai-shim.sh` with Codex shim install, uninstall, repair, status, and runtime forwarding commands.
 - Kept shim files in a LearnLoop-managed directory, recorded original `codex` path/hash metadata, detected recursive shim candidates, and reported PATH precedence or original-path drift.
 - Forwarded args, stdin, stdout, stderr, cwd, signals, and exit code to the original Codex binary while emitting bounded best-effort shim events.
-- Omitted env vars and local shell/config/cache data from shim events; redacted stdout excerpts and suppressed stderr content by default.
+- Omitted env vars and local shell/config/cache data from shim events; stdout and stderr content are suppressed by default.
 - Added Node tests for fake PATH handling, fake Codex passthrough, large output, signal forwarding, companion-down behavior, event redaction, and latency budgets.
 - Added release-bundle wrappers and status/docs references for the Codex shim manager.
 - Replaced stale installed-app demo-role command output with local-owner credential guidance.
@@ -439,3 +439,67 @@ Initial Phase 1 files:
 **Learnings:**
 - The shim should use stored original-binary metadata for runtime behavior, while status/repair owns warnings about PATH drift.
 - End events need a very short flush window; otherwise fast Codex invocations can exit before the companion receives the final bounded event.
+
+### 2026-05-20 - Phase 11 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Restricted shim event delivery to loopback companion URLs only.
+- Added the real `/shim/events` companion receiver and status endpoint with sanitized metadata-only storage.
+- Prevented shim install, repair, and uninstall from following symlinks or replacing non-LearnLoop files.
+- Preserved interactive TTY behavior by inheriting provider stdout/stderr for TTY sessions and capturing only non-interactive output byte counts.
+- Suppressed stdout and stderr content in shim events instead of attempting partial redaction.
+- Generalized signal exit-code preservation and added tests for unmanaged directories, symlink targets, non-marker uninstall, real HTTP receiver, loopback-only delivery, and TTY detection.
+
+**Learnings:**
+- CLI shims should not attempt to classify provider output in-process; byte counts and timing are safer until backend preflight owns content inspection.
+- A local-only endpoint still needs loopback URL validation because inherited environment variables can otherwise redirect event delivery.
+
+### 2026-05-20 - Phase 12 Companion Security Boundary
+
+**By:** Codex
+
+**Actions:**
+- Added loopback-only companion `/status`, `/consent/status`, `/consent/revoke`, and `/consent/purge-raw` endpoints.
+- Added per-install local API token creation under `~/.learnloop/local-api-token` by default with owner-only permissions.
+- Required the local token for mutating companion endpoints, including shim events and consent controls.
+- Added Host, Origin, loopback remote-address, body-size, and rate-limit checks.
+- Updated source and release companion wrappers to reject non-loopback bind hosts, print structured status, and wait briefly after stop.
+- Verified source and release-bundle companion start/status/stop with a dedicated token file.
+- Checked off completed Phase 12 plan items except installed-app E2E, which is blocked until Docker access is available.
+
+**Learnings:**
+- Test token files should live under a dedicated temp directory; using `/private/tmp` directly would make the companion try to tighten permissions on a system directory.
+- The release wrapper works with `NODE_BIN` override, which is necessary on machines where the default `node` binary is broken or unavailable.
+
+### 2026-05-20 - Phase 12 Review Fixes
+
+**By:** Codex
+
+**Actions:**
+- Required the local API token on `POST /oauth/start` and updated the frontend OAuth flow to read the local companion token before starting OAuth.
+- Added a loopback-origin-only `/auth/token` helper so the installed web app can pass the token without asking the user to copy it.
+- Restricted extra companion CORS origins to loopback app origins only.
+- Rejected token-file overrides inside the application directory and required override parent directories to be LearnLoop-managed before writing a token.
+- Fixed IPv6 loopback URL formatting for `::1`.
+- Removed `screen` dependency from source and release companion wrappers so PID files point at the managed process directly.
+
+**Learnings:**
+- A token-protected local endpoint still needs a browser-readable token bootstrap path when the UI runs in a separate loopback origin.
+- Environment overrides are part of the local attack surface; token path and CORS overrides need the same validation level as HTTP inputs.
+
+### 2026-05-20 - Phase 12 Review Fixes Round 2
+
+**By:** Codex
+
+**Actions:**
+- Changed browser token bootstrap to return a one-time, short-lived OAuth-start token instead of the full local API token.
+- Removed dev server origins from the default companion allowlist; Vite dev origins now require explicit opt-in.
+- Restricted token file overrides to the LearnLoop config directory and rejected config directories under git repositories.
+- Updated shim event delivery to honor `LEARNLOOP_LOCAL_AI_HOST=::1` by building a bracketed IPv6 default companion URL.
+- Added tests for one-time OAuth-start tokens, repo-contained config rejection, token override containment, and IPv6 shim event delivery.
+
+**Learnings:**
+- Browser-facing companion tokens should be scoped to the single browser action they enable, not reused as the companion's general local API token.
+- Checking only the app install directory is insufficient for local tools; token storage also has to reject any git ancestor because the user's work repos are separate from the installed app.

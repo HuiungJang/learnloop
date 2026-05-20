@@ -14,6 +14,7 @@ const email = process.env.E2E_OWNER_EMAIL ?? "owner@local.learnloop";
 const password = process.env.E2E_OWNER_PASSWORD ?? "demo-password";
 const localAiKey = `local-only-key-${Date.now()}`;
 const oauthLabel = `Gemini OAuth ${Date.now()}`;
+const companionToken = `local-token-${Date.now()}`;
 const postedRequests = [];
 const companionRequests = [];
 const demoProblemId = "problem-demo-practice-workbench";
@@ -41,14 +42,24 @@ await page.route("http://127.0.0.1:4317/**", async (route) => {
   const corsHeaders = {
     "access-control-allow-origin": appUrl,
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "content-type,x-learnloop-local-token,authorization",
     "access-control-allow-private-network": "true"
   };
   if (route.request().method() === "OPTIONS") {
     await route.fulfill({ status: 204, headers: corsHeaders });
     return;
   }
+  if (url.pathname === "/auth/token") {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({ status: "ok", token: companionToken })
+    });
+    return;
+  }
   if (url.pathname === "/oauth/start") {
+    assert.equal(route.request().headers()["x-learnloop-local-token"], companionToken);
     await route.fulfill({
       status: 202,
       contentType: "application/json",
