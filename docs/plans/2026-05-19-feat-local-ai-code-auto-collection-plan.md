@@ -842,14 +842,14 @@ Verification:
 
 ### Post-MVP Phase 33: Extract Generic Shim Runtime
 
-- [ ] Extract provider-agnostic runtime forwarding around `spawn`.
-- [ ] Preserve args, stdin, stdout, stderr, cwd, signal behavior, and exit code.
-- [ ] Send collection events asynchronously with short timeouts.
-- [ ] Fail open when companion or backend is down.
+- [x] Extract provider-agnostic runtime forwarding around `spawn`.
+- [x] Preserve args, stdin, stdout, stderr, cwd, signal behavior, and exit code.
+- [x] Send collection events asynchronously with short timeouts.
+- [x] Fail open when companion or backend is down.
 
 Verification:
 
-- [ ] Fake binary tests prove behavior matches the original binary for success, failure, signal, stdin, large output, and companion-down cases.
+- [x] Fake binary tests prove behavior matches the original binary for success, failure, signal, stdin, large output, and companion-down cases.
 
 ### Post-MVP Phase 34: Add Claude Code Shim Installer
 

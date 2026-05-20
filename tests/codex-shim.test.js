@@ -9,6 +9,7 @@ import test from "node:test";
 import {
   buildEndEvent,
   createOutputCollector,
+  forwardProviderRuntime,
   installProviderShim,
   installCodexShim,
   isLoopbackCompanionUrl,
@@ -187,6 +188,30 @@ test("codex shim preserves stdout, stderr, stdin, args, and exit code when compa
     assert.equal(failed.code, 37);
     assert.equal(failed.stdout, "failed-out\n");
     assert.equal(failed.stderr, "failed-err\n");
+  });
+});
+
+test("generic provider runtime preserves args and emits provider-specific events", async () => {
+  await withTempDir(async (dir) => {
+    const originalPath = path.join(dir, "gemini");
+    const stdout = captureStream();
+    const stderr = captureStream();
+    const events = [];
+    await writeFakeCodex(originalPath);
+
+    const result = await forwardProviderRuntime("gemini", ["success", "ARG"], {
+      originalPath,
+      stdin: "ignore",
+      stdout,
+      stderr,
+      eventSender: (event) => events.push(event)
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(stdout.value(), "out:ARG\n");
+    assert.equal(stderr.value(), "err:ARG\n");
+    assert.equal(events[0].provider, "gemini_cli");
+    assert.equal(events.at(-1).provider, "gemini_cli");
   });
 });
 

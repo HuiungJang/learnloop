@@ -871,3 +871,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - Generic shim extraction is safest when the Codex-specific public functions remain wrappers, because existing scripts and tests keep their stable API.
+
+### 2026-05-20 - Post-MVP Phase 33 Generic Shim Runtime
+
+**By:** Codex
+
+**Actions:**
+- Extracted provider-agnostic runtime forwarding into `forwardProviderRuntime`.
+- Kept `runProviderShim` responsible for original binary resolution and delegated runtime execution.
+- Preserved stdout, stderr, stdin, args, cwd, signal forwarding, and exit-code behavior.
+- Preserved asynchronous start/end event emission with short timeout fail-open behavior.
+- Added generic Gemini runtime coverage for provider-specific event names.
+- Checked off Post-MVP Phase 33 in the plan document.
+
+**Verification:**
+- Ran bundled-Node `tests/codex-shim.test.js`.
+- Existing fake binary tests cover success, failure, signal, stdin, large output, and companion-down behavior.
+- New generic runtime test covers args, stdout, stderr, exit code, and `gemini_cli` event provider mapping.
+
+**Learnings:**
+- Runtime forwarding should take an already-resolved original path so install/status resolution stays separate from process behavior.

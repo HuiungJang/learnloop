@@ -205,6 +205,16 @@ export async function runProviderShim(providerName, args, options = {}) {
     throw new Error(`Original ${provider.command} was not found`);
   }
 
+  return await forwardProviderRuntime(providerName, args, { ...options, originalPath: resolved.originalPath });
+}
+
+export async function forwardProviderRuntime(providerName, args, options = {}) {
+  const provider = providerConfig(providerName);
+  const originalPath = options.originalPath;
+  if (!originalPath) {
+    throw new Error(`Original ${provider.command} was not found`);
+  }
+
   const invocationId = options.invocationId ?? randomUUID();
   const startedAt = new Date();
   const customEventSender = options.eventSender;
@@ -231,7 +241,7 @@ export async function runProviderShim(providerName, args, options = {}) {
   });
 
   return await new Promise((resolve, reject) => {
-    const child = spawn(resolved.originalPath, args, {
+    const child = spawn(originalPath, args, {
       cwd,
       env: options.env ?? process.env,
       stdio: [stdin, captureOutput ? "pipe" : "inherit", captureOutput ? "pipe" : "inherit"]
