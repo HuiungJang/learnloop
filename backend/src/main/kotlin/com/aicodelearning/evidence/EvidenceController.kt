@@ -23,6 +23,7 @@ class EvidenceController(
     private val evidenceService: EvidenceService,
     private val evidenceRetentionSettingsService: EvidenceRetentionSettingsService,
     private val evidenceRetentionDryRunService: EvidenceRetentionDryRunService,
+    private val evidenceRetentionCleanupService: EvidenceRetentionCleanupService,
 ) {
     @PostMapping("/api/ingest/manual")
     @ResponseStatus(HttpStatus.CREATED)
@@ -158,6 +159,15 @@ class EvidenceController(
     ): EvidenceRetentionDryRunResponse =
         evidenceRetentionDryRunService
             .preview(currentUser, organizationId)
+            .toResponse()
+
+    @PostMapping("/api/evidence/retention-cleanup")
+    fun runRetentionCleanup(
+        @AuthenticationPrincipal currentUser: CurrentUser,
+        @RequestBody request: EvidenceRetentionCleanupRequest,
+    ): EvidenceRetentionCleanupResponse =
+        evidenceRetentionCleanupService
+            .run(currentUser, request)
             .toResponse()
 }
 
@@ -346,6 +356,21 @@ data class EvidenceRetentionDryRunArtifactCategoryResponse(
     val estimatedBytes: Long,
 )
 
+data class EvidenceRetentionCleanupResponse(
+    val organizationId: String,
+    val retentionMode: String,
+    val retentionDays: Int?,
+    val cutoffAt: Instant?,
+    val batchSize: Int,
+    val purgedBundles: Int,
+    val purgedItems: Int,
+    val reclaimedBytes: Long,
+    val remainingEligibleItems: Int,
+    val activeIngestionSkippedItems: Int,
+    val filesystemArtifactsDeleted: Int,
+    val skippedReason: String?,
+)
+
 data class SourceBundleResponse(
     val id: String,
     val organizationId: String,
@@ -478,6 +503,22 @@ fun EvidenceRetentionDryRunArtifactCategory.toResponse(): EvidenceRetentionDryRu
         itemType = itemType,
         itemCount = itemCount,
         estimatedBytes = estimatedBytes,
+    )
+
+fun EvidenceRetentionCleanupRun.toResponse(): EvidenceRetentionCleanupResponse =
+    EvidenceRetentionCleanupResponse(
+        organizationId = organizationId,
+        retentionMode = retentionMode,
+        retentionDays = retentionDays,
+        cutoffAt = cutoffAt,
+        batchSize = batchSize,
+        purgedBundles = purgedBundles,
+        purgedItems = purgedItems,
+        reclaimedBytes = reclaimedBytes,
+        remainingEligibleItems = remainingEligibleItems,
+        activeIngestionSkippedItems = activeIngestionSkippedItems,
+        filesystemArtifactsDeleted = filesystemArtifactsDeleted,
+        skippedReason = skippedReason,
     )
 
 fun EvidenceItemEntity.toResponse(

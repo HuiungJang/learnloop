@@ -964,14 +964,14 @@ Verification:
 
 ### Post-MVP Phase 44: Add Bounded Retention Purge Job
 
-- [ ] Select expired raw artifacts in bounded batches.
-- [ ] Null raw content while preserving hashes, metadata, lineage, generated cards, and progress.
-- [ ] Delete filesystem artifacts separately from database metadata.
-- [ ] Avoid running during active ingestion unless explicitly purging.
+- [x] Select expired raw artifacts in bounded batches.
+- [x] Null raw content while preserving hashes, metadata, lineage, generated cards, and progress.
+- [x] Delete filesystem artifacts separately from database metadata.
+- [x] Avoid running during active ingestion unless explicitly purging.
 
 Verification:
 
-- [ ] Backend tests cover expired raw content, metadata preservation, generated-card survival, and active-ingestion skip.
+- [x] Backend tests cover expired raw content, metadata preservation, generated-card survival, and active-ingestion skip.
 
 ### Post-MVP Phase 45: Add Retention Resume And Progress
 

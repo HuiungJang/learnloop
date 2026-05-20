@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.time.Instant
 
 interface SourceBundleRepository : JpaRepository<SourceBundleEntity, String>, JpaSpecificationExecutor<SourceBundleEntity> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -58,6 +59,50 @@ interface EvidenceItemRepository : JpaRepository<EvidenceItemEntity, String> {
     fun findByBundleId(bundleId: String): List<EvidenceItemEntity>
 
     fun findByBundleIdIn(bundleIds: Collection<String>): List<EvidenceItemEntity>
+
+    @Query(
+        """
+        select item from EvidenceItemEntity item, SourceBundleEntity bundle
+        where item.bundleId = bundle.id
+          and bundle.organizationId = :organizationId
+          and item.createdAt <= :cutoffAt
+          and (item.contentText is not null or item.rawPurgedAt is null)
+        order by item.createdAt asc, item.id asc
+        """,
+    )
+    fun findRetentionCleanupCandidates(
+        @Param("organizationId") organizationId: String,
+        @Param("cutoffAt") cutoffAt: Instant,
+        pageable: Pageable,
+    ): List<EvidenceItemEntity>
+
+    @Query(
+        """
+        select count(item) from EvidenceItemEntity item, SourceBundleEntity bundle
+        where item.bundleId = bundle.id
+          and bundle.organizationId = :organizationId
+          and item.createdAt <= :cutoffAt
+          and (item.contentText is not null or item.rawPurgedAt is null)
+        """,
+    )
+    fun countRetentionCleanupCandidates(
+        @Param("organizationId") organizationId: String,
+        @Param("cutoffAt") cutoffAt: Instant,
+    ): Long
+
+    @Query(
+        """
+        select count(item) from EvidenceItemEntity item, SourceBundleEntity bundle
+        where item.bundleId = bundle.id
+          and bundle.organizationId = :organizationId
+          and item.createdAt > :cutoffAt
+          and (item.contentText is not null or item.rawPurgedAt is null)
+        """,
+    )
+    fun countActiveIngestionSkippedCandidates(
+        @Param("organizationId") organizationId: String,
+        @Param("cutoffAt") cutoffAt: Instant,
+    ): Long
 }
 
 interface SourceBundleAttributionEventRepository : JpaRepository<SourceBundleAttributionEventEntity, String>

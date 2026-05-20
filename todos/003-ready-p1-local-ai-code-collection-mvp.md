@@ -1085,3 +1085,23 @@ Initial Phase 1 files:
 
 **Learnings:**
 - The dry-run should be a reporting surface only; purge selection and mutation stay separate so Phase 44 can add bounded execution without changing the preview contract.
+
+### 2026-05-20 - Post-MVP Phase 44 Bounded Retention Purge Job
+
+**By:** Codex
+
+**Actions:**
+- Added a retention cleanup service and `POST /api/evidence/retention-cleanup`.
+- Selected expired cleanup candidates through bounded DB queries.
+- Nullified expired raw item content and recorded retention purge metadata.
+- Preserved content hashes, item metadata, bundle metadata, source lineage, generated cards, and fresh raw content.
+- Kept filesystem deletion separate from database cleanup with an explicit zero-count response until filesystem artifacts exist.
+- Adjusted dry-run reclaimed byte estimates to match the raw item content that automatic cleanup actually removes.
+- Checked off Post-MVP Phase 44 in the plan document.
+
+**Verification:**
+- Ran `./gradlew :backend:test --tests "com.aicodelearning.auth.LocalOwnerEvidenceRetentionIntegrationTest"`.
+- Backend tests cover bounded batch execution, expired raw content purge, metadata preservation, generated-card survival, fresh active-ingestion skip, and filesystem deletion separation.
+
+**Learnings:**
+- Automatic retention cleanup must be narrower than manual purge: it removes raw item bodies while preserving database metadata so learning assets and traceability survive.

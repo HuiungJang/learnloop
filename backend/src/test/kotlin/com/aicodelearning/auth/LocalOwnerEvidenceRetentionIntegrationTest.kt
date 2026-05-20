@@ -190,6 +190,82 @@ class LocalOwnerEvidenceRetentionIntegrationTest {
     }
 
     @Test
+    fun `retention cleanup purges expired raw content in bounded batches and preserves metadata cards and fresh ingestion`() {
+        val owner = login()
+        val sentinel = "retention-cleanup-${System.nanoTime()}"
+        patchJson(
+            "/api/evidence/retention-settings",
+            owner.token,
+            mapOf("organizationId" to "org-demo", "retentionMode" to "default", "retentionDays" to 30),
+        )
+        val fixture =
+            createConfirmedAccessibleSourceLinkFixture(
+                owner.token,
+                codeContent = "class RetentionCleanupPattern { val marker = \"$sentinel\" }",
+                codeFilePaths = listOf("src/$sentinel.kt"),
+                codeProvenance = mapOf("rawPath" to "/tmp/$sentinel", "stdout" to sentinel),
+            )
+        val generated =
+            postJson(
+                "/api/generation/run",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "providerConfigId" to "provider-local-mock",
+                    "sourceLinkIds" to listOf(fixture.linkId),
+                    "visibility" to "organization",
+                ),
+            )
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        val cardId = json(generated)["patternCard"]["id"].asText()
+        val secondExpired = createEvidence(owner.token, "Retention cleanup second", "code", "const secondRetentionCleanup = \"$sentinel\"")
+        val fresh = createEvidence(owner.token, "Retention cleanup fresh", "code", "const freshRetentionCleanup = \"$sentinel\"")
+        listOf(fixture.codeBundleId, secondExpired).forEach(::ageEvidenceForRetention)
+        val beforeBundle = sourceBundleRepository.findById(fixture.codeBundleId).orElseThrow()
+        val beforeItem = evidenceItemRepository.findByBundleId(fixture.codeBundleId).single()
+
+        val firstRun =
+            postJson(
+                "/api/evidence/retention-cleanup",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "batchSize" to 1),
+            )
+
+        assertEquals(HttpStatus.OK, firstRun.statusCode)
+        assertEquals(1, json(firstRun)["purgedItems"].asInt())
+        assertTrue(json(firstRun)["remainingEligibleItems"].asInt() >= 1)
+        assertTrue(json(firstRun)["reclaimedBytes"].asLong() >= 0)
+        assertTrue(json(firstRun)["activeIngestionSkippedItems"].asInt() >= 1)
+        assertEquals(0, json(firstRun)["filesystemArtifactsDeleted"].asInt())
+
+        val finalRun =
+            postJson(
+                "/api/evidence/retention-cleanup",
+                owner.token,
+                mapOf("organizationId" to "org-demo", "batchSize" to 500),
+            )
+        assertEquals(HttpStatus.OK, finalRun.statusCode)
+        assertTrue(json(finalRun)["purgedItems"].asInt() >= 1)
+
+        val afterItem = evidenceItemRepository.findByBundleId(fixture.codeBundleId).single()
+        assertNull(afterItem.contentText)
+        assertEquals(beforeItem.contentHash, afterItem.contentHash)
+        assertEquals(beforeItem.metadataJson, afterItem.metadataJson)
+        assertNotNull(afterItem.rawPurgedAt)
+        assertEquals("retention_cleanup", afterItem.rawPurgeReason)
+        val afterBundle = sourceBundleRepository.findById(fixture.codeBundleId).orElseThrow()
+        assertEquals(beforeBundle.filePathsJson, afterBundle.filePathsJson)
+        assertEquals(beforeBundle.provenanceJson, afterBundle.provenanceJson)
+        assertEquals(beforeBundle.contentHash, afterBundle.contentHash)
+        assertEquals(beforeBundle.dedupeKey, afterBundle.dedupeKey)
+        assertEquals("const freshRetentionCleanup = \"$sentinel\"", evidenceItemRepository.findByBundleId(fresh).single().contentText)
+
+        val card = getJson("/api/pattern-cards/$cardId", owner.token)
+        assertEquals(HttpStatus.OK, card.statusCode)
+        assertEquals(cardId, json(card)["patternCard"]["id"].asText())
+    }
+
+    @Test
     fun `local owner delete tombstones bundle and excludes it from reads and generation`() {
         val owner = login()
         val fixture = createConfirmedAccessibleSourceLinkFixture(owner.token)

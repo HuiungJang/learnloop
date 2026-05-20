@@ -45,7 +45,6 @@ class EvidenceRetentionDryRunService(
                 !it.createdAt.isAfter(cutoffAt) && it.hasRawMetadata()
             }
 
-        val rawMetadataBytes = rawMetadataBundles.sumOf { it.rawMetadataBytes() }
         val itemBytes = items.sumOf { it.estimatedRawBytes() }
         val bundleIds = (items.map { it.bundleId } + rawMetadataBundles.map { it.id }).toSet()
         val quarantinedBundleIds = bundleIds.filter { bundleById[it]?.isQuarantined() == true }.toSet()
@@ -72,7 +71,7 @@ class EvidenceRetentionDryRunService(
             eligibleBundles = bundleIds.size,
             eligibleItems = items.size,
             rawMetadataBundles = rawMetadataBundles.size,
-            estimatedReclaimedBytes = itemBytes + rawMetadataBytes,
+            estimatedReclaimedBytes = itemBytes,
             artifactCategories = artifactCategories,
             quarantinedBundles = quarantinedBundleIds.size,
             quarantinedItems = quarantinedItems.size,
@@ -91,10 +90,6 @@ class EvidenceRetentionDryRunService(
 
     private fun SourceBundleEntity.hasRawMetadata(): Boolean =
         filePathsJson != EMPTY_FILE_PATHS_JSON || provenanceJson != EMPTY_PROVENANCE_JSON
-
-    private fun SourceBundleEntity.rawMetadataBytes(): Long =
-        (if (filePathsJson == EMPTY_FILE_PATHS_JSON) 0L else filePathsJson.toByteArray(StandardCharsets.UTF_8).size.toLong()) +
-            (if (provenanceJson == EMPTY_PROVENANCE_JSON) 0L else provenanceJson.toByteArray(StandardCharsets.UTF_8).size.toLong())
 
     private fun SourceBundleEntity.isQuarantined(): Boolean =
         status == STATUS_BLOCKED_SENSITIVE || status == STATUS_QUARANTINED_SECRET
