@@ -25,7 +25,11 @@ class SecretScanner {
                 "github_token" to Regex("\\bghp_[A-Za-z0-9_]{20,}\\b"),
                 "aws_access_key" to Regex("\\bAKIA[0-9A-Z]{16}\\b"),
                 "private_key" to Regex("-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-                "assigned_secret" to Regex("\\b(?:api[_-]?key|password|secret|token)\\s*[:=]\\s*[\"']?[^\"'\\s]{8,}", RegexOption.IGNORE_CASE),
+                "assigned_secret" to
+                    Regex(
+                        "\\b(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|secret|token)(?:[_-][A-Za-z0-9]+)*\\s*[:=]\\s*[\"']?[^\"'\\s]{8,}",
+                        RegexOption.IGNORE_CASE,
+                    ),
             )
     }
 }

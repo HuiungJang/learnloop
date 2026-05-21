@@ -169,16 +169,14 @@ echo
 echo "LearnLoop $AI_CODE_RELEASE_VERSION is installed."
 echo "Open: http://localhost:${AI_CODE_WEB_PORT:-8080}"
 echo
-echo "Demo users:"
-echo "- admin@example.com"
-echo "- contributor@example.com"
-echo "- reviewer@example.com"
-echo "- learner@example.com"
+echo "Local owner:"
+echo "- ${APP_LOCAL_OWNER_EMAIL:-owner@local.learnloop}"
 echo
-echo "Demo password: ${APP_DEMO_PASSWORD}"
+echo "Local owner password: ${APP_DEMO_PASSWORD}"
 echo
 echo "Useful commands:"
 echo "- ./start.sh"
 echo "- ./stop.sh"
 echo "- ./status.sh"
 echo "- ./local-ai-companion.sh"
+echo "- ./local-ai-shim.sh codex install"

@@ -6,8 +6,27 @@ cd "$ROOT_DIR"
 
 NODE_BIN="${NODE_BIN:-node}"
 PORT="${LEARNLOOP_LOCAL_AI_PORT:-4317}"
+HOST="${LEARNLOOP_LOCAL_AI_HOST:-127.0.0.1}"
 PID_FILE=".local-ai-companion.pid"
 LOG_FILE=".local-ai-companion.log"
+
+case "$HOST" in
+  127.0.0.1 | localhost | ::1) ;;
+  *)
+    echo "LEARNLOOP_LOCAL_AI_HOST must be 127.0.0.1, localhost, or ::1." >&2
+    exit 1
+    ;;
+esac
+
+host_url() {
+  if [ "$HOST" = "::1" ]; then
+    printf '[::1]'
+  else
+    printf '%s' "$HOST"
+  fi
+}
+
+BASE_URL="http://$(host_url):$PORT"
 
 is_running() {
   [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
@@ -20,15 +39,15 @@ listener_pid() {
 }
 
 healthcheck() {
-  curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1
+  curl -fsS "$BASE_URL/health" >/dev/null 2>&1
+}
+
+status_payload() {
+  curl -fsS "$BASE_URL/status" 2>/dev/null || true
 }
 
 start_process() {
   STARTED_PID=""
-  if command -v screen >/dev/null 2>&1; then
-    screen -dmS "learnloop-local-ai-$PORT" sh -c 'exec "$1" local-ai-companion.mjs >>"$2" 2>&1' sh "$NODE_BIN" "$LOG_FILE"
-    return
-  fi
   nohup "$NODE_BIN" local-ai-companion.mjs >"$LOG_FILE" 2>&1 &
   STARTED_PID="$!"
   printf '%s\n' "$STARTED_PID" > "$PID_FILE"
@@ -48,7 +67,7 @@ start() {
         rm -f "$PID_FILE"
       fi
     fi
-    echo "LearnLoop local AI companion is already running on http://127.0.0.1:$PORT"
+    echo "LearnLoop local AI companion is already running on $BASE_URL"
     return
   fi
   rm -f "$PID_FILE"
@@ -63,7 +82,7 @@ start() {
       elif [ -n "${STARTED_PID:-}" ]; then
         printf '%s\n' "$STARTED_PID" > "$PID_FILE"
       fi
-      echo "LearnLoop local AI companion started on http://127.0.0.1:$PORT"
+      echo "LearnLoop local AI companion started on $BASE_URL"
       return
     fi
     i=$((i + 1))
@@ -76,12 +95,14 @@ start() {
 stop() {
   if is_running; then
     kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    wait_for_stop "$(cat "$PID_FILE")"
     rm -f "$PID_FILE"
     echo "LearnLoop local AI companion stopped."
   else
     current_pid=$(listener_pid || true)
     if [ -n "$current_pid" ]; then
       kill "$current_pid" 2>/dev/null || true
+      wait_for_stop "$current_pid"
       rm -f "$PID_FILE"
       echo "LearnLoop local AI companion stopped."
       return
@@ -89,6 +110,18 @@ stop() {
     rm -f "$PID_FILE"
     echo "LearnLoop local AI companion is not running."
   fi
+}
+
+wait_for_stop() {
+  pid="$1"
+  i=0
+  while [ "$i" -lt 20 ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return
+    fi
+    i=$((i + 1))
+    sleep 0.1
+  done
 }
 
 case "${1:-start}" in
@@ -100,7 +133,11 @@ case "${1:-start}" in
     ;;
   status)
     if healthcheck; then
-      echo "LearnLoop local AI companion is running on http://127.0.0.1:$PORT"
+      echo "LearnLoop local AI companion is running on $BASE_URL"
+      payload=$(status_payload)
+      if [ -n "$payload" ]; then
+        echo "$payload"
+      fi
     else
       echo "LearnLoop local AI companion is not running."
       exit 1

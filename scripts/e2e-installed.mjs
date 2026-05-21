@@ -10,13 +10,11 @@ const chromePath = process.env.PLAYWRIGHT_CHROME_PATH ?? "/Applications/Google C
 const launchOptions = existsSync(chromePath) ? { executablePath: chromePath } : {};
 assertLocalAppUrl(appUrl, "ALLOW_REMOTE_E2E_TARGET");
 
-const email = `e2e-${Date.now()}@example.com`;
-const password = "LocalSecret1234!";
-const displayName = "E2E Local User";
-const secondEmail = `e2e-second-${Date.now()}@example.com`;
-const secondDisplayName = "E2E Second User";
+const email = process.env.E2E_OWNER_EMAIL ?? "owner@local.learnloop";
+const password = process.env.E2E_OWNER_PASSWORD ?? "demo-password";
 const localAiKey = `local-only-key-${Date.now()}`;
 const oauthLabel = `Gemini OAuth ${Date.now()}`;
+const companionToken = `local-token-${Date.now()}`;
 const postedRequests = [];
 const companionRequests = [];
 const demoProblemId = "problem-demo-practice-workbench";
@@ -44,14 +42,24 @@ await page.route("http://127.0.0.1:4317/**", async (route) => {
   const corsHeaders = {
     "access-control-allow-origin": appUrl,
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "content-type,x-learnloop-local-token,authorization",
     "access-control-allow-private-network": "true"
   };
   if (route.request().method() === "OPTIONS") {
     await route.fulfill({ status: 204, headers: corsHeaders });
     return;
   }
+  if (url.pathname === "/auth/token") {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({ status: "ok", token: companionToken })
+    });
+    return;
+  }
   if (url.pathname === "/oauth/start") {
+    assert.equal(route.request().headers()["x-learnloop-local-token"], companionToken);
     await route.fulfill({
       status: 202,
       contentType: "application/json",
@@ -84,13 +92,12 @@ await page.route("http://127.0.0.1:4317/**", async (route) => {
 
 try {
   await page.goto(appUrl, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /Sign up/i }).click();
-  await page.getByLabel("Display name").fill(displayName);
+  assert.equal(await page.getByRole("button", { name: /Sign up/i }).count(), 0);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/api/register") && response.status() === 201),
-    page.getByRole("button", { name: /Create account/i }).click()
+    page.waitForResponse((response) => response.url().includes("/api/session") && response.status() === 201),
+    page.getByRole("button", { name: /^Login$/i }).click()
   ]);
 
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
@@ -98,7 +105,7 @@ try {
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.goBack();
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.getByRole("button", { name: /AI setup/i }).click();
@@ -109,7 +116,7 @@ try {
   assert.equal(await page.getByRole("button", { name: /^OAuth$/i }).isDisabled(), true);
   await page.getByLabel("API key").fill(localAiKey);
   await page.getByRole("button", { name: /Save local setup/i }).click();
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   const storedApiKeySettings = await page.evaluate((needle) => {
     const entry = Object.entries(window.localStorage).find(([key, value]) => key.startsWith("learnloop:local-ai:") && value.includes(needle));
@@ -120,7 +127,7 @@ try {
   assert.equal(storedApiKeySettings.apiKey, localAiKey);
 
   await page.getByRole("button", { name: /Run flow/i }).click();
-  await page.getByText(/Card draft|Card published|Review pending/i).waitFor({ timeout: 20_000 });
+  await page.getByText(/Card draft|Card published|Curation open/i).first().waitFor({ timeout: 20_000 });
 
   await page.getByRole("button", { name: /Logout/i }).click();
   await page.getByRole("button", { name: /^Login$/i }).first().click();
@@ -130,24 +137,24 @@ try {
     page.waitForResponse((response) => response.url().includes("/api/session") && response.status() === 201),
     page.getByRole("button", { name: /^Login$/i }).last().click()
   ]);
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
   await page.getByRole("button", { name: /claude/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.getByRole("button", { name: /claude/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.goBack();
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
   await page.getByRole("button", { name: /claude/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.getByRole("button", { name: /Back to dashboard/i }).click();
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
   await page.getByRole("button", { name: /claude/i }).click();
@@ -163,7 +170,7 @@ try {
   }
   assert.equal(await page.getByLabel("Local OAuth profile").inputValue(), oauthLabel);
   await page.getByRole("button", { name: /Save local setup/i }).click();
-  await page.getByRole("heading", { name: /Generated code becomes reviewed practice/i }).waitFor();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   const storedOauthSettings = await page.evaluate(() => {
     const entry = Object.entries(window.localStorage).find(([key]) => key.startsWith("learnloop:local-ai:"));
@@ -229,18 +236,26 @@ export function formatTag(input: string): string {
   await progressPanel.getByText(/Pure Function/i).waitFor({ timeout: 20_000 });
   await progressPanel.getByText(/TypeScript/i).waitFor({ timeout: 20_000 });
 
-  const firstSession = await apiRequest("/api/session", {
+  const ownerSession = await apiRequest("/api/session", {
     method: "POST",
     body: { email, password }
   });
-  const secondSession = await apiRequest("/api/register", {
+
+  const disabledRegistration = await fetch(`${appUrl}/api/register`, {
     method: "POST",
-    body: { email: secondEmail, displayName: secondDisplayName, password }
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email: `blocked-${Date.now()}@example.com`,
+      displayName: "Blocked User",
+      password: "LocalSecret1234!"
+    })
   });
-  const firstPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: firstSession.token });
-  const secondPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: secondSession.token });
-  const canonicalContent = firstPractice.problem.files[0].content;
-  assert.equal(secondPractice.problem.files[0].content, canonicalContent);
+  assert.equal(disabledRegistration.status, 403);
+
+  const firstPractice = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: ownerSession.token });
 
   const runnerHealth = await apiRequest("/api/runner/health");
   const directRunnerFiles = firstPractice.problem.files.map((file) => ({
@@ -260,7 +275,7 @@ export function formatTag(input: string): string {
   }));
   const directRun = await apiRequest(`/api/problems/${demoProblemId}/runs`, {
     method: "POST",
-    token: firstSession.token,
+    token: ownerSession.token,
     body: {
       clientAttemptId: `direct-run-${Date.now()}`,
       assetRevision: firstPractice.problem.assetRevision,
@@ -275,30 +290,8 @@ export function formatTag(input: string): string {
     assert.ok(["passed", "runner_unavailable"].includes(directRun.run.status), JSON.stringify(directRun.run));
   }
 
-  const firstAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: firstSession.token });
-  const secondAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: secondSession.token });
+  const firstAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: ownerSession.token });
   assert.ok(firstAttemptsBefore.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("toLowerCase()"))));
-  assert.equal(secondAttemptsBefore.attempts.length, 0);
-
-  const secondSubmissionContent = "export function formatTag(input: string): string { return `second-${input}` }";
-  await apiRequest(`/api/problems/${demoProblemId}/submissions`, {
-    method: "POST",
-    token: secondSession.token,
-    body: {
-      clientAttemptId: `second-attempt-${Date.now()}`,
-      assetRevision: secondPractice.problem.assetRevision,
-      language: "typescript",
-      files: [{ path: "src/formatTag.ts", content: secondSubmissionContent }],
-      resultStatus: "submitted"
-    }
-  });
-
-  const firstAttemptsAfter = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: firstSession.token });
-  const secondAttemptsAfter = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: secondSession.token });
-  const firstPracticeAfter = await apiRequest(`/api/problems/${demoProblemId}/practice`, { token: firstSession.token });
-  assert.equal(firstPracticeAfter.problem.files[0].content, canonicalContent);
-  assert.equal(firstAttemptsAfter.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("second-"))), false);
-  assert.ok(secondAttemptsAfter.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("second-"))));
 
   const apiKeyLeakedToServer = postedRequests.some((request) => request.postData.includes(localAiKey));
   const oauthLabelLeakedToServer = postedRequests.some((request) => request.postData.includes(oauthLabel));
@@ -311,7 +304,7 @@ export function formatTag(input: string): string {
     postRequestCount: postedRequests.length,
     localStorageProvider: storedOauthSettings.provider,
     localStorageAuthMethod: storedOauthSettings.authMethod,
-    multiUserIsolation: true,
+    registrationDisabled: true,
     apiKeyLeakedToServer,
     oauthLabelLeakedToServer
   }, null, 2));

@@ -11,6 +11,7 @@ import java.time.Instant
 @RestController
 class AuditController(
     private val auditLogRepository: AuditLogRepository,
+    private val auditService: AuditService,
     private val authorizationService: AuthorizationService,
 ) {
     @GetMapping("/api/audit")
@@ -33,7 +34,7 @@ class AuditController(
                             targetType = it.targetType,
                             targetId = it.targetId,
                             requestId = it.requestId,
-                            metadataJson = it.metadataJson,
+                            metadataJson = auditService.sanitizeMetadataJson(it.metadataJson),
                             previousHash = it.previousHash,
                             eventHash = it.eventHash,
                             createdAt = it.createdAt,

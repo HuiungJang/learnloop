@@ -1,6 +1,6 @@
 # LearnLoop Release Bundle
 
-This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run LearnLoop without building from source.
+This bundle contains the runtime Compose file, install scripts, and Docker image archives needed to run LearnLoop as a single-user local learning app without building from source.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ Open the printed URL after installation. The default is:
 http://localhost:8080
 ```
 
-The installer creates `.env` with generated local credentials and prints the generated demo password. Enter that password in the UI to use the seeded demo roles.
+The installer creates `.env` with generated local credentials. The installed product path is a single local owner workspace rather than a role-switching demo.
 
 ## Commands
 
@@ -42,6 +42,26 @@ The installer creates `.env` with generated local credentials and prints the gen
 `./stop.sh` stops containers without deleting the PostgreSQL Docker volume.
 
 The application stores learner attempts in PostgreSQL. Stopping and starting the bundle keeps that volume intact, so saved drafts and submitted attempts remain available after restart.
+
+## Local Product Boundary
+
+The MVP is a personal local app:
+
+- one local owner
+- approved local repositories
+- local AI provider setup
+- collected evidence
+- generated learning cards
+- practice exercises
+
+Non-goals for this MVP:
+
+- hosted multi-user deployment
+- admin dashboards
+- reviewer queues
+- organization membership
+- team permissions
+- remote collector pairing or sync
 
 ## Practice Workbench
 
@@ -72,7 +92,17 @@ Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments
 
 ## Local AI OAuth
 
-The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on `127.0.0.1`, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
+The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on loopback, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. Mutating companion endpoints require a random local API token stored outside repository directories with owner-only permissions; browser OAuth uses a short-lived OAuth-start token scoped to the installed app origin. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
+
+## Codex CLI Shim
+
+Install the first automatic collection path with:
+
+```sh
+./local-ai-shim.sh codex install
+```
+
+The shim is written only to the LearnLoop-managed shim directory. It records the original `codex` path and hash, preserves stdin/stdout/stderr/exit behavior, and emits bounded best-effort collection events to the local companion. Run `./local-ai-shim.sh codex status`, `repair`, or `uninstall` to inspect or change the shim without overwriting the real Codex binary.
 
 ## License
 

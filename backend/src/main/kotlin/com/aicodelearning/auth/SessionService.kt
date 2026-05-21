@@ -127,12 +127,12 @@ class SessionService(
     private fun ensureDefaultWorkspace(now: Instant) {
         if (!organizationRepository.existsById("org-demo")) {
             organizationRepository.save(
-                OrganizationEntity(id = "org-demo", name = "Demo Organization", slug = "demo", createdAt = now),
+                OrganizationEntity(id = "org-demo", name = "Local Workspace", slug = "local", createdAt = now),
             )
         }
         if (!teamRepository.existsById("team-platform")) {
             teamRepository.save(
-                TeamEntity(id = "team-platform", organizationId = "org-demo", name = "Platform", createdAt = now),
+                TeamEntity(id = "team-platform", organizationId = "org-demo", name = "Local", createdAt = now),
             )
         }
         if (!projectRepository.existsById("project-learning")) {
@@ -141,7 +141,7 @@ class SessionService(
                     id = "project-learning",
                     organizationId = "org-demo",
                     teamId = "team-platform",
-                    name = "Learning Platform",
+                    name = "Personal Learning",
                     createdAt = now,
                 ),
             )

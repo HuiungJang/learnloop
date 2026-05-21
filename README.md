@@ -6,32 +6,31 @@
 
 [한국어](README.ko.md)
 
-LearnLoop turns code snippets, conversation logs, pull requests, commits, and diffs created through AI coding tools such as Codex, Gemini, and Claude into reusable developer learning assets.
+LearnLoop is a single-user local installed learning tool for developers who use AI coding tools such as Codex, Gemini, and Claude. It turns approved local code evidence into personal learning cards and practice exercises.
 
 ## Key Screens and Features
 
 <p align="center">
-  <img src="assets/learnloop-demo.gif" alt="LearnLoop demo showing signup, local AI setup, workflow run, and generated learning card" width="900">
+  <img src="assets/learnloop-demo.gif" alt="LearnLoop demo showing local setup, AI setup, workflow run, and generated learning card" width="900">
 </p>
 
-The demo shows the core flow: sign up, configure local AI, run the evidence-to-practice workflow, and review the generated learning card.
+The demo shows the core flow: open the local app, configure local AI, run the evidence-to-practice workflow, and inspect the generated learning card.
 
 ## Purpose
 
-AI-generated code can improve short-term delivery speed, but teams often lose the chance to learn which patterns, libraries, APIs, and implementation choices keep repeating. LearnLoop turns that activity into a learning loop.
+AI-generated code can improve short-term delivery speed, but developers often lose the chance to learn which patterns, libraries, APIs, and implementation choices keep repeating. LearnLoop turns that activity into a personal learning loop.
 
-- Collect code snippets, conversation logs, pull requests, commits, and diffs generated with AI assistance.
+- Collect approved local code snippets, conversation logs, commits, and diffs generated with AI assistance.
 - Analyze design patterns, libraries, algorithms, API usage, and configuration practices.
 - Convert the analysis into implementation exercises, Q&A, and practice cards.
-- Require human review before generated cards become reusable organization learning assets.
+- Let the local owner curate, edit, delete, or practice generated learning assets.
 - Keep user AI API keys and OAuth settings in the local browser only, without sending them to the server.
 
 ## Recommended Users
 
 - Developers who use AI coding tools often and want to turn generated code into durable learning material
-- Tech leads who want to convert recurring libraries, APIs, and patterns into training content
-- Platform administrators who manage onboarding, code review education, or internal developer learning
-- Organizations that want to create learning problems from real pull request and commit history
+- Developers who want a local personal library of recurring implementation patterns
+- Developers who want practice exercises generated from their own code history
 
 ## Usage
 
@@ -55,7 +54,7 @@ Open:
 http://localhost:8080
 ```
 
-The installer creates `.env` with generated local credentials. It also prints the generated demo password after startup; enter that password in the UI to use the seeded demo roles.
+The installer creates `.env` with generated local credentials. The installed product path is a single local owner workspace rather than a role-switching demo.
 
 Common installed-app commands:
 
@@ -64,7 +63,12 @@ Common installed-app commands:
 ./scripts/status.sh
 ./scripts/stop.sh
 ./scripts/local-ai-companion.sh
+./scripts/local-ai-shim.sh codex install
 ```
+
+The Codex shim manager installs only into a LearnLoop-managed shim directory and prints PATH guidance. It records the original `codex` path and hash, and `./scripts/local-ai-shim.sh codex status` reports repair or PATH precedence issues without modifying the real Codex binary.
+
+The local AI companion listens only on loopback. Mutating companion endpoints use a random local API token stored outside repository directories with owner-only permissions. Browser OAuth uses a short-lived OAuth-start token scoped to the installed app origin.
 
 To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
 
@@ -73,6 +77,26 @@ To change the browser port, edit `AI_CODE_WEB_PORT` in `.env`, then restart:
 ```
 
 Data is stored in the `learnloop_install-postgres-data` Docker volume. `./scripts/stop.sh` stops containers without deleting data.
+
+### Local Product Boundary
+
+The MVP is a personal local app:
+
+- one local owner
+- approved local repositories
+- local AI provider setup
+- collected evidence
+- generated learning cards
+- practice exercises
+
+Non-goals for this MVP:
+
+- hosted multi-user deployment
+- admin dashboards
+- reviewer queues
+- organization membership
+- team permissions
+- remote collector pairing or sync
 
 ### Practice Workbench and Sandbox Runs
 
@@ -102,18 +126,19 @@ The installed app now enables local sandbox execution by default. It installs Do
 
 ### Attempts and Sync
 
-Editor state is local-first. The browser keeps unsent edits locally, then syncs drafts and submitted answers to the server as per-user attempt records. Canonical organization assets such as pattern cards, practice files, hints, and answer references are not mutated when a learner submits an attempt.
+Editor state is local-first. The browser keeps unsent edits locally, then syncs drafts and submitted answers as per-user attempt records. Canonical learning assets such as pattern cards, practice files, hints, and answer references are not mutated when a learner submits an attempt.
 
-Server sync is idempotent by `(user, problem, clientAttemptId)`, so retries update the learner's own draft/submission instead of creating conflicting organization-level records. Reviewers and administrators can inspect submitted attempts according to their role, but local AI provider credentials remain in the user's browser and are not sent to the server.
+Server sync is idempotent by `(user, problem, clientAttemptId)`, so retries update the learner's own draft/submission instead of creating conflicting records. Local AI provider credentials remain in the user's browser and are not sent to the server.
 
 ### First User Flow
 
-1. Sign up or log in.
-2. Choose the AI provider you want to use on first login.
-3. Codex and Gemini support OAuth or API key setup; Claude uses API key setup.
-4. For OAuth, click `Connect Codex` or `Connect Gemini` in the local AI setup screen. The local companion starts the provider's login command on this machine.
-5. Save local AI settings, then run the learning flow.
-6. Review generated pattern cards and exercises, then turn them into reusable learning assets.
+1. Open the local app.
+2. Configure an AI provider now or skip it until generation is needed.
+3. Approve one or more local Git repositories for collection.
+4. Use Codex CLI as the first automatic collection path.
+5. Keep using Gemini and Claude through manual/local-session evidence until their adapters are added after MVP.
+6. Curate collected evidence in the local app.
+7. Generate pattern cards and practice exercises.
 
 ## Release Bundle
 
@@ -139,9 +164,9 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-Release-bundle installation does not build from source. It loads the packaged Docker images, including the language runner images, starts the stack, and prints the generated demo password.
+Release-bundle installation does not build from source. It loads the packaged Docker images, including the language runner images, and starts the local stack.
 
-The release bundle includes the application, database, and TypeScript/Java/Kotlin runner images. Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and reviewing practice attempts.
+The release bundle includes the application, database, and TypeScript/Java/Kotlin runner images. Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and inspecting practice attempts.
 
 ## CI/CD
 
@@ -200,38 +225,18 @@ Build and verify sandbox runner images:
 
 To add another runner language later, add a runner image under `runner/`, register a fixed harness in `backend/src/main/kotlin/com/aicodelearning/runner/RunnerRegistry.kt`, extend the practice contract tests, and add a smoke script that proves both passing and failing exercises without network access.
 
-## Demo Users
+## Local Owner Session
 
-Use the UI role selector or create a session with `POST /api/session`:
-
-- `u-admin`
-- `u-contributor`
-- `u-reviewer`
-- `u-learner`
-
-Default local development password: `demo-password`. The Docker installer generates `APP_DEMO_PASSWORD` in `.env`; the installed UI asks for that password instead of embedding it in the static frontend bundle.
+The installed app should present one local owner path. Existing internal seed data can remain for compatibility while the product moves away from role switching, but the primary local workflow should not ask the user to choose a role.
 
 ## AI Provider Setup
 
-The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and local-first AI setup surfaces. The Node MVP remains as a parity oracle and now supports both deterministic local generation and real OpenAI-compatible provider calls.
+The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and local-first AI setup surfaces. The Node MVP remains as an internal compatibility oracle and supports both deterministic local generation and real OpenAI-compatible provider calls.
 
 Node MVP provider modes:
 
 - `provider-local-mock` keeps deterministic generation for demos, stable tests, and parity checks.
 - Non-mock providers call an OpenAI-compatible Responses API endpoint at `POST /v1/responses` with structured JSON schema output.
-
-Register an OpenAI-compatible provider with `POST /api/providers`:
-
-```json
-{
-  "organizationId": "org-demo",
-  "provider": "openai",
-  "model": "gpt-4.1-mini",
-  "scope": "organization",
-  "credential": "YOUR_API_KEY",
-  "orgApproved": true
-}
-```
 
 For `provider: "openai"`, `baseUrl` defaults to `https://api.openai.com`. Custom `baseUrl` values must use HTTPS. Loopback HTTP is allowed only for local fake-provider tests when `APP_ALLOW_INSECURE_PROVIDER_BASE_URL=1`.
 

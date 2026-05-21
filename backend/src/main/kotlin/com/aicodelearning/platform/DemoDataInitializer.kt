@@ -55,15 +55,35 @@ class DemoDataInitializer(
     private val passwordEncoder: PasswordEncoder,
     @param:Value("\${app.demo-password:demo-password}")
     private val demoPassword: String,
+    @param:Value("\${app.seed-demo-roles:false}")
+    private val seedDemoRoles: Boolean,
+    @param:Value("\${app.local-owner.email:owner@local.learnloop}")
+    private val localOwnerEmail: String,
+    @param:Value("\${app.local-owner.display-name:Local Owner}")
+    private val localOwnerDisplayName: String,
 ) : ApplicationRunner {
     @Transactional
     override fun run(args: ApplicationArguments) {
         val now = Instant.now()
+        seedWorkspace(now)
+        if (seedDemoRoles) {
+            seedUser("u-admin", "admin@example.com", "Admin", "admin", now)
+            seedUser("u-contributor", "contributor@example.com", "Contributor", "contributor", now)
+            seedUser("u-reviewer", "reviewer@example.com", "Reviewer", "reviewer", now)
+            seedUser("u-learner", "learner@example.com", "Learner", "learner", now)
+        } else {
+            seedLocalOwner(now)
+        }
+        seedLocalMockProvider(now)
+        seedDemoPractice(now)
+    }
+
+    private fun seedWorkspace(now: Instant) {
         if (!organizationRepository.existsById("org-demo")) {
-            organizationRepository.save(OrganizationEntity(id = "org-demo", name = "Demo Organization", slug = "demo", createdAt = now))
+            organizationRepository.save(OrganizationEntity(id = "org-demo", name = "Local Workspace", slug = "local", createdAt = now))
         }
         if (!teamRepository.existsById("team-platform")) {
-            teamRepository.save(TeamEntity(id = "team-platform", organizationId = "org-demo", name = "Platform", createdAt = now))
+            teamRepository.save(TeamEntity(id = "team-platform", organizationId = "org-demo", name = "Local", createdAt = now))
         }
         if (!projectRepository.existsById("project-learning")) {
             projectRepository.save(
@@ -71,18 +91,15 @@ class DemoDataInitializer(
                     id = "project-learning",
                     organizationId = "org-demo",
                     teamId = "team-platform",
-                    name = "Learning Platform",
+                    name = "Personal Learning",
                     createdAt = now,
                 ),
             )
         }
+    }
 
-        seedUser("u-admin", "admin@example.com", "Admin", "admin", now)
-        seedUser("u-contributor", "contributor@example.com", "Contributor", "contributor", now)
-        seedUser("u-reviewer", "reviewer@example.com", "Reviewer", "reviewer", now)
-        seedUser("u-learner", "learner@example.com", "Learner", "learner", now)
-        seedLocalMockProvider(now)
-        seedDemoPractice(now)
+    private fun seedLocalOwner(now: Instant) {
+        seedUser(LOCAL_OWNER_ID, localOwnerEmail, localOwnerDisplayName, "admin", now)
     }
 
     private fun seedUser(
@@ -127,7 +144,7 @@ class DemoDataInitializer(
                     id = "provider-local-mock",
                     organizationId = "org-demo",
                     ownerUserId = null,
-                    createdByUserId = "u-admin",
+                    createdByUserId = if (seedDemoRoles) "u-admin" else LOCAL_OWNER_ID,
                     provider = "local",
                     model = "mock-pattern-generator",
                     scope = "organization",
@@ -152,7 +169,7 @@ class DemoDataInitializer(
                     organizationId = "org-demo",
                     teamId = "team-platform",
                     projectId = "project-learning",
-                    createdByUserId = "u-contributor",
+                    createdByUserId = if (seedDemoRoles) "u-contributor" else LOCAL_OWNER_ID,
                     title = "Normalize AI-generated tag labels",
                     summary = "Practice turning inconsistent AI-generated labels into stable display text.",
                     visibility = "organization",
@@ -343,6 +360,7 @@ class DemoDataInitializer(
     }
 
     private companion object {
+        const val LOCAL_OWNER_ID = "u-local-owner"
         const val DEMO_CARD_ID = "card-demo-practice-workbench"
         const val DEMO_PROBLEM_ID = "problem-demo-practice-workbench"
     }

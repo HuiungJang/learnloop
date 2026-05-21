@@ -33,9 +33,103 @@ export type ProviderResponse = {
 
 export type SourceBundleResponse = {
   id: string;
+  organizationId: string;
+  teamId: string | null;
+  projectId: string | null;
   title: string;
   sourceKind: string;
   status: string;
+  repositoryUrl: string | null;
+  pullRequestUrl: string | null;
+  commitSha: string | null;
+  branchName: string | null;
+  filePathsJson: string;
+  provenanceJson: string;
+  contentHash: string;
+  secretFindingsJson: string;
+  createdAt: string;
+  deletedAt: string | null;
+  deletedByUserId: string | null;
+  deletionReason: string | null;
+  autoAttribution: string;
+  userAttribution: string | null;
+  attributionConfidence: number | null;
+  attributionReasonsJson: string;
+};
+
+export type SourceBundleSummaryResponse = {
+  id: string;
+  organizationId: string;
+  teamId: string | null;
+  projectId: string | null;
+  title: string;
+  sourceKind: string;
+  status: string;
+  repositoryUrl: string | null;
+  commitSha: string | null;
+  branchName: string | null;
+  createdAt: string;
+  autoAttribution: string;
+  userAttribution: string | null;
+  attributionConfidence: number | null;
+  attributionReasonsJson: string;
+};
+
+export type EvidenceItemResponse = {
+  id: string;
+  bundleId: string;
+  itemType: string;
+  contentText: string | null;
+  contentHash: string;
+  createdAt: string;
+  rawPurgedAt: string | null;
+  rawPurgeReason: string | null;
+  repoRelativePath: string | null;
+  sizeBytes: number | null;
+  metadataJson: string;
+  contentTruncated: boolean;
+  limitReason: string | null;
+};
+
+export type EvidenceDetailResponse = {
+  bundle: SourceBundleSummaryResponse;
+  evidenceItems: EvidenceItemResponse[];
+};
+
+export type EvidenceListResponse = {
+  bundles: SourceBundleSummaryResponse[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+export type RawPurgeResponse = {
+  purgedBundles: number;
+  purgedItems: number;
+};
+
+export type EvidenceRetentionMode = "default" | "disabled" | "immediate";
+
+export type EvidenceRetentionSettingsResponse = {
+  organizationId: string;
+  ownerUserId: string;
+  retentionMode: EvidenceRetentionMode;
+  retentionDays: number | null;
+  automaticCleanupEnabled: boolean;
+  immediatePurge: boolean;
+  updatedAt: string | null;
+  lastCleanupAt: string | null;
+  lastCleanupPurgedItems: number;
+  lastCleanupReclaimedBytes: number;
+  lastCleanupRemainingItems: number;
+};
+
+export type LocalRepositoryConsentResponse = {
+  repoIdentityHash: string;
+  organizationId: string;
+  displayLabel: string;
+  status: "approved" | "revoked" | "always_ignored" | "missing";
+  updatedAt: string;
 };
 
 export type SourceLinkResponse = {
@@ -394,6 +488,116 @@ export async function getConversionTraces(token: string, organizationId: string)
   return response.traces;
 }
 
+export async function listEvidence(
+  token: string,
+  organizationId: string,
+  page = 0,
+  pageSize = 50
+): Promise<EvidenceListResponse> {
+  const params = new URLSearchParams({
+    organizationId,
+    page: String(page),
+    pageSize: String(pageSize)
+  });
+  return request<EvidenceListResponse>(`/api/evidence?${params.toString()}`, { token });
+}
+
+export async function getEvidenceDetail(token: string, bundleId: string): Promise<EvidenceDetailResponse> {
+  return request<EvidenceDetailResponse>(`/api/evidence/${encodeURIComponent(bundleId)}`, { token });
+}
+
+export async function listLocalRepositories(token: string, organizationId: string): Promise<LocalRepositoryConsentResponse[]> {
+  const response = await request<{ repositories: LocalRepositoryConsentResponse[] }>(`/api/local-repositories?organizationId=${encodeURIComponent(organizationId)}`, { token });
+  return response.repositories;
+}
+
+export async function updateLocalRepository(
+  token: string,
+  repoIdentityHash: string,
+  body: { organizationId: string; displayLabel: string; status: LocalRepositoryConsentResponse["status"] }
+): Promise<LocalRepositoryConsentResponse> {
+  return request<LocalRepositoryConsentResponse>(`/api/local-repositories/${encodeURIComponent(repoIdentityHash)}`, {
+    token,
+    method: "PATCH",
+    body
+  });
+}
+
+export async function updateEvidenceAttribution(
+  token: string,
+  bundleId: string,
+  body: { userAttribution: "use_for_generation" | "manual" | "delete"; attributionConfidence?: number; attributionReasons?: string[] }
+): Promise<SourceBundleResponse> {
+  return request<SourceBundleResponse>(`/api/evidence/${encodeURIComponent(bundleId)}/attribution`, {
+    token,
+    method: "PATCH",
+    body
+  });
+}
+
+export async function deleteEvidence(token: string, bundleId: string): Promise<void> {
+  await request<void>(`/api/evidence/${encodeURIComponent(bundleId)}`, {
+    token,
+    method: "DELETE"
+  });
+}
+
+export async function purgeEvidenceRaw(token: string, bundleId: string): Promise<RawPurgeResponse> {
+  return request<RawPurgeResponse>(`/api/evidence/${encodeURIComponent(bundleId)}/purge-raw`, {
+    token,
+    method: "POST",
+    body: {}
+  });
+}
+
+export async function getEvidenceRetentionSettings(token: string, organizationId: string): Promise<EvidenceRetentionSettingsResponse> {
+  return request<EvidenceRetentionSettingsResponse>(`/api/evidence/retention-settings?organizationId=${encodeURIComponent(organizationId)}`, { token });
+}
+
+export async function updateEvidenceRetentionSettings(
+  token: string,
+  body: { organizationId: string; retentionMode: EvidenceRetentionMode; retentionDays?: number | null }
+): Promise<EvidenceRetentionSettingsResponse> {
+  return request<EvidenceRetentionSettingsResponse>("/api/evidence/retention-settings", {
+    token,
+    method: "PATCH",
+    body
+  });
+}
+
+export async function purgeEvidenceRawScope(
+  token: string,
+  body: { organizationId: string; repositoryUrl?: string | null; purgeAll?: boolean }
+): Promise<RawPurgeResponse> {
+  return request<RawPurgeResponse>("/api/evidence/purge-raw", {
+    token,
+    method: "POST",
+    body
+  });
+}
+
+export async function generateFromEvidence(
+  token: string,
+  body: { organizationId: string; providerConfigId: string; sourceBundleId: string; visibility: "private" | "organization" }
+): Promise<{
+  reviewTask: ReviewTaskResponse;
+  patternCard: PatternCardResponse;
+}> {
+  return request<{
+    reviewTask: ReviewTaskResponse;
+    patternCard: PatternCardResponse;
+  }>("/api/generation/run", {
+    token,
+    method: "POST",
+    body: {
+      organizationId: body.organizationId,
+      providerConfigId: body.providerConfigId,
+      sourceBundleIds: [body.sourceBundleId],
+      visibility: body.visibility
+    }
+  });
+}
+
 export async function getPracticeProblem(token: string, problemId: string): Promise<PracticeProblemResponse> {
   const response = await request<{ problem: PracticeProblemResponse }>(`/api/problems/${encodeURIComponent(problemId)}/practice`, { token });
   return response.problem;
@@ -456,12 +660,37 @@ async function request<T>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   });
 
-  const payload = (await response.json()) as unknown;
+  const responseText = await response.text();
+  const payload = parseJsonPayload(responseText);
   if (!response.ok) {
-    const errorPayload = payload as { error?: { message?: string; code?: string } };
+    const errorPayload = (payload ?? {}) as { error?: { message?: string; code?: string } };
     const message = errorPayload.error?.message ?? `Request failed with ${response.status}`;
     throw new ApiRequestError(message, response.status, errorPayload.error?.code ?? null);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  if (payload === null && responseText.length > 0) {
+    throw new ApiRequestError("Unexpected API response", response.status, "invalid_json");
+  }
+
+  if (payload === null) {
+    throw new ApiRequestError("Empty API response", response.status, "empty_response");
+  }
+
   return payload as T;
+}
+
+function parseJsonPayload(responseText: string): unknown {
+  if (responseText.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    return null;
+  }
 }

@@ -6,6 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Cloud,
+  Database,
+  Eye,
+  FolderGit2,
   GitPullRequest,
   KeyRound,
   Library,
@@ -19,29 +22,41 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
   UploadCloud,
-  UserPlus,
   X,
   type LucideIcon
 } from "lucide-react";
 import { Suspense, lazy, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteEvidence,
+  generateFromEvidence,
   getConversionTraces,
   createSession,
   fetchHealth,
+  getEvidenceDetail,
+  getEvidenceRetentionSettings,
   getLibrary,
   getPracticeProblem,
   getProgress,
   getRecommendations,
+  listEvidence,
+  listLocalRepositories,
   type HealthResponse,
   isConflictError,
   listProviders,
   type PracticeAttemptFileRequest,
-  registerUser,
+  purgeEvidenceRaw,
+  purgeEvidenceRawScope,
   runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
   syncLocalPracticeAttempt,
+  type EvidenceDetailResponse,
+  type EvidenceItemResponse,
+  type EvidenceListResponse,
+  type EvidenceRetentionMode,
+  type EvidenceRetentionSettingsResponse,
   type ConversionTraceResponse,
   type Membership,
   type PatternCardResponse,
@@ -50,7 +65,12 @@ import {
   type PracticeRunResultResponse,
   type ProficiencyResponse,
   type ProviderResponse,
-  type SessionResponse
+  type SessionResponse,
+  type SourceBundleSummaryResponse,
+  updateEvidenceAttribution,
+  updateEvidenceRetentionSettings,
+  updateLocalRepository,
+  type LocalRepositoryConsentResponse
 } from "./api/client";
 import { ensurePracticeDraft } from "./practice/practiceStorage";
 import {
@@ -63,7 +83,6 @@ import {
 } from "./practice/practiceSyncQueue";
 import { loadRevealedHintIds, logHintReveal, saveRevealedHintId } from "./practice/hintProgress";
 
-type AuthMode = "login" | "register";
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
 type EditorTheme = "vs" | "vs-dark";
@@ -107,13 +126,76 @@ type CompanionOAuthResponse = {
   credentialLabel?: string;
   message?: string;
 };
+type CompanionTokenResponse = {
+  status?: string;
+  token?: string;
+  message?: string;
+};
+type RepositoryConsentStatus = "approved" | "revoked" | "always_ignored" | "missing";
+type LocalRepositoryConsent = {
+  repoIdentityHash: string;
+  displayLabel: string;
+  status: RepositoryConsentStatus;
+  updatedAt: string;
+};
+type LocalWatcherState = "active" | "stopped" | "degraded" | "unavailable";
+type LocalWatcherRegistration = {
+  repoIdentityHash: string;
+  repositoryDisplayLabel: string;
+  repositoryStatus: RepositoryConsentStatus;
+  state: LocalWatcherState;
+  reason: string | null;
+  lastReconciliationAt: string | null;
+  lastReconciliationStatus: string | null;
+  lastReconciliationChangedFileCount: number;
+  lastReconciliationDiffCandidateCount: number;
+  pendingChangeCount: number;
+  settledChangeCount: number;
+  droppedEventCount: number;
+  reconciliationQueued: boolean;
+};
+type LocalWatcherCounts = Record<LocalWatcherState, number>;
+type LocalUploadQueueStatus = {
+  queued: number;
+  discardedCount: number;
+  nextAttemptAt: string | null;
+};
+type LocalWatcherStatus = {
+  collectionEnabled: boolean;
+  uploadQueue: LocalUploadQueueStatus;
+  watcherCounts: LocalWatcherCounts;
+  watchers: LocalWatcherRegistration[];
+};
+type LocalAdapterStatusValue = "idle" | "running" | "ok" | "failed" | "missing";
+type LocalAdapterStatus = {
+  provider: string;
+  label: string;
+  status: LocalAdapterStatusValue;
+  reason: string | null;
+  errorCode: string | null;
+  lastEventType: string | null;
+  lastEventAt: string | null;
+};
+type CompanionWatcherStatusResponse = {
+  status?: string;
+  collectionEnabled?: boolean;
+  uploadQueue?: Partial<LocalUploadQueueStatus>;
+  watcherCounts?: Partial<LocalWatcherCounts>;
+  watchers?: Partial<LocalWatcherRegistration>[];
+  message?: string;
+};
+type CompanionAdapterStatusResponse = {
+  status?: string;
+  adapters?: Partial<LocalAdapterStatus>[];
+  message?: string;
+};
 
 const workflowCards = [
   {
     title: "Evidence Intake",
-    description: "Collect Codex, Gemini, Claude, PR, commit, and diff evidence into one reviewable source bundle.",
+    description: "Collect Codex CLI and local-session evidence from approved repositories into one curation-ready bundle.",
     icon: UploadCloud,
-    metric: "6 sources"
+    metric: "local inputs"
   },
   {
     title: "Pattern Generation",
@@ -122,16 +204,16 @@ const workflowCards = [
     metric: "AI assisted"
   },
   {
-    title: "Human Review",
-    description: "Require reviewer approval before generated cards become reusable organization learning assets.",
+    title: "Local Curation",
+    description: "Let the local owner keep, edit, delete, or generate practice from collected evidence.",
     icon: ListChecks,
-    metric: "default gate"
+    metric: "owner gate"
   },
   {
     title: "Practice Library",
-    description: "Turn reviewed cards into implementation prompts, Q&A, and problem-solving exercises for learners.",
+    description: "Turn curated cards into implementation prompts, Q&A, and problem-solving exercises.",
     icon: Library,
-    metric: "reusable"
+    metric: "personal"
   }
 ];
 
@@ -180,6 +262,236 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
     window.localStorage.removeItem(legacyKey);
     return null;
   }
+}
+
+function repositoryStatusCounts(repositories: LocalRepositoryConsent[]): Record<RepositoryConsentStatus, number> {
+  return repositories.reduce(
+    (counts, repository) => ({
+      ...counts,
+      [repository.status]: counts[repository.status] + 1
+    }),
+    { approved: 0, revoked: 0, always_ignored: 0, missing: 0 }
+  );
+}
+
+function repositoryStatusLabel(status: RepositoryConsentStatus): string {
+  if (status === "always_ignored") return "ignored";
+  return status;
+}
+
+function watcherStateLabel(watcher: LocalWatcherRegistration): string {
+  if (watcher.reason === "collection_disabled") return "disabled";
+  if (watcher.reconciliationQueued) return "queued";
+  return watcher.state;
+}
+
+function watcherStatusClass(watcher: LocalWatcherRegistration): string {
+  if (watcher.state === "active") return "status-success";
+  if (watcher.state === "degraded") return "status-warning";
+  if (watcher.reason === "collection_disabled") return "status-neutral";
+  return "status-danger";
+}
+
+function adapterStatusClass(adapter: LocalAdapterStatus): string {
+  if (adapter.status === "ok") return "status-success";
+  if (adapter.status === "running") return "status-warning";
+  if (adapter.status === "idle") return "status-neutral";
+  return "status-danger";
+}
+
+function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
+  if (bundle.userAttribution === "use_for_generation") return "Use";
+  if (isGuiCorrelatedEvidence(bundle) && bundle.userAttribution === "manual") return "Confirmed";
+  if (bundle.userAttribution === "manual") return "Manual";
+  if (bundle.status === "user_confirmation_required") return "Needs confirmation";
+  if (bundle.status === "quarantined_secret") return "Quarantined";
+  if (bundle.status === "purged_raw") return "Purged";
+  return "Uncurated";
+}
+
+function bundleStatusClass(bundle: SourceBundleSummaryResponse): string {
+  if (bundle.status === "quarantined_secret") return "status-danger";
+  if (bundle.userAttribution === "use_for_generation") return "status-success";
+  if (bundle.status === "user_confirmation_required") return "status-warning";
+  return "status-neutral";
+}
+
+function attributionLabel(value: string): string {
+  if (value === "ai_assisted") return "AI assisted";
+  if (value === "gui_correlated") return "GUI correlated";
+  if (value === "manual_or_unknown") return "Manual or unknown";
+  if (value === "use_for_generation") return "Use for generation";
+  if (value === "manual") return "Manual";
+  if (value === "delete") return "Delete";
+  if (value === "uncurated") return "Uncurated";
+  return value.replaceAll("_", " ");
+}
+
+function reasonCodes(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function isGuiCorrelatedEvidence(bundle: SourceBundleSummaryResponse): boolean {
+  return bundle.autoAttribution === "gui_correlated" || bundle.status === "user_confirmation_required";
+}
+
+function reasonCodeLabel(value: string): string {
+  if (value === "gui_activity_window") return "GUI activity window";
+  if (value === "repo_changed") return "Repository changed";
+  if (value === "single_ai_tool") return "Single AI tool";
+  if (value === "competing_ai_tools") return "Competing AI tools";
+  if (value === "tool_session") return "Tool session";
+  if (value === "changed_files") return "Changed files";
+  if (value === "human_review") return "Human review";
+  if (value === "curation_approved") return "Curation approved";
+  if (value === "user_deleted") return "User deleted";
+  return value.replaceAll("_", " ");
+}
+
+function guiCorrelationExplanation(bundle: SourceBundleSummaryResponse): string {
+  const reasons = reasonCodes(bundle.attributionReasonsJson);
+  if (reasons.includes("competing_ai_tools")) {
+    return "Lower confidence because more than one AI tool was active while repository files changed.";
+  }
+  return "Lower confidence because this was inferred from app activity and repository changes, not direct AI output or patch data.";
+}
+
+function generationBlockedReason(bundle: SourceBundleSummaryResponse): string | null {
+  if (isGuiCorrelatedEvidence(bundle)) {
+    return "Generation stays blocked until direct AI output or patch data is attached.";
+  }
+  if (bundle.sourceKind === "local_ai_session" && bundle.status !== "generation_eligible") {
+    return "Generation is blocked until this evidence passes local safety checks.";
+  }
+  if (bundle.sourceKind === "local_ai_session" && bundle.userAttribution !== "use_for_generation") {
+    return "Mark this evidence for generation before creating practice.";
+  }
+  return null;
+}
+
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null) return "size unknown";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function retentionSummary(settings: EvidenceRetentionSettingsResponse | null): string {
+  if (settings === null) return "Policy not loaded";
+  if (settings.retentionMode === "disabled") return "Automatic cleanup disabled";
+  if (settings.retentionMode === "immediate") return "Raw evidence purges immediately";
+  return `Raw evidence retained for ${settings.retentionDays ?? 30} days`;
+}
+
+function normalizeRetentionDays(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 30;
+}
+
+function retentionDaysFormValue(settings: EvidenceRetentionSettingsResponse): string {
+  return settings.retentionMode === "default" ? String(settings.retentionDays ?? 30) : "30";
+}
+
+function toLocalRepositoryConsent(repository: LocalRepositoryConsentResponse): LocalRepositoryConsent {
+  return {
+    repoIdentityHash: repository.repoIdentityHash,
+    displayLabel: repository.displayLabel,
+    status: repository.status,
+    updatedAt: repository.updatedAt
+  };
+}
+
+function toLocalWatcherStatus(payload: CompanionWatcherStatusResponse): LocalWatcherStatus {
+  const counts = payload.watcherCounts ?? {};
+  const queue = payload.uploadQueue ?? {};
+  return {
+    collectionEnabled: payload.collectionEnabled !== false,
+    uploadQueue: {
+      queued: safeNumber(queue.queued),
+      discardedCount: safeNumber(queue.discardedCount),
+      nextAttemptAt: typeof queue.nextAttemptAt === "string" ? queue.nextAttemptAt : null
+    },
+    watcherCounts: {
+      active: safeNumber(counts.active),
+      stopped: safeNumber(counts.stopped),
+      degraded: safeNumber(counts.degraded),
+      unavailable: safeNumber(counts.unavailable)
+    },
+    watchers: Array.isArray(payload.watchers) ? payload.watchers.map(toLocalWatcherRegistration) : []
+  };
+}
+
+function toLocalWatcherRegistration(value: Partial<LocalWatcherRegistration>): LocalWatcherRegistration {
+  const state = isLocalWatcherState(value.state) ? value.state : "unavailable";
+  return {
+    repoIdentityHash: typeof value.repoIdentityHash === "string" ? value.repoIdentityHash : "",
+    repositoryDisplayLabel: typeof value.repositoryDisplayLabel === "string" ? value.repositoryDisplayLabel : "repository",
+    repositoryStatus: isRepositoryConsentStatus(value.repositoryStatus) ? value.repositoryStatus : "missing",
+    state,
+    reason: typeof value.reason === "string" ? value.reason : null,
+    lastReconciliationAt: typeof value.lastReconciliationAt === "string" ? value.lastReconciliationAt : null,
+    lastReconciliationStatus: typeof value.lastReconciliationStatus === "string" ? value.lastReconciliationStatus : null,
+    lastReconciliationChangedFileCount: safeNumber(value.lastReconciliationChangedFileCount),
+    lastReconciliationDiffCandidateCount: safeNumber(value.lastReconciliationDiffCandidateCount),
+    pendingChangeCount: safeNumber(value.pendingChangeCount),
+    settledChangeCount: safeNumber(value.settledChangeCount),
+    droppedEventCount: safeNumber(value.droppedEventCount),
+    reconciliationQueued: value.reconciliationQueued === true
+  };
+}
+
+function toLocalAdapterStatuses(payload: CompanionAdapterStatusResponse): LocalAdapterStatus[] {
+  return Array.isArray(payload.adapters) ? payload.adapters.map(toLocalAdapterStatus) : [];
+}
+
+function toLocalAdapterStatus(value: Partial<LocalAdapterStatus>): LocalAdapterStatus {
+  const status = isLocalAdapterStatusValue(value.status) ? value.status : "idle";
+  return {
+    provider: typeof value.provider === "string" ? value.provider : "unknown",
+    label: typeof value.label === "string" ? value.label : "Unknown adapter",
+    status,
+    reason: typeof value.reason === "string" ? value.reason : null,
+    errorCode: typeof value.errorCode === "string" ? value.errorCode : null,
+    lastEventType: typeof value.lastEventType === "string" ? value.lastEventType : null,
+    lastEventAt: typeof value.lastEventAt === "string" ? value.lastEventAt : null
+  };
+}
+
+function isLocalAdapterStatusValue(value: unknown): value is LocalAdapterStatusValue {
+  return value === "idle" || value === "running" || value === "ok" || value === "failed" || value === "missing";
+}
+
+function isLocalWatcherState(value: unknown): value is LocalWatcherState {
+  return value === "active" || value === "stopped" || value === "degraded" || value === "unavailable";
+}
+
+function isRepositoryConsentStatus(value: unknown): value is RepositoryConsentStatus {
+  return value === "approved" || value === "revoked" || value === "always_ignored" || value === "missing";
+}
+
+function safeNumber(value: unknown): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
+function repositoryDisplayLabel(value: string): string {
+  const normalized = value.trim();
+  const lastSegment = normalized.split(/[\\/]/).filter(Boolean).at(-1);
+  return (lastSegment ?? normalized).slice(0, 80);
+}
+
+async function repositoryIdentityHash(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value.trim());
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function readEditorTheme(): EditorTheme {
@@ -250,21 +562,35 @@ async function readCompanionResponse(response: Response): Promise<CompanionOAuth
   };
 }
 
+async function readLocalCompanionToken(): Promise<string> {
+  const response = await fetch(`${LOCAL_AI_COMPANION_URL}/auth/token`);
+  const payload = (await response.json().catch(() => ({}))) as CompanionTokenResponse;
+  if (!response.ok || typeof payload.token !== "string" || payload.token.length === 0) {
+    throw new Error(payload.message || "Local companion token is unavailable.");
+  }
+  return payload.token;
+}
+
 function primaryMembership(session: SessionResponse | null): Membership | null {
   return session?.user.memberships[0] ?? null;
 }
 
 export function App() {
   const editorSnapshotRef = useRef<(() => PracticeAttemptFileRequest[]) | null>(null);
-  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [session, setSession] = useState<SessionResponse | null>(() => readStoredSession());
   const [providers, setProviders] = useState<ProviderResponse[]>([]);
   const [latestCard, setLatestCard] = useState<PatternCardResponse | null>(null);
   const [libraryCards, setLibraryCards] = useState<PatternCardResponse[]>([]);
+  const [evidenceList, setEvidenceList] = useState<EvidenceListResponse>({ bundles: [], page: 0, pageSize: 50, total: 0 });
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState("");
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [selectedEvidenceDetail, setSelectedEvidenceDetail] = useState<EvidenceDetailResponse | null>(null);
+  const [evidenceDetailLoading, setEvidenceDetailLoading] = useState(false);
+  const [evidenceActionMessage, setEvidenceActionMessage] = useState("");
   const [progressScores, setProgressScores] = useState<ProficiencyResponse[]>([]);
   const [recommendationCards, setRecommendationCards] = useState<PatternCardResponse[]>([]);
   const [conversionTraces, setConversionTraces] = useState<ConversionTraceResponse[]>([]);
@@ -291,6 +617,17 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
+  const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
+  const [localWatcherStatus, setLocalWatcherStatus] = useState<LocalWatcherStatus | null>(null);
+  const [localAdapterStatuses, setLocalAdapterStatuses] = useState<LocalAdapterStatus[]>([]);
+  const [localWatcherLoading, setLocalWatcherLoading] = useState(false);
+  const [localWatcherError, setLocalWatcherError] = useState("");
+  const [retentionSettings, setRetentionSettings] = useState<EvidenceRetentionSettingsResponse | null>(null);
+  const [retentionMode, setRetentionMode] = useState<EvidenceRetentionMode>("default");
+  const [retentionDays, setRetentionDays] = useState("30");
+  const [retentionLoading, setRetentionLoading] = useState(false);
+  const [retentionMessage, setRetentionMessage] = useState("");
+  const [repositoryLabel, setRepositoryLabel] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<LocalAuthMethod>("api_key");
@@ -303,6 +640,7 @@ export function App() {
   const showOnboardingRef = useRef(showOnboarding);
   const sessionRef = useRef(session);
   const restoredSessionRef = useRef(session !== null);
+  const evidenceDetailRequestRef = useRef(0);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
@@ -347,7 +685,22 @@ export function App() {
   useEffect(() => {
     sessionRef.current = session;
     storeSession(session);
+    if (session === null) {
+      setLocalRepositories([]);
+      setLocalWatcherStatus(null);
+      setLocalAdapterStatuses([]);
+      setRetentionSettings(null);
+      setRetentionMessage("");
+      setLocalWatcherError("");
+    } else {
+      void refreshLocalRepositories(session);
+    }
   }, [session]);
+
+  useEffect(() => {
+    if (session === null || !showOnboarding) return;
+    void refreshLocalWatcherStatus();
+  }, [session, showOnboarding]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -387,6 +740,7 @@ export function App() {
     if (session === null || membership === null || showOnboarding) return;
     void refreshLearningSignals(session);
     void refreshConversionTraces(session);
+    void refreshEvidence(session);
   }, [membership, session, showOnboarding]);
 
   if (session === null) {
@@ -400,27 +754,10 @@ export function App() {
 
           <div>
             <p className="eyebrow">Local learning workspace</p>
-            <h1>Sign in to your reviewed code practice.</h1>
-          </div>
-
-          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-            <button className={authMode === "login" ? "nav-active" : ""} onClick={() => setAuthMode("login")} type="button">
-              <LogIn aria-hidden="true" size={16} />
-              <span>Login</span>
-            </button>
-            <button className={authMode === "register" ? "nav-active" : ""} onClick={() => setAuthMode("register")} type="button">
-              <UserPlus aria-hidden="true" size={16} />
-              <span>Sign up</span>
-            </button>
+            <h1>Open your local learning workspace.</h1>
           </div>
 
           <form className="auth-form" onSubmit={handleAuthSubmit}>
-            {authMode === "register" ? (
-              <label>
-                <span>Display name</span>
-                <input autoComplete="name" onChange={(event) => setDisplayName(event.target.value)} required type="text" value={displayName} />
-              </label>
-            ) : null}
             <label>
               <span>Email</span>
               <input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
@@ -428,8 +765,7 @@ export function App() {
             <label>
               <span>Password</span>
               <input
-                autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                minLength={authMode === "register" ? 8 : undefined}
+                autoComplete="current-password"
                 onChange={(event) => setPassword(event.target.value)}
                 required
                 type="password"
@@ -438,13 +774,13 @@ export function App() {
             </label>
             {authError.length > 0 ? <p className="form-error">{authError}</p> : null}
             <button className="primary-button" type="submit">
-              {authMode === "register" ? <UserPlus aria-hidden="true" size={16} /> : <LogIn aria-hidden="true" size={16} />}
-              {authMode === "register" ? "Create account" : "Login"}
+              <LogIn aria-hidden="true" size={16} />
+              Login
             </button>
           </form>
         </section>
 
-        <section className="auth-preview" aria-label="Platform workflow">
+        <section className="auth-preview" aria-label="Local learning workflow">
           {workflowCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -476,7 +812,7 @@ export function App() {
         <div className="account-card">
           <strong>{session.user.displayName}</strong>
           <span>{session.user.email}</span>
-          <small>{membership?.role ?? "member"}</small>
+          <small>{membership?.role === "admin" ? "Local owner" : membership?.role ?? "member"}</small>
         </div>
 
         <button className="local-ai-card" onClick={openLocalAiSetup} type="button">
@@ -496,7 +832,7 @@ export function App() {
 
         <div className="sidebar-status">
           <ShieldCheck aria-hidden="true" size={18} />
-          <span>Internal org mode</span>
+          <span>Local personal mode</span>
         </div>
       </aside>
 
@@ -601,13 +937,14 @@ export function App() {
                 Save local setup
               </button>
             </form>
+            {renderRepositorySettings()}
           </section>
         ) : (
           <>
             <header className="topbar">
               <div>
                 <p className="eyebrow">AI-assisted code learning workspace</p>
-                <h1>Generated code becomes reviewed practice.</h1>
+                <h1>Generated code becomes curated practice.</h1>
               </div>
               <div className={`health-pill ${health.status}`}>
                 <CheckCircle2 aria-hidden="true" size={16} />
@@ -615,7 +952,7 @@ export function App() {
               </div>
             </header>
 
-            <section className="summary-grid" aria-label="Platform workflow">
+            <section className="summary-grid" aria-label="Local learning workflow">
               {workflowCards.map((card) => {
                 const Icon = card.icon;
 
@@ -657,6 +994,8 @@ export function App() {
                   {activity.length === 0 ? <span>Ready</span> : null}
                 </div>
               </div>
+
+              {renderCollectedEvidencePanel()}
 
               <div className="panel panel-wide">
                 <div className="panel-title">
@@ -985,15 +1324,318 @@ export function App() {
     </div>
   );
 
+  function renderRepositorySettings() {
+    const counts = repositoryStatusCounts(localRepositories);
+    const watcherCounts = localWatcherStatus?.watcherCounts ?? { active: 0, stopped: 0, degraded: 0, unavailable: 0 };
+    const uploadQueue = localWatcherStatus?.uploadQueue ?? { queued: 0, discardedCount: 0, nextAttemptAt: null };
+    const latestReconciliationAt =
+      localWatcherStatus?.watchers
+        .map((watcher) => watcher.lastReconciliationAt)
+        .filter((value): value is string => typeof value === "string")
+        .sort()
+        .at(-1) ?? null;
+
+    return (
+      <section className="settings-section" aria-label="Collection status">
+        <div className="panel-title">
+          <FolderGit2 aria-hidden="true" size={20} />
+          <h2>Collection Status</h2>
+        </div>
+        <div className="status-list">
+          <span>{counts.approved} approved</span>
+          <span>{counts.revoked} revoked</span>
+          <span>{counts.always_ignored} ignored</span>
+          <span>{counts.missing} missing</span>
+        </div>
+        <div className="watcher-toolbar">
+          <div className="watcher-summary">
+            <span>{localWatcherStatus?.collectionEnabled === false ? "disabled" : "enabled"}</span>
+            <span>{watcherCounts.active} active</span>
+            <span>{watcherCounts.degraded} degraded</span>
+            <span>{uploadQueue.queued} queued</span>
+            <span>{latestReconciliationAt === null ? "no reconciliation" : `last ${formatShortDate(latestReconciliationAt)}`}</span>
+          </div>
+          <div className="mini-action-row">
+            <button className="secondary-button" disabled={localWatcherLoading} onClick={() => void refreshLocalWatcherStatus()} type="button">
+              <RefreshCw aria-hidden="true" size={16} />
+              Refresh
+            </button>
+            <button
+              className="secondary-button"
+              disabled={localWatcherLoading}
+              onClick={() => void setWatcherCollectionEnabled(!(localWatcherStatus?.collectionEnabled ?? true))}
+              type="button"
+            >
+              <ShieldCheck aria-hidden="true" size={16} />
+              {localWatcherStatus?.collectionEnabled === false ? "Enable watcher" : "Disable watcher"}
+            </button>
+          </div>
+        </div>
+        {localWatcherError.length > 0 ? <p className="form-error">{localWatcherError}</p> : null}
+        {localAdapterStatuses.length > 0 ? (
+          <div className="watcher-list" aria-label="Adapter status">
+            {localAdapterStatuses.map((adapter) => (
+              <div className="watcher-row" key={adapter.provider}>
+                <div>
+                  <strong>{adapter.label}</strong>
+                  <small>
+                    {adapter.reason === null ? adapter.provider : `${adapter.provider} · ${adapter.reason.replaceAll("_", " ")}`}
+                    {adapter.lastEventAt === null ? "" : ` · ${formatShortDate(adapter.lastEventAt)}`}
+                  </small>
+                </div>
+                <span className={`status-badge ${adapterStatusClass(adapter)}`}>{adapter.status}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <div className="retention-policy-row" aria-label="Raw evidence retention">
+          <div>
+            <strong>Raw Evidence Retention</strong>
+            <small>{retentionSummary(retentionSettings)} · metadata, generated cards, and practice progress remain after raw purge</small>
+          </div>
+          <select
+            aria-label="Retention mode"
+            disabled={retentionLoading}
+            onChange={(event) => setRetentionMode(event.target.value as EvidenceRetentionMode)}
+            value={retentionMode}
+          >
+            <option value="default">Default cleanup</option>
+            <option value="disabled">Disabled</option>
+            <option value="immediate">Immediate purge</option>
+          </select>
+          {retentionMode === "default" ? (
+            <input
+              aria-label="Retention days"
+              disabled={retentionLoading}
+              max={3650}
+              min={1}
+              onChange={(event) => setRetentionDays(event.target.value)}
+              type="number"
+              value={retentionDays}
+            />
+          ) : null}
+          <button className="secondary-button" disabled={retentionLoading} onClick={() => void saveRetentionSettings()} type="button">
+            <ShieldCheck aria-hidden="true" size={16} />
+            Save
+          </button>
+          <button className="secondary-button danger-button" disabled={retentionLoading} onClick={() => void purgeAllRawEvidenceNow()} type="button">
+            <Trash2 aria-hidden="true" size={16} />
+            Purge now
+          </button>
+        </div>
+        {retentionMessage.length > 0 ? <p className="muted-copy">{retentionMessage}</p> : null}
+        <div className="watcher-list" aria-live="polite">
+          {localWatcherStatus?.watchers.length === 0 ? <p className="muted-copy">No watcher registrations.</p> : null}
+          {localWatcherStatus?.watchers.map((watcher) => (
+            <div className="watcher-row" key={watcher.repoIdentityHash}>
+              <div>
+                <strong>{watcher.repositoryDisplayLabel}</strong>
+                <small>
+                  {watcher.lastReconciliationAt === null ? "not reconciled" : formatShortDate(watcher.lastReconciliationAt)}
+                  {" · "}
+                  {watcher.lastReconciliationStatus ?? "status unknown"}
+                  {" · "}
+                  {watcher.lastReconciliationDiffCandidateCount} diff candidates
+                </small>
+              </div>
+              <span className={`status-badge ${watcherStatusClass(watcher)}`}>{watcherStateLabel(watcher)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="repository-approval-row">
+          <input
+            onChange={(event) => setRepositoryLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void approveRepository();
+              }
+            }}
+            placeholder="Repository label or path"
+            type="text"
+            value={repositoryLabel}
+          />
+          <button className="primary-button" onClick={() => void approveRepository()} type="button">
+            <CheckCircle2 aria-hidden="true" size={16} />
+            Approve
+          </button>
+        </div>
+        <div className="repository-list" aria-live="polite">
+          {localRepositories.length === 0 ? <p className="muted-copy">No repositories configured.</p> : null}
+          {localRepositories.map((repository) => (
+            <div className="repository-row" key={repository.repoIdentityHash}>
+              <div>
+                <strong>{repository.displayLabel}</strong>
+                <small>{repositoryStatusLabel(repository.status)} · {formatShortDate(repository.updatedAt)}</small>
+              </div>
+              <div className="mini-action-row">
+                <button onClick={() => void updateRepositoryStatus(repository, "approved")} type="button">Approve</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "revoked")} type="button">Revoke</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "always_ignored")} type="button">Ignore</button>
+                <button onClick={() => void updateRepositoryStatus(repository, "missing")} type="button">Missing</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function renderCollectedEvidencePanel() {
+    const selectedBundle = evidenceList.bundles.find((bundle) => bundle.id === selectedEvidenceId) ?? null;
+    const maxPage = Math.max(0, Math.ceil(evidenceList.total / evidenceList.pageSize) - 1);
+
+    return (
+      <div className="panel panel-wide evidence-panel">
+        <div className="panel-title">
+          <Database aria-hidden="true" size={20} />
+          <h2>Collected Evidence</h2>
+        </div>
+        <div className="action-row">
+          <button className="secondary-button" disabled={evidenceLoading} onClick={() => session !== null && void refreshEvidence(session)} type="button">
+            <RefreshCw aria-hidden="true" size={16} />
+            {evidenceLoading ? "Loading" : "Refresh"}
+          </button>
+          <button
+            className="secondary-button"
+            disabled={evidenceList.page === 0 || evidenceLoading || session === null}
+            onClick={() => session !== null && void refreshEvidence(session, evidenceList.page - 1)}
+            type="button"
+          >
+            <ChevronLeft aria-hidden="true" size={16} />
+            Previous
+          </button>
+          <button
+            className="secondary-button"
+            disabled={evidenceList.page >= maxPage || evidenceLoading || session === null}
+            onClick={() => session !== null && void refreshEvidence(session, evidenceList.page + 1)}
+            type="button"
+          >
+            Next
+            <ChevronRight aria-hidden="true" size={16} />
+          </button>
+          <span className="pagination-status">{evidenceList.total} bundles</span>
+        </div>
+        {evidenceError.length > 0 ? <p className="form-error">{evidenceError}</p> : null}
+        {evidenceActionMessage.length > 0 ? <p className="action-message">{evidenceActionMessage}</p> : null}
+        <div className="evidence-browser">
+          <div className="evidence-list" aria-label="Collected evidence list">
+            {evidenceList.bundles.length === 0 && !evidenceLoading ? <p className="muted-copy">No collected evidence yet.</p> : null}
+            {evidenceList.bundles.map((bundle) => (
+              <button
+                className={bundle.id === selectedEvidenceId ? "evidence-row evidence-row-active" : "evidence-row"}
+                key={bundle.id}
+                onClick={() => void selectEvidence(bundle.id)}
+                type="button"
+              >
+                <span>
+                  <strong>{bundle.title}</strong>
+                  <small>{bundle.sourceKind} · {formatShortDate(bundle.createdAt)}</small>
+                </span>
+                <span className={`status-badge ${bundleStatusClass(bundle)}`}>{bundleCurationLabel(bundle)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="evidence-detail" aria-live="polite">
+            {selectedBundle === null ? <p className="muted-copy">Select evidence to view bounded excerpts.</p> : null}
+            {selectedBundle !== null ? renderEvidenceSummary(selectedBundle) : null}
+            {evidenceDetailLoading ? <p className="muted-copy">Loading evidence excerpts.</p> : null}
+            {selectedBundle !== null && selectedEvidenceDetail?.bundle.id === selectedBundle.id ? renderEvidenceItems(selectedEvidenceDetail.evidenceItems) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEvidenceSummary(bundle: SourceBundleSummaryResponse) {
+    const canUseForGeneration = bundle.sourceKind === "local_ai_session" && bundle.status === "generation_eligible";
+    const canGenerate = canUseForGeneration && bundle.userAttribution === "use_for_generation";
+    const isGuiCorrelated = isGuiCorrelatedEvidence(bundle);
+    const blockedReason = generationBlockedReason(bundle);
+    const reasons = reasonCodes(bundle.attributionReasonsJson);
+
+    return (
+      <div className="evidence-summary">
+        <div>
+          <strong>{bundle.title}</strong>
+          <small>{bundle.repositoryUrl ?? "local evidence"} · {bundle.branchName ?? "branch unknown"}</small>
+        </div>
+        <div className="evidence-meta-grid">
+          <span>Auto: {attributionLabel(bundle.autoAttribution)}</span>
+          <span>User: {attributionLabel(bundle.userAttribution ?? "uncurated")}</span>
+          <span>Confidence: {bundle.attributionConfidence === null ? "unknown" : bundle.attributionConfidence.toFixed(2)}</span>
+          <span>{reasons.map(reasonCodeLabel).join(", ") || "no reason codes"}</span>
+        </div>
+        {isGuiCorrelated ? (
+          <div className="evidence-notice">
+            <ShieldCheck aria-hidden="true" size={16} />
+            <span>{guiCorrelationExplanation(bundle)}</span>
+          </div>
+        ) : null}
+        {blockedReason !== null ? <small className="evidence-blocked-copy">{blockedReason}</small> : null}
+        <div className="mini-action-row">
+          {isGuiCorrelated ? (
+            <button disabled={bundle.userAttribution === "manual"} onClick={() => void confirmGuiCorrelation(bundle)} type="button">
+              <CheckCircle2 aria-hidden="true" size={14} />
+              Confirm
+            </button>
+          ) : (
+            <button disabled={!canUseForGeneration} onClick={() => void applyEvidenceAttribution(bundle, "use_for_generation")} type="button">
+              <CheckCircle2 aria-hidden="true" size={14} />
+              Use
+            </button>
+          )}
+          <button onClick={() => void applyEvidenceAttribution(bundle, "manual")} type="button">
+            <Bot aria-hidden="true" size={14} />
+            Manual
+          </button>
+          <button disabled={!canGenerate} onClick={() => void generatePracticeFromEvidence(bundle)} type="button">
+            <Sparkles aria-hidden="true" size={14} />
+            Generate
+          </button>
+          <button onClick={() => void purgeEvidence(bundle)} type="button">
+            <Eye aria-hidden="true" size={14} />
+            Purge raw
+          </button>
+          <button onClick={() => void removeEvidence(bundle)} type="button">
+            <Trash2 aria-hidden="true" size={14} />
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderEvidenceItems(items: EvidenceItemResponse[]) {
+    if (items.length === 0) {
+      return <p className="muted-copy">No evidence items available.</p>;
+    }
+
+    return (
+      <div className="evidence-items">
+        {items.map((item) => (
+          <div className="evidence-item" key={item.id}>
+            <div>
+              <strong>{item.itemType}</strong>
+              <small>{item.repoRelativePath ?? "session artifact"} · {formatBytes(item.sizeBytes)}</small>
+            </div>
+            {item.contentText === null ? (
+              <small className="muted-copy">Raw content unavailable.</small>
+            ) : (
+              <pre>{item.contentText}</pre>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
 
     try {
-      const nextSession =
-        authMode === "register"
-          ? await registerUser(email, displayName, password)
-          : await createSession(email, password);
+      const nextSession = await createSession(email, password);
 
       setSession(nextSession);
       setPassword("");
@@ -1080,6 +1722,325 @@ export function App() {
     } catch (error) {
       setConversionTraces([]);
       setConversionTraceError(error instanceof Error ? error.message : "Conversion traces failed to load");
+    }
+  }
+
+  async function refreshEvidence(currentSession: SessionResponse, page = evidenceList.page) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+      setSelectedEvidenceId(null);
+      setSelectedEvidenceDetail(null);
+      return;
+    }
+
+    setEvidenceLoading(true);
+    setEvidenceError("");
+    try {
+      const list = await listEvidence(currentSession.token, currentMembership.organizationId, page, evidenceList.pageSize);
+      setEvidenceList(list);
+      if (selectedEvidenceId !== null && !list.bundles.some((bundle) => bundle.id === selectedEvidenceId)) {
+        evidenceDetailRequestRef.current += 1;
+        setSelectedEvidenceId(null);
+        setSelectedEvidenceDetail(null);
+      }
+    } catch (error) {
+      setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+      setEvidenceError(error instanceof Error ? error.message : "Collected evidence failed to load");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }
+
+  async function selectEvidence(bundleId: string) {
+    if (session === null) return;
+    const requestId = evidenceDetailRequestRef.current + 1;
+    evidenceDetailRequestRef.current = requestId;
+    setSelectedEvidenceId(bundleId);
+    setSelectedEvidenceDetail(null);
+    setEvidenceDetailLoading(true);
+    setOnboardingError("");
+    try {
+      const detail = await getEvidenceDetail(session.token, bundleId);
+      if (evidenceDetailRequestRef.current === requestId) {
+        setSelectedEvidenceDetail(detail);
+      }
+    } catch (error) {
+      if (evidenceDetailRequestRef.current === requestId) {
+        setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence detail failed to load");
+      }
+    } finally {
+      if (evidenceDetailRequestRef.current === requestId) {
+        setEvidenceDetailLoading(false);
+      }
+    }
+  }
+
+  async function refreshLocalRepositories(currentSession: SessionResponse) {
+    const currentMembership = primaryMembership(currentSession);
+    if (currentMembership === null) {
+      setLocalRepositories([]);
+      setRetentionSettings(null);
+      return;
+    }
+
+    try {
+      const repositories = await listLocalRepositories(currentSession.token, currentMembership.organizationId);
+      setLocalRepositories(repositories.map(toLocalRepositoryConsent));
+    } catch {
+      setLocalRepositories([]);
+    }
+    await refreshRetentionSettings(currentSession, currentMembership.organizationId);
+  }
+
+  async function refreshRetentionSettings(currentSession: SessionResponse, organizationId: string) {
+    try {
+      const settings = await getEvidenceRetentionSettings(currentSession.token, organizationId);
+      setRetentionSettings(settings);
+      setRetentionMode(settings.retentionMode);
+      setRetentionDays(retentionDaysFormValue(settings));
+    } catch {
+      setRetentionSettings(null);
+    }
+  }
+
+  async function refreshLocalWatcherStatus() {
+    setLocalWatcherLoading(true);
+    setLocalWatcherError("");
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/status`, {
+        headers: { "x-learnloop-local-token": localToken }
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher status is unavailable");
+      setLocalWatcherStatus(toLocalWatcherStatus(payload));
+      await refreshLocalAdapterStatus(localToken);
+    } catch (error) {
+      setLocalWatcherStatus(null);
+      setLocalAdapterStatuses([]);
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher status is unavailable");
+    } finally {
+      setLocalWatcherLoading(false);
+    }
+  }
+
+  async function refreshLocalAdapterStatus(localToken: string) {
+    try {
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/adapters/status`, {
+        headers: { "x-learnloop-local-token": localToken }
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionAdapterStatusResponse;
+      setLocalAdapterStatuses(response.ok ? toLocalAdapterStatuses(payload) : []);
+    } catch {
+      setLocalAdapterStatuses([]);
+    }
+  }
+
+  async function setWatcherCollectionEnabled(enabled: boolean) {
+    setLocalWatcherLoading(true);
+    setLocalWatcherError("");
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
+        body: JSON.stringify({ enabled })
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher setting update failed");
+      setLocalWatcherStatus(toLocalWatcherStatus(payload));
+      await refreshLocalAdapterStatus(localToken);
+    } catch (error) {
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher setting update failed");
+    } finally {
+      setLocalWatcherLoading(false);
+    }
+  }
+
+  async function syncCompanionWatcherRepository(
+    repoIdentityHash: string,
+    displayLabel: string,
+    status: RepositoryConsentStatus,
+    repoRoot?: string
+  ) {
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/watchers/repositories`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
+        body: JSON.stringify({
+          repoIdentityHash,
+          repositoryDisplayLabel: displayLabel,
+          repoRoot,
+          status
+        })
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
+      if (!response.ok) throw new Error(payload.message || "Watcher repository sync failed");
+      await refreshLocalWatcherStatus();
+    } catch (error) {
+      setLocalWatcherError(error instanceof Error ? error.message : "Watcher repository sync failed");
+    }
+  }
+
+  async function approveRepository() {
+    if (session === null || membership === null) return;
+    const label = repositoryLabel.trim();
+    if (label.length === 0) return;
+    setEvidenceActionMessage("");
+    try {
+      const repoIdentityHash = await repositoryIdentityHash(label);
+      await updateLocalRepository(session.token, repoIdentityHash, {
+        organizationId: membership.organizationId,
+        displayLabel: repositoryDisplayLabel(label),
+        status: "approved"
+      });
+      await syncCompanionWatcherRepository(repoIdentityHash, repositoryDisplayLabel(label), "approved", label);
+      await refreshLocalRepositories(session);
+      setRepositoryLabel("");
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? error.message : "Repository approval failed");
+    }
+  }
+
+  async function updateRepositoryStatus(repository: LocalRepositoryConsent, status: RepositoryConsentStatus) {
+    if (session === null || membership === null) return;
+    setOnboardingError("");
+    try {
+      await updateLocalRepository(session.token, repository.repoIdentityHash, {
+        organizationId: membership.organizationId,
+        displayLabel: repository.displayLabel,
+        status
+      });
+      await syncCompanionWatcherRepository(repository.repoIdentityHash, repository.displayLabel, status);
+      await refreshLocalRepositories(session);
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? error.message : "Repository status update failed");
+    }
+  }
+
+  async function confirmGuiCorrelation(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    setEvidenceActionMessage("");
+    try {
+      await updateEvidenceAttribution(session.token, bundle.id, {
+        userAttribution: "manual",
+        attributionConfidence: bundle.attributionConfidence ?? undefined,
+        attributionReasons: ["human_review"]
+      });
+      setEvidenceActionMessage("GUI correlation confirmed. Generation remains blocked until direct AI output or patch data is attached.");
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence confirmation failed");
+    }
+  }
+
+  async function applyEvidenceAttribution(bundle: SourceBundleSummaryResponse, userAttribution: "use_for_generation" | "manual") {
+    if (session === null) return;
+    setEvidenceActionMessage("");
+    try {
+      await updateEvidenceAttribution(session.token, bundle.id, {
+        userAttribution,
+        attributionConfidence: userAttribution === "use_for_generation" ? 0.9 : undefined,
+        attributionReasons: [userAttribution === "use_for_generation" ? "curation_approved" : "human_review"]
+      });
+      setEvidenceActionMessage("Evidence curation updated.");
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence curation failed");
+    }
+  }
+
+  async function removeEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    if (!window.confirm(`Delete "${bundle.title}" from collected evidence?`)) return;
+    setEvidenceActionMessage("");
+    try {
+      await deleteEvidence(session.token, bundle.id);
+      setEvidenceActionMessage("Evidence deleted.");
+      setSelectedEvidenceId(null);
+      setSelectedEvidenceDetail(null);
+      await refreshEvidence(session);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Evidence delete failed");
+    }
+  }
+
+  async function purgeEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null) return;
+    if (!window.confirm(`Purge raw evidence for "${bundle.title}"?`)) return;
+    setEvidenceActionMessage("");
+    try {
+      const result = await purgeEvidenceRaw(session.token, bundle.id);
+      setEvidenceActionMessage(`Purged ${result.purgedItems} raw items.`);
+      await refreshEvidence(session);
+      await selectEvidence(bundle.id);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Raw purge failed");
+    }
+  }
+
+  async function saveRetentionSettings() {
+    if (session === null || membership === null) return;
+    setRetentionLoading(true);
+    setRetentionMessage("");
+    try {
+      const settings = await updateEvidenceRetentionSettings(session.token, {
+        organizationId: membership.organizationId,
+        retentionMode,
+        retentionDays: retentionMode === "default" ? normalizeRetentionDays(retentionDays) : null
+      });
+      setRetentionSettings(settings);
+      setRetentionMode(settings.retentionMode);
+      setRetentionDays(retentionDaysFormValue(settings));
+      setRetentionMessage("Retention policy saved.");
+    } catch (error) {
+      setRetentionMessage(error instanceof Error ? error.message : "Retention policy update failed");
+    } finally {
+      setRetentionLoading(false);
+    }
+  }
+
+  async function purgeAllRawEvidenceNow() {
+    if (session === null || membership === null) return;
+    if (!window.confirm("Purge all raw evidence now? Metadata, generated cards, and practice progress remain.")) return;
+    setRetentionLoading(true);
+    setRetentionMessage("");
+    try {
+      const result = await purgeEvidenceRawScope(session.token, {
+        organizationId: membership.organizationId,
+        purgeAll: true
+      });
+      setRetentionMessage(`Purged ${result.purgedItems} raw items. Metadata, generated cards, and practice progress remain.`);
+      await refreshEvidence(session);
+    } catch (error) {
+      setRetentionMessage(error instanceof Error ? error.message : "Raw purge failed");
+    } finally {
+      setRetentionLoading(false);
+    }
+  }
+
+  async function generatePracticeFromEvidence(bundle: SourceBundleSummaryResponse) {
+    if (session === null || membership === null) return;
+    const providerId = providers.find((provider) => provider.status === "active")?.id ?? "provider-local-mock";
+    setEvidenceActionMessage("");
+    try {
+      const result = await generateFromEvidence(session.token, {
+        organizationId: membership.organizationId,
+        providerConfigId: providerId,
+        sourceBundleId: bundle.id,
+        visibility: "private"
+      });
+      setLatestCard(result.patternCard);
+      setActivity((items) => [`Generated ${result.patternCard.title}`, ...items].slice(0, 6));
+      setEvidenceActionMessage("Practice generated.");
+      await refreshLibrary(session);
+      await refreshConversionTraces(session);
+    } catch (error) {
+      setEvidenceActionMessage(error instanceof Error ? error.message : "Generation failed");
     }
   }
 
@@ -1385,12 +2346,12 @@ export function App() {
         </div>
         <div className="feedback-section">
           <span>Pattern feedback</span>
-          <small>Pattern feedback will appear after review.</small>
+          <small>Pattern feedback will appear after curation.</small>
         </div>
         <div className="feedback-section">
           <span>Recommendations</span>
           {status === "failed" || status === "compile_error" ? (
-            <small>Review the runner output and try again.</small>
+            <small>Inspect the runner output and try again.</small>
           ) : nextRecommendations.length > 0 ? (
             nextRecommendations.map((card) => <small key={card.id}>{card.title}</small>)
           ) : (
@@ -1408,7 +2369,7 @@ export function App() {
   }
 
   function reviewStatusLabel(status: string | null): string {
-    if (status === "open") return "Review open";
+    if (status === "open") return "Curation open";
     if (status === "approved") return "Approved";
     if (status === "changes_requested") return "Changes requested";
     if (status === "rejected") return "Rejected";
@@ -1534,6 +2495,12 @@ export function App() {
     setConversionTraces([]);
     setConversionTraceError("");
     setLibraryError("");
+    setEvidenceList({ bundles: [], page: 0, pageSize: 50, total: 0 });
+    setEvidenceError("");
+    setSelectedEvidenceId(null);
+    setSelectedEvidenceDetail(null);
+    setEvidenceActionMessage("");
+    setLocalRepositories([]);
     setActivePractice(null);
     setActivePracticePath(null);
     setRevealedHintIds([]);
@@ -1546,6 +2513,7 @@ export function App() {
     setPracticeError("");
     setActivity([]);
     setShowOnboarding(false);
+    evidenceDetailRequestRef.current += 1;
     replaceLocalAiSetupHistoryState();
   }
 
@@ -1605,9 +2573,10 @@ export function App() {
     setOauthConnection({ status: "starting", message: "Opening local OAuth connection." });
 
     try {
+      const localToken = await readLocalCompanionToken();
       const response = await fetch(`${LOCAL_AI_COMPANION_URL}/oauth/start`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
         body: JSON.stringify({ provider: selectedAiProvider })
       });
       const payload = await readCompanionResponse(response);
@@ -1674,10 +2643,11 @@ export function App() {
         `Code ${result.codeBundle.status}`,
         `Conversation ${result.conversationBundle.status}`,
         `Link ${result.sourceLink.status}`,
-        `Review ${result.reviewTask.status}`,
+        `Curation ${result.reviewTask.status}`,
         `Card ${result.patternCard.publicationStatus}`
       ]);
       void refreshConversionTraces(session);
+      void refreshEvidence(session);
     } catch (error) {
       setActivity([error instanceof Error ? error.message : "Flow failed"]);
     } finally {
