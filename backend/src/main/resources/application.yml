@@ -28,6 +28,8 @@ springdoc:
 app:
   session:
     ttl: PT8H
+  local-owner:
+    enforce-session-owner: ${APP_LOCAL_OWNER_ENFORCE_SESSION_OWNER:true}
   login-rate-limit:
     max-attempts: 5
     window: PT1M
