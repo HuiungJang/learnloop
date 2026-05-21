@@ -264,6 +264,7 @@ data class LocalRepositoryConsentResponse(
     val repoIdentityHash: String,
     val organizationId: String,
     val displayLabel: String,
+    val repoRoot: String?,
     val status: String,
     val updatedAt: Instant,
 )
@@ -275,6 +276,7 @@ data class LocalRepositoryConsentRequest(
     val displayLabel: String = "",
     @field:NotBlank
     val status: String = "",
+    val repoRoot: String? = null,
 )
 
 data class EvidenceListResponse(
@@ -472,6 +474,7 @@ fun LocalRepositoryConsentEntity.toResponse(): LocalRepositoryConsentResponse =
         repoIdentityHash = repoIdentityHash,
         organizationId = organizationId,
         displayLabel = displayLabel,
+        repoRoot = repoRoot,
         status = status,
         updatedAt = updatedAt,
     )

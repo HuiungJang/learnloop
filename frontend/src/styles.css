@@ -280,8 +280,20 @@ a {
 }
 
 .nav-list button span {
+  display: grid;
+  gap: 2px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.nav-list button strong {
+  color: var(--charcoal);
+  font-weight: 600;
+}
+
+.nav-list button small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 button svg {
@@ -342,6 +354,14 @@ button svg {
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 32px;
+}
+
+.page-description {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .eyebrow {
@@ -450,6 +470,18 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
   gap: 16px;
+  margin-top: 16px;
+}
+
+.dashboard-grid,
+.page-stack,
+.practice-page {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 16px;
 }
 
@@ -568,6 +600,11 @@ h1 {
   gap: 10px;
 }
 
+.trace-browser,
+.practice-browser {
+  align-items: start;
+}
+
 .trace-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -600,6 +637,45 @@ h1 {
 }
 
 .trace-cell small {
+  color: var(--muted);
+}
+
+.trace-detail-section,
+.practice-detail-summary,
+.empty-detail-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trace-detail-section:last-child,
+.practice-detail-summary:last-child,
+.empty-detail-panel:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.trace-detail-section strong {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.trace-detail-section span,
+.trace-detail-section small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.trace-detail-section span {
+  color: var(--charcoal);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.trace-detail-section small {
   color: var(--muted);
 }
 
@@ -858,9 +934,18 @@ h1 {
   box-shadow: var(--focus-shadow);
 }
 
+.practice-list-row strong,
+.practice-list-row small {
+  display: block;
+}
+
 .practice-card-list {
   display: grid;
   gap: 12px;
+}
+
+.practice-library-panel .practice-card-list {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .practice-card {
@@ -870,9 +955,21 @@ h1 {
   border-top: 1px solid var(--border);
 }
 
+.practice-library-panel .practice-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
 .practice-card:first-child {
   padding-top: 0;
   border-top: 0;
+}
+
+.practice-library-panel .practice-card:first-child {
+  padding: 14px;
+  border: 1px solid var(--border);
 }
 
 .practice-card-header {
@@ -896,11 +993,45 @@ h1 {
   width: fit-content;
 }
 
+.problem-action-list {
+  align-items: center;
+}
+
+.problem-action-list button {
+  width: fit-content;
+}
+
+.empty-detail-panel {
+  place-items: center;
+  min-height: 220px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .practice-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
   gap: 16px;
   margin-top: 16px;
+}
+
+.practice-detail .practice-workbench {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+
+.practice-detail .practice-main-panel,
+.practice-detail .practice-side-panel {
+  min-height: auto;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.practice-detail .panel-title {
+  margin-bottom: 14px;
 }
 
 .practice-main-panel,
@@ -1380,6 +1511,11 @@ h1 {
   padding-top: 40px;
 }
 
+.ai-setup-page {
+  min-height: auto;
+  padding-top: 0;
+}
+
 .onboarding-header {
   display: flex;
   align-items: flex-start;
@@ -1396,6 +1532,20 @@ h1 {
   background: var(--cream);
 }
 
+.settings-section .panel-title {
+  margin-bottom: 0;
+}
+
+.settings-section button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.settings-section .mini-action-row button {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
 .repository-approval-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1404,19 +1554,47 @@ h1 {
 
 .retention-policy-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, auto) minmax(96px, 120px) auto auto;
-  align-items: end;
-  gap: 10px;
+  gap: 12px;
+  padding-top: 2px;
 }
 
+.setting-copy,
 .retention-policy-row > div {
   min-width: 0;
+}
+
+.setting-copy {
+  max-width: 680px;
 }
 
 .retention-policy-row small {
   display: block;
   margin-top: 4px;
   color: rgba(28, 28, 28, 0.72);
+}
+
+.retention-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.retention-controls select {
+  flex: 1 1 180px;
+  max-width: 240px;
+}
+
+.retention-controls input {
+  flex: 0 0 96px;
+}
+
+.retention-controls .secondary-button {
+  flex: 0 0 96px;
+}
+
+.retention-controls .danger-button {
+  flex-basis: 112px;
 }
 
 .watcher-toolbar {
@@ -1445,6 +1623,7 @@ h1 {
 }
 
 .repository-approval-row input,
+.path-picker-button,
 .retention-policy-row input,
 .retention-policy-row select {
   min-width: 0;
@@ -1454,6 +1633,40 @@ h1 {
   border-radius: 6px;
   color: var(--charcoal);
   background: var(--cream);
+}
+
+.path-picker-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  color: var(--muted);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.path-picker-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-picker-button:hover,
+.path-picker-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+.path-picker-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.repository-approval-row .primary-button {
+  min-width: 112px;
 }
 
 .repository-row {
@@ -1661,6 +1874,23 @@ h1 {
   .retention-policy-row,
   .repository-row {
     grid-template-columns: 1fr;
+  }
+
+  .retention-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .retention-controls select,
+  .retention-controls input,
+  .retention-controls .secondary-button,
+  .problem-action-list button {
+    width: 100%;
+    max-width: none;
+  }
+
+  .path-picker-button span {
+    white-space: normal;
   }
 
   .nav-list {

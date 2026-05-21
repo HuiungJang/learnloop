@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { chmod, lstat, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -96,8 +96,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/auth/token") {
       assertTokenDisclosureOrigin(req);
-      const token = createOAuthStartToken();
-      sendJson(res, 200, { status: "ok", token, scope: "oauth_start", expiresInSeconds: 60 });
+      sendJson(res, 200, { status: "ok", token: localApiToken, scope: "local_api" });
       return;
     }
 
@@ -142,6 +141,15 @@ const server = http.createServer(async (req, res) => {
       assertRateLimit(req, url.pathname);
       assertLocalApiToken(req);
       sendJson(res, 200, await readHostProcessSnapshot());
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/host/directory-picker") {
+      assertRateLimit(req, url.pathname);
+      assertLocalApiToken(req);
+      const body = await readJson(req);
+      const selectedPath = await chooseHostDirectory(body);
+      sendJson(res, 200, selectedPath === null ? { status: "cancelled", path: null } : { status: "ok", path: selectedPath });
       return;
     }
 
@@ -506,6 +514,35 @@ function runCommand(command, args, timeoutMs) {
       finish({ code, errorCode: null, timedOut: false, output });
     });
   });
+}
+
+async function chooseHostDirectory(value) {
+  if (process.platform !== "darwin") {
+    throw httpError(501, "Directory picker is only available on macOS");
+  }
+
+  const input = typeof value === "object" && value !== null ? value : {};
+  const prompt = safeString(input.prompt, 160) || "Choose a folder.";
+  const result = await runCommand("osascript", ["-e", `POSIX path of (choose folder with prompt ${appleScriptString(prompt)})`], 120_000);
+  if (result.code !== 0) {
+    if (/user canceled/i.test(result.output)) return null;
+    throw httpError(500, trimmedMessage(result.output) || "Directory picker failed");
+  }
+
+  const selectedPath = result.output.trim().split("\n").at(-1)?.trim();
+  if (!selectedPath || !path.isAbsolute(selectedPath)) {
+    throw httpError(500, "Directory picker returned an invalid path");
+  }
+  const resolvedPath = await realpath(selectedPath);
+  const selectedStats = await lstat(resolvedPath);
+  if (!selectedStats.isDirectory()) {
+    throw httpError(400, "Selected path is not a directory");
+  }
+  return resolvedPath;
+}
+
+function appleScriptString(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function stateFor(provider) {

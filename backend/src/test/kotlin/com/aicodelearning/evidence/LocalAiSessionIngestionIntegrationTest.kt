@@ -107,6 +107,43 @@ class LocalAiSessionIngestionIntegrationTest {
     }
 
     @Test
+    fun `local repository consent persists repo root for watcher restore`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+        val repoIdentityHash = "repo-root-${System.nanoTime()}"
+        val approved =
+            patchJson(
+                "/api/local-repositories/$repoIdentityHash",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "displayLabel" to "local repo",
+                    "repoRoot" to repoRoot.toString(),
+                    "status" to "approved",
+                ),
+            )
+
+        assertEquals(HttpStatus.OK, approved.statusCode)
+        assertEquals(repoRoot.toString(), json(approved)["repoRoot"].asText())
+
+        val revoked =
+            patchJson(
+                "/api/local-repositories/$repoIdentityHash",
+                owner.token,
+                mapOf(
+                    "organizationId" to "org-demo",
+                    "displayLabel" to "local repo",
+                    "status" to "revoked",
+                ),
+            )
+        val listed = getJson("/api/local-repositories?organizationId=org-demo", owner.token)
+
+        assertEquals(HttpStatus.OK, revoked.statusCode)
+        assertEquals(repoRoot.toString(), json(revoked)["repoRoot"].asText())
+        assertTrue(json(listed)["repositories"].any { it["repoRoot"].asText() == repoRoot.toString() })
+    }
+
+    @Test
     fun `evidence list returns local session summaries without raw artifact content`() {
         val owner = login()
         val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
