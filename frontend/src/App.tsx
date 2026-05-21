@@ -290,6 +290,7 @@ const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const SESSION_STORAGE_KEY = "learnloop:session";
 const LOCAL_OWNER_USER_ID = "u-local-owner";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
+const RUNNER_ONBOARDING_STORAGE_PREFIX = "learnloop:runner-onboarding:";
 const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
@@ -304,6 +305,10 @@ function localAiStorageKey(userId: string) {
 
 function legacyLocalAiStorageKey(userId: string) {
   return `${LEGACY_LOCAL_AI_STORAGE_PREFIX}${userId}`;
+}
+
+function runnerOnboardingStorageKey(userId: string) {
+  return `${RUNNER_ONBOARDING_STORAGE_PREFIX}${userId}`;
 }
 
 function readLocalAiSettings(userId: string): LocalAiSettings | null {
@@ -2918,6 +2923,7 @@ export function App() {
     event.preventDefault();
     if (session === null) return;
 
+    const wasFirstLocalSetup = localAiSettings === null && window.localStorage.getItem(runnerOnboardingStorageKey(session.user.id)) !== "done";
     const apiKey = localApiKey.trim();
     const label = oauthLabel.trim();
     if (selectedAuthMethod === "api_key" && apiKey.length === 0) {
@@ -2940,7 +2946,12 @@ export function App() {
     setLocalAiSettings(nextSettings);
     setLocalApiKey("");
     setOnboardingError("");
-    goToDashboard();
+    if (wasFirstLocalSetup) {
+      window.localStorage.setItem(runnerOnboardingStorageKey(session.user.id), "done");
+      setActivePage("runners");
+    } else {
+      goToDashboard();
+    }
   }
 
   function openLocalAiSetup() {

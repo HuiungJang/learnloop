@@ -152,6 +152,13 @@ try {
   assert.equal(await page.getByRole("button", { name: /^OAuth$/i }).isDisabled(), true);
   await page.getByLabel("API key").fill(localAiKey);
   await page.getByRole("button", { name: /Save local setup/i }).click();
+  await page.getByRole("heading", { name: /Install only the languages you use/i }).waitFor();
+  await page.locator(".runner-language-row", { hasText: /TypeScript/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Kotlin/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Java/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Swift/ }).getByText(/optional/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/optional/i).waitFor();
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   const storedApiKeySettings = await page.evaluate((needle) => {
