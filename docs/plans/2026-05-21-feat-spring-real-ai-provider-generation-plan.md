@@ -301,59 +301,59 @@ Verification:
 
 Scope:
 
-- [ ] Add a Spring generation integration test with a fake OpenAI-compatible provider URL.
-- [ ] Assert fake provider request count is exactly one.
-- [ ] Assert generated title comes from fake provider output, not `inferPattern`.
+- [x] Add a Spring generation integration test with a fake OpenAI-compatible provider URL.
+- [x] Assert fake provider request count is exactly one.
+- [x] Assert generated title comes from fake provider output, not `inferPattern`.
 
 Verification:
 
-- [ ] Test fails on current code because no provider HTTP request is made.
-- [ ] `./gradlew :backend:test --tests "*Generation*"`
+- [x] Test fails on current code because no provider HTTP request is made.
+- [x] `./gradlew :backend:test --tests "*Generation*"`
 
 ### Slice 3: Failing Test: Invalid Output Creates No Assets
 
 Scope:
 
-- [ ] Add a fake provider response with invalid JSON.
-- [ ] Assert one failed generation run is persisted with a safe failure code.
-- [ ] Assert zero new pattern cards, tag links, problems, and review tasks.
+- [x] Add a fake provider response with invalid JSON.
+- [x] Assert one failed generation run is persisted with a safe failure code.
+- [x] Assert zero new pattern cards, tag links, problems, and review tasks.
 
 Verification:
 
-- [ ] Test fails on current code because current generation succeeds heuristically.
-- [ ] `./gradlew :backend:test --tests "*Generation*"`
+- [x] Test fails on current code because current generation succeeds heuristically.
+- [x] `./gradlew :backend:test --tests "*Generation*"`
 
 ### Slice 4: Failing Test: Provider HTTP Failure Is Safe
 
 Scope:
 
-- [ ] Add fake provider `401` or `403` response test.
-- [ ] Assert public API error is safe and includes `generationRunId` plus `failureCode`.
-- [ ] Assert response/audit/log assertions do not include provider response body or credential.
+- [x] Add fake provider `401` or `403` response test.
+- [x] Assert public API error is safe and includes `generationRunId` plus `failureCode`.
+- [x] Assert response/audit/log assertions do not include provider response body or credential.
 
 Verification:
 
-- [ ] Test fails on current code because provider HTTP is not called.
-- [ ] `./gradlew :backend:test --tests "*Generation*"`
+- [x] Test fails on current code because provider HTTP is not called.
+- [x] `./gradlew :backend:test --tests "*Generation*"`
 
 ### Slice 5: Failing Test: Local Mock Makes Zero HTTP Requests
 
 Scope:
 
-- [ ] Add a regression test for `provider-local-mock`.
-- [ ] Assert deterministic local generation still succeeds.
-- [ ] Assert fake provider request count remains zero.
+- [x] Add a regression test for `provider-local-mock`.
+- [x] Assert deterministic local generation still succeeds.
+- [x] Assert fake provider request count remains zero.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*Generation*"`
+- [x] `./gradlew :backend:test --tests "*Generation*"`
 
 ### Slice 6: Migration Columns Only
 
 Scope:
 
-- [ ] Add next Flyway migration with nullable `base_url`, `credential_algorithm`, `credential_iv`, `credential_tag`, and `credential_ciphertext`.
-- [ ] Keep existing rows valid.
+- [x] Add next Flyway migration with nullable `base_url`, `credential_algorithm`, `credential_iv`, `credential_tag`, and `credential_ciphertext`.
+- [x] Keep existing rows valid.
 - [ ] Do not add constraints in this slice.
 
 Verification:
@@ -365,8 +365,8 @@ Verification:
 
 Scope:
 
-- [ ] Add all-null/all-present constraint for encrypted credential fields.
-- [ ] Add `credential_algorithm` constraint for `AES_GCM_V1` or null.
+- [x] Add all-null/all-present constraint for encrypted credential fields.
+- [x] Add `credential_algorithm` constraint for `AES_GCM_V1` or null.
 - [ ] Add migration fixture for `provider-local-mock` and legacy non-local hash-only row.
 
 Verification:
@@ -379,15 +379,15 @@ Verification:
 
 Scope:
 
-- [ ] Add new fields to `ProviderEntity`.
-- [ ] Keep DTO responses from exposing ciphertext, IV, tag, or algorithm.
-- [ ] Keep local mock nullable credential fields valid.
+- [x] Add new fields to `ProviderEntity`.
+- [x] Keep DTO responses from exposing ciphertext, IV, tag, or algorithm.
+- [x] Keep local mock nullable credential fields valid.
 
 Verification:
 
 - [ ] Repository/entity test persists and reloads a provider with encrypted fields.
-- [ ] Provider API response JSON does not include encrypted fields.
-- [ ] `./gradlew :backend:test --tests "*Provider*"`
+- [x] Provider API response JSON does not include encrypted fields.
+- [x] `./gradlew :backend:test --tests "*Provider*"`
 
 ### Slice 9: Provider Configuration Properties
 

@@ -21,3 +21,6 @@ app:
   local-owner:
     email: ${APP_LOCAL_OWNER_EMAIL:owner@local.learnloop}
     display-name: ${APP_LOCAL_OWNER_DISPLAY_NAME:Local Owner}
+  provider-generation:
+    credential-encryption-key: ${APP_CREDENTIAL_ENCRYPTION_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+    allow-loopback-base-url: ${APP_PROVIDER_ALLOW_LOOPBACK_BASE_URL:true}

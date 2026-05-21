@@ -13,20 +13,26 @@ import com.aicodelearning.evidence.stableLocalSessionItemOrder
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ForbiddenException
-import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
-import com.aicodelearning.provider.ProviderRepository
+import com.aicodelearning.provider.PatternGenerationClientFactory
+import com.aicodelearning.provider.PatternGenerationClientRequest
+import com.aicodelearning.provider.PatternGenerationResult
+import com.aicodelearning.provider.ProviderConfigResolver
+import com.aicodelearning.provider.ProviderFailureCode
+import com.aicodelearning.provider.ProviderGenerationApiException
+import com.aicodelearning.provider.ProviderGenerationException
+import com.aicodelearning.provider.ResolvedProviderConfig
 import com.aicodelearning.source.SourceLinkRepository
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 
 @Service
 class GenerationService(
-    private val providerRepository: ProviderRepository,
     private val sourceLinkRepository: SourceLinkRepository,
     private val sourceBundleRepository: SourceBundleRepository,
     private val evidenceItemRepository: EvidenceItemRepository,
@@ -40,13 +46,76 @@ class GenerationService(
     private val auditService: AuditService,
     private val patternReadService: PatternReadService,
     private val patternRecognitionPromptBuilder: PatternRecognitionPromptBuilder,
+    private val providerConfigResolver: ProviderConfigResolver,
+    private val patternGenerationClientFactory: PatternGenerationClientFactory,
+    private val transactionTemplate: TransactionTemplate,
     private val objectMapper: ObjectMapper,
 ) {
-    @Transactional
     fun run(
         currentUser: CurrentUser,
         request: GenerationRequest,
     ): GenerationResponse {
+        val existing =
+            request.idempotencyKey?.let { idempotencyKey ->
+                transactionTemplate.execute {
+                    existingCompletedGeneration(currentUser, request.organizationId, idempotencyKey)
+                }
+            }
+        if (existing != null) {
+            return existing
+        }
+
+        val preflight =
+            transactionTemplate.execute {
+                prepareGeneration(currentUser, request)
+            } ?: throw BadRequestException("Generation could not be prepared")
+
+        val generated =
+            try {
+                patternGenerationClientFactory
+                    .clientFor(preflight.provider.provider)
+                    .generate(
+                        PatternGenerationClientRequest(
+                            providerConfig = preflight.provider,
+                            promptText = preflight.recognitionPrompt.promptText,
+                            evidenceExcerpt = preflight.recognitionPrompt.evidenceExcerpt,
+                        ),
+                    )
+            } catch (exception: ProviderGenerationException) {
+                val failedRun =
+                    transactionTemplate.execute {
+                        recordFailedGeneration(currentUser, preflight, exception.failureCode)
+                    } ?: throw exception
+                throw ProviderGenerationApiException(failedRun.id, exception.failureCode)
+            }
+
+        return transactionTemplate.execute {
+            persistGeneratedAssets(currentUser, preflight, generated)
+        } ?: throw BadRequestException("Generation could not be persisted")
+    }
+
+    private fun existingCompletedGeneration(
+        currentUser: CurrentUser,
+        organizationId: String,
+        idempotencyKey: String,
+    ): GenerationResponse? {
+        val existing = generationRunRepository.findByOrganizationIdAndIdempotencyKey(organizationId, idempotencyKey)
+        val existingCard = existing?.let { run -> patternCardRepository.findByGenerationRunId(run.id) }
+        val existingTask = existingCard?.let { card -> reviewTaskRepository.findByPatternCardId(card.id) }
+        if (existing != null && existingCard != null && existingTask != null) {
+            if (existing.createdByUserId != currentUser.id) {
+                throw ForbiddenException("Idempotency key belongs to another generation request")
+            }
+            authorizationService.requireRole(currentUser, existingCard.organizationId, "contributor", existingCard.teamId, existingCard.projectId)
+            return GenerationResponse(existing.toResponse(), patternReadService.toResponse(currentUser, existingCard, true), existingTask.toResponse())
+        }
+        return null
+    }
+
+    private fun prepareGeneration(
+        currentUser: CurrentUser,
+        request: GenerationRequest,
+    ): GenerationPreflight {
         if (request.visibility !in setOf("private", "organization")) {
             throw BadRequestException("visibility must be private or organization")
         }
@@ -56,29 +125,8 @@ class GenerationService(
         if (request.sourceLinkIds.isNotEmpty() && request.sourceBundleIds.isNotEmpty()) {
             throw BadRequestException("Choose either source links or source bundles")
         }
-        request.idempotencyKey?.let {
-            val existing = generationRunRepository.findByOrganizationIdAndIdempotencyKey(request.organizationId, it)
-            val existingCard = existing?.let { run -> patternCardRepository.findByGenerationRunId(run.id) }
-            val existingTask = existingCard?.let { card -> reviewTaskRepository.findByPatternCardId(card.id) }
-            if (existing != null && existingCard != null && existingTask != null) {
-                if (existing.createdByUserId != currentUser.id) {
-                    throw ForbiddenException("Idempotency key belongs to another generation request")
-                }
-                authorizationService.requireRole(currentUser, existingCard.organizationId, "contributor", existingCard.teamId, existingCard.projectId)
-                return GenerationResponse(existing.toResponse(), patternReadService.toResponse(currentUser, existingCard, true), existingTask.toResponse())
-            }
-        }
 
-        val provider = providerRepository.findById(request.providerConfigId).orElseThrow { NotFoundException("Provider not found") }
-        if (provider.organizationId != request.organizationId || provider.status != "active") {
-            throw BadRequestException("Provider is not active for this organization")
-        }
-        if (provider.scope == "personal" && provider.ownerUserId != currentUser.id) {
-            throw ForbiddenException("Personal provider can only be used by its owner")
-        }
-        if (request.visibility == "organization" && !provider.orgApproved) {
-            throw ForbiddenException("Organization publication requires an approved provider")
-        }
+        val provider = providerConfigResolver.resolve(currentUser, request.organizationId, request.providerConfigId, request.visibility)
 
         val sources =
             if (request.sourceLinkIds.isNotEmpty()) {
@@ -90,6 +138,27 @@ class GenerationService(
             throw BadRequestException("Generation requires unpurged source evidence")
         }
 
+        val evidenceText =
+            sources.evidenceItems
+                .map { requireNotNull(it.contentText) }
+                .joinToString("\n")
+
+        val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
+        return GenerationPreflight(
+            request = request,
+            provider = provider,
+            sources = sources,
+            recognitionPrompt = recognitionPrompt,
+        )
+    }
+
+    private fun persistGeneratedAssets(
+        currentUser: CurrentUser,
+        preflight: GenerationPreflight,
+        generated: PatternGenerationResult,
+    ): GenerationResponse {
+        val request = preflight.request
+        val sources = preflight.sources
         val now = Instant.now()
         val run =
             generationRunRepository.save(
@@ -108,14 +177,6 @@ class GenerationService(
                     completedAt = now,
                 ),
             )
-
-        val evidenceText =
-            sources.evidenceItems
-                .map { requireNotNull(it.contentText) }
-                .joinToString("\n")
-
-        val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
-        val inferred = inferPattern(recognitionPrompt.evidenceExcerpt)
         val card =
             patternCardRepository.save(
                 PatternCardEntity(
@@ -125,21 +186,21 @@ class GenerationService(
                     projectId = sources.firstBundle.projectId,
                     generationRunId = run.id,
                     createdByUserId = currentUser.id,
-                    title = inferred.title,
-                    summary = inferred.summary,
+                    title = generated.title,
+                    summary = generated.summary,
                     visibility = request.visibility,
                     publicationStatus = "draft",
                     createdAt = now,
                 ),
             )
-        inferred.tags.forEach { tag ->
+        generated.tags.forEach { tag ->
             val normalized = tag.name.lowercase()
             val entity =
                 patternTagRepository.findByNormalizedName(normalized)
                     ?: patternTagRepository.save(PatternTagEntity(id = prefixedId("tag"), tagType = tag.type, name = tag.name, normalizedName = normalized))
             patternTagLinkRepository.save(PatternTagLinkEntity(patternCardId = card.id, tagId = entity.id))
         }
-        inferred.problems.forEach {
+        generated.problems.forEach {
             problemRepository.save(
                 ProblemEntity(
                     id = prefixedId("problem"),
@@ -165,6 +226,43 @@ class GenerationService(
             )
         auditService.append(currentUser, request.organizationId, "generation.completed", "generation_run", run.id)
         return GenerationResponse(run.toResponse(), patternReadService.toResponse(currentUser, card, true), task.toResponse())
+    }
+
+    private fun recordFailedGeneration(
+        currentUser: CurrentUser,
+        preflight: GenerationPreflight,
+        failureCode: ProviderFailureCode,
+    ): GenerationRunEntity {
+        val request = preflight.request
+        val sources = preflight.sources
+        val now = Instant.now()
+        val run =
+            generationRunRepository.save(
+                GenerationRunEntity(
+                    id = prefixedId("run"),
+                    organizationId = request.organizationId,
+                    providerConfigId = request.providerConfigId,
+                    createdByUserId = currentUser.id,
+                    status = "failed",
+                    visibility = request.visibility,
+                    idempotencyKey = request.idempotencyKey,
+                    sourceLinkIdsJson = objectMapper.writeValueAsString(sources.sourceLinkIds),
+                    sourceBundleIdsJson = objectMapper.writeValueAsString(sources.sourceBundleIds),
+                    evidenceItemIdsJson = objectMapper.writeValueAsString(sources.evidenceItems.map { it.id }),
+                    failureCode = failureCode.value,
+                    createdAt = now,
+                    completedAt = now,
+                ),
+            )
+        auditService.append(
+            actor = currentUser,
+            organizationId = request.organizationId,
+            eventType = "generation.failed",
+            targetType = "generation_run",
+            targetId = run.id,
+            metadata = mapOf("failureCode" to failureCode.value),
+        )
+        return run
     }
 
     private fun resolveLinkedGenerationSources(
@@ -502,4 +600,11 @@ private data class GenerationSources(
     val sourceBundleIds: List<String>,
     val firstBundle: SourceBundleEntity,
     val evidenceItems: List<EvidenceItemEntity>,
+)
+
+private data class GenerationPreflight(
+    val request: GenerationRequest,
+    val provider: ResolvedProviderConfig,
+    val sources: GenerationSources,
+    val recognitionPrompt: PatternRecognitionPrompt,
 )

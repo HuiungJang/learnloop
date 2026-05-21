@@ -41,9 +41,9 @@ data class ProviderCreateRequest(
     val provider: String = "",
     @field:NotBlank
     val model: String = "",
+    val baseUrl: String? = null,
     val scope: String = "personal",
-    @field:NotBlank
-    val credential: String = "",
+    val credential: String? = null,
     val retentionMode: String = "standard",
     val authType: String = "byok",
 )
@@ -62,6 +62,7 @@ data class ProviderResponse(
     val ownerUserId: String?,
     val provider: String,
     val model: String,
+    val baseUrl: String?,
     val scope: String,
     val authType: String,
     val retentionMode: String,
@@ -80,6 +81,7 @@ private fun ProviderEntity.toResponse(): ProviderResponse =
         ownerUserId = ownerUserId,
         provider = provider,
         model = model,
+        baseUrl = baseUrl,
         scope = scope,
         authType = authType,
         retentionMode = retentionMode,

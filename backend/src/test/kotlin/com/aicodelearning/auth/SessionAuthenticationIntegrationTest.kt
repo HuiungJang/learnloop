@@ -309,7 +309,10 @@ class SessionAuthenticationIntegrationTest {
 
         assertEquals(HttpStatus.CREATED, created.statusCode)
         assertFalse(created.body.orEmpty().contains(secret))
-        assertTrue(json(created)["provider"]["credentialRef"].asText().startsWith("vault://"))
+        assertTrue(json(created)["provider"]["credentialRef"].asText().startsWith("encrypted://"))
+        assertFalse(json(created)["provider"].has("credentialCiphertext"))
+        assertFalse(json(created)["provider"].has("credentialIv"))
+        assertFalse(json(created)["provider"].has("credentialTag"))
 
         val admin = login("admin@example.com")
         val audit = getJson("/api/audit?organizationId=org-demo", admin.token)

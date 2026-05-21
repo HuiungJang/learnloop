@@ -26,13 +26,14 @@ open class ApiException(
     val status: HttpStatus,
     override val message: String,
     val code: String? = null,
+    val fields: Map<String, String>? = null,
 ) : RuntimeException(message)
 
 @RestControllerAdvice
 class ApiExceptionHandler {
     @ExceptionHandler(ApiException::class)
     fun handleApiException(exception: ApiException): ResponseEntity<ErrorEnvelope> =
-        error(exception.status, exception.message, exception.code)
+        error(exception.status, exception.message, exception.code, exception.fields)
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidation(exception: MethodArgumentNotValidException): ResponseEntity<ErrorEnvelope> {

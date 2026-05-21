@@ -53,3 +53,11 @@ app:
       startup-jitter-ms: ${APP_RETENTION_CLEANUP_STARTUP_JITTER_MS:300000}
       recurring-jitter-ms: ${APP_RETENTION_CLEANUP_RECURRING_JITTER_MS:300000}
       batch-size: ${APP_RETENTION_CLEANUP_BATCH_SIZE:100}
+  provider-generation:
+    credential-encryption-key: ${APP_CREDENTIAL_ENCRYPTION_KEY:}
+    allow-loopback-base-url: ${APP_PROVIDER_ALLOW_LOOPBACK_BASE_URL:false}
+    connect-timeout: ${APP_PROVIDER_CONNECT_TIMEOUT:PT2S}
+    request-timeout: ${APP_PROVIDER_REQUEST_TIMEOUT:PT15S}
+    max-request-bytes: ${APP_PROVIDER_MAX_REQUEST_BYTES:65536}
+    max-response-bytes: ${APP_PROVIDER_MAX_RESPONSE_BYTES:65536}
+    max-output-tokens: ${APP_PROVIDER_MAX_OUTPUT_TOKENS:1024}

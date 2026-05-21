@@ -94,6 +94,11 @@ class AuditService(
                 "userAttribution",
                 "attributionConfidence",
                 "attributionReasons",
+                "provider",
+                "model",
+                "authType",
+                "retentionMode",
+                "failureCode",
             )
         val sensitiveKeyRegex = Regex("credential|token|password|apiKey|rawContent|content|prompt|response|diff|stdout|stderr|path", RegexOption.IGNORE_CASE)
         val sensitiveValueRegex =

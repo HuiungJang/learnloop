@@ -27,6 +27,9 @@ class ProviderEntity(
     @Column(nullable = false)
     var model: String = "",
 
+    @Column(name = "base_url")
+    var baseUrl: String? = null,
+
     @Column(nullable = false)
     var scope: String = "",
 
@@ -44,6 +47,18 @@ class ProviderEntity(
 
     @Column(name = "secret_preview")
     var secretPreview: String? = null,
+
+    @Column(name = "credential_algorithm")
+    var credentialAlgorithm: String? = null,
+
+    @Column(name = "credential_iv")
+    var credentialIv: String? = null,
+
+    @Column(name = "credential_tag")
+    var credentialTag: String? = null,
+
+    @Column(name = "credential_ciphertext")
+    var credentialCiphertext: String? = null,
 
     @Column(nullable = false)
     var status: String = "",

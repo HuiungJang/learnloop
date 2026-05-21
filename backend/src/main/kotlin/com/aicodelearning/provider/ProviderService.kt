@@ -15,6 +15,8 @@ class ProviderService(
     private val providerRepository: ProviderRepository,
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
+    private val credentialCryptoService: CredentialCryptoService,
+    private val baseUrlValidator: ProviderBaseUrlValidator,
 ) {
     @Transactional(readOnly = true)
     fun list(
@@ -36,9 +38,23 @@ class ProviderService(
         if (scope !in allowedScopes) {
             throw BadRequestException("scope must be organization or personal")
         }
-        if (request.credential.length < 8) {
+        val providerFamily = ProviderCatalog.normalize(request.provider)
+        val credential = request.credential.orEmpty()
+        if (providerFamily == ProviderCatalog.LOCAL) {
+            throw BadRequestException("local provider is managed by the application")
+        }
+        if (credential.length < 8) {
             throw BadRequestException("credential must be at least 8 characters")
         }
+        if (!credentialCryptoService.isConfigured()) {
+            throw BadRequestException("credential encryption key is not configured")
+        }
+        val normalizedBaseUrl =
+            baseUrlValidator.normalizeAndValidate(
+                request.baseUrl?.takeIf { it.isNotBlank() }
+                    ?: ProviderCatalog.defaultBaseUrl(providerFamily)
+                    ?: throw BadRequestException("baseUrl is required"),
+            )
 
         if (scope == "organization") {
             authorizationService.requireRole(currentUser, request.organizationId, "admin")
@@ -46,22 +62,36 @@ class ProviderService(
             authorizationService.requireOrganizationMember(currentUser, request.organizationId, "learner")
         }
 
-        val digest = sha256Hex(request.credential)
+        val id = prefixedId("provider")
+        val digest = sha256Hex(credential)
+        val sealedCredential =
+            credentialCryptoService.seal(
+                providerId = id,
+                organizationId = request.organizationId,
+                provider = providerFamily,
+                model = request.model,
+                credential = credential,
+            )
         val entity =
             providerRepository.save(
                 ProviderEntity(
-                    id = prefixedId("provider"),
+                    id = id,
                     organizationId = request.organizationId,
                     ownerUserId = if (scope == "personal") currentUser.id else null,
                     createdByUserId = currentUser.id,
-                    provider = request.provider,
+                    provider = providerFamily,
                     model = request.model,
+                    baseUrl = normalizedBaseUrl,
                     scope = scope,
                     authType = request.authType,
                     retentionMode = request.retentionMode,
-                    credentialRef = "vault://${digest.take(24)}",
+                    credentialRef = "encrypted://${id}",
                     credentialFingerprint = digest.take(16),
-                    secretPreview = if (request.credential.length >= 4) "***${request.credential.takeLast(4)}" else "***",
+                    secretPreview = "***${credential.takeLast(4)}",
+                    credentialAlgorithm = sealedCredential.algorithm,
+                    credentialIv = sealedCredential.iv,
+                    credentialTag = sealedCredential.tag,
+                    credentialCiphertext = sealedCredential.ciphertext,
                     status = "active",
                     orgApproved = scope == "organization",
                     createdAt = Instant.now(),
@@ -79,7 +109,9 @@ class ProviderService(
                     "provider" to entity.provider,
                     "model" to entity.model,
                     "scope" to entity.scope,
-                    "credential" to request.credential,
+                    "authType" to entity.authType,
+                    "retentionMode" to entity.retentionMode,
+                    "status" to entity.status,
                 ),
         )
 
