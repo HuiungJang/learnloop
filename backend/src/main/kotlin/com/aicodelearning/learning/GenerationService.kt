@@ -35,6 +35,7 @@ class GenerationService(
     private val patternTagRepository: PatternTagRepository,
     private val patternTagLinkRepository: PatternTagLinkRepository,
     private val problemRepository: ProblemRepository,
+    private val problemFileRepository: ProblemFileRepository,
     private val reviewTaskRepository: ReviewTaskRepository,
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
@@ -115,7 +116,7 @@ class GenerationService(
                 .joinToString("\n")
 
         val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
-        val inferred = inferPattern(recognitionPrompt.evidenceExcerpt)
+        val inferred = inferPattern(recognitionPrompt.evidenceExcerpt, detectPracticeLanguage(sources))
         val card =
             patternCardRepository.save(
                 PatternCardEntity(
@@ -140,17 +141,21 @@ class GenerationService(
             patternTagLinkRepository.save(PatternTagLinkEntity(patternCardId = card.id, tagId = entity.id))
         }
         inferred.problems.forEach {
-            problemRepository.save(
-                ProblemEntity(
-                    id = prefixedId("problem"),
-                    patternCardId = card.id,
-                    problemType = it.type,
-                    prompt = it.prompt,
-                    referenceAnswer = it.referenceAnswer,
-                    difficulty = it.difficulty,
-                    createdAt = now,
-                ),
-            )
+            val problem =
+                problemRepository.save(
+                    ProblemEntity(
+                        id = prefixedId("problem"),
+                        patternCardId = card.id,
+                        problemType = it.type,
+                        prompt = it.prompt,
+                        referenceAnswer = it.referenceAnswer,
+                        difficulty = it.difficulty,
+                        createdAt = now,
+                    ),
+                )
+            if (it.type == "short_implementation") {
+                problemFileRepository.saveAll(PracticeLanguageTemplateFactory.filesFor(problem.id, inferred.practiceLanguage, now))
+            }
         }
         val task =
             reviewTaskRepository.save(
@@ -370,7 +375,10 @@ class GenerationService(
         return ConversionTraceListResponse(traces)
     }
 
-    private fun inferPattern(text: String): InferredPattern {
+    private fun inferPattern(
+        text: String,
+        practiceLanguage: String?,
+    ): InferredPattern {
         val normalized = text.lowercase()
         val tags =
             buildList {
@@ -379,8 +387,16 @@ class GenerationService(
                 if ("retry" in normalized || "timeout" in normalized) add(InferredTag("pattern", "Retry/Timeout"))
                 if ("oauth" in normalized || "token" in normalized || "authorization" in normalized) add(InferredTag("api", "Auth API"))
                 if (isEmpty()) add(InferredTag("pattern", "Implementation Pattern"))
+                PracticeLanguageTemplateFactory.displayName(practiceLanguage)?.let { add(InferredTag("language", it)) }
             }
         val primary = tags.first()
+        val languageLabel = PracticeLanguageTemplateFactory.displayName(practiceLanguage)
+        val implementationPrompt =
+            if (languageLabel == null) {
+                "Implement a similar pattern in a neutral order-processing domain."
+            } else {
+                "Implement a similar pattern in a neutral order-processing domain using $languageLabel."
+            }
         return InferredPattern(
             title = "${primary.name} Practice Pattern",
             summary = "A reusable ${primary.name.lowercase()} pattern extracted from AI-assisted implementation evidence.",
@@ -388,11 +404,18 @@ class GenerationService(
             problems =
                 listOf(
                     InferredProblem("qa", "When should a developer use the ${primary.name} approach shown in this pattern?", "Use it when the implementation has similar technical constraints while avoiding product-specific details.", "easy"),
-                    InferredProblem("short_implementation", "Implement a similar pattern in a neutral order-processing domain.", "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic.", "medium"),
+                    InferredProblem("short_implementation", implementationPrompt, "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic.", "medium"),
                     InferredProblem("debugging", "What failure mode should be tested before reusing this pattern?", "Test the edge case that would break the boundary, such as timeout, invalid token, or missing dependency behavior.", "medium"),
                 ),
+            practiceLanguage = practiceLanguage,
             )
     }
+
+    private fun detectPracticeLanguage(sources: GenerationSources): String? =
+        PracticeLanguageTemplateFactory.detectPrimaryLanguage(
+            paths = sources.evidenceItems.mapNotNull { it.repoRelativePath },
+            contents = sources.evidenceItems.mapNotNull { it.contentText },
+        )
 
     private fun parseSourceLinkIds(sourceLinkIdsJson: String): List<String> =
         try {
@@ -483,6 +506,7 @@ private data class InferredPattern(
     val summary: String,
     val tags: List<InferredTag>,
     val problems: List<InferredProblem>,
+    val practiceLanguage: String?,
 )
 
 private data class InferredTag(
