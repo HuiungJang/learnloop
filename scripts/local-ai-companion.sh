@@ -49,8 +49,7 @@ status_payload() {
 
 start_process() {
   STARTED_PID=""
-  nohup "$NODE_BIN" scripts/local-ai-companion.mjs >"$LOG_FILE" 2>&1 &
-  STARTED_PID="$!"
+  STARTED_PID=$("$NODE_BIN" scripts/local-ai-companion-launcher.mjs scripts/local-ai-companion.mjs "$LOG_FILE")
   printf '%s\n' "$STARTED_PID" > "$PID_FILE"
 }
 
