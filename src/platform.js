@@ -9,7 +9,7 @@ const DEFAULT_PROVIDER_BASE_URLS = new Map([["openai", "https://api.openai.com"]
 const PROVIDER_TIMEOUT_MS = 30_000;
 const ALLOWED_TAG_TYPES = new Set(["language", "framework", "library", "api", "algorithm", "pattern", "design-pattern", "configuration"]);
 const ALLOWED_PROBLEM_TYPES = new Set(["qa", "short_implementation", "code_reading"]);
-const ALLOWED_DIFFICULTIES = new Set(["beginner", "intermediate", "advanced"]);
+const ALLOWED_DIFFICULTIES = new Set(["easy", "medium", "hard"]);
 const ALLOWED_SUBMISSION_STATUS = new Set([
   "submitted",
   "self_marked_complete",
@@ -146,19 +146,19 @@ function inferPattern(evidenceText) {
         type: "qa",
         prompt: `When should a developer use the ${primary.name} approach shown in this pattern?`,
         referenceAnswer: `Use it when the implementation has the same technical constraints, while keeping business-specific names and data out of reusable learning material.`,
-        difficulty: "beginner"
+        difficulty: "easy"
       },
       {
         type: "short_implementation",
         prompt: `${promptBase} Include clear error handling and keep the domain names generic.`,
         referenceAnswer: "A strong answer preserves the control flow, API usage, and error handling while changing identifiers, constants, and business-specific data.",
-        difficulty: "intermediate"
+        difficulty: "medium"
       },
       {
         type: "code_reading",
         prompt: "Identify the library/API usage and the failure mode this pattern is designed to handle.",
         referenceAnswer: "The answer should name the technical dependency, the boundary where it is used, and the retry/timeout/error behavior if present.",
-        difficulty: "beginner"
+        difficulty: "easy"
       }
     ]
   };

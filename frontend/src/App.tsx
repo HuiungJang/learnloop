@@ -1444,6 +1444,8 @@ export function App() {
               <option value="TypeScript">TypeScript</option>
               <option value="Kotlin">Kotlin</option>
               <option value="Java">Java</option>
+              <option value="Swift">Swift</option>
+              <option value="Rust">Rust</option>
             </select>
           </label>
           <label>

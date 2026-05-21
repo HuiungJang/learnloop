@@ -23,7 +23,7 @@ const fakeProviderOutput = {
       type: "qa",
       prompt: "When is a bounded timeout pattern appropriate around an API boundary?",
       referenceAnswer: "Use it when callers need predictable failure behavior around transient network or service delays.",
-      difficulty: "beginner"
+      difficulty: "easy"
     }
   ]
 };
