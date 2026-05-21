@@ -687,6 +687,41 @@ test("local companion accepts shim events on the real receiver path", async () =
   });
 });
 
+test("local companion launcher keeps the companion alive after launcher exits", async () => {
+  await withTempDir(async (dir) => {
+    const port = await findOpenPort();
+    const configDir = path.join(dir, ".learnloop");
+    const logFile = path.join(dir, "companion.log");
+    const env = {
+      ...process.env,
+      LEARNLOOP_LOCAL_AI_PORT: String(port),
+      LEARNLOOP_LOCAL_AI_CONFIG_DIR: configDir,
+      LEARNLOOP_CODEX_STATUS_COMMAND: "/usr/bin/false",
+      LEARNLOOP_CODEX_LOGIN_COMMAND: "/usr/bin/true"
+    };
+    const launch = await spawnFile(
+      process.execPath,
+      ["scripts/local-ai-companion-launcher.mjs", "scripts/local-ai-companion.mjs", logFile],
+      { env }
+    );
+    assert.equal(launch.code, 0, launch.stderr);
+
+    const pid = Number(launch.stdout.trim());
+    assert.ok(Number.isInteger(pid) && pid > 0);
+
+    try {
+      const baseUrl = `http://127.0.0.1:${port}`;
+      await waitForHealth(`${baseUrl}/health`);
+      const tokenResponse = await fetch(`${baseUrl}/auth/token`, {
+        headers: { Origin: "http://localhost:8080" }
+      });
+      assert.equal(tokenResponse.status, 200);
+    } finally {
+      await terminateProcess(pid);
+    }
+  });
+});
+
 test("local companion rejects unsafe host, origin, token, size, control, and bind cases", async () => {
   await withCompanion(async ({ baseUrl, port, token }) => {
     const goodHost = `127.0.0.1:${port}`;
@@ -1274,6 +1309,29 @@ async function waitForHealth(url) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw lastError ?? new Error("health check timed out");
+}
+
+async function terminateProcess(pid) {
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (error.code === "ESRCH") return;
+    throw error;
+  }
+  for (let i = 0; i < 20; i += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (error.code === "ESRCH") return;
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
 }
 
 function captureStream() {
