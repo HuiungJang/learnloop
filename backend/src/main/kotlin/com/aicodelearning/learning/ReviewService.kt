@@ -5,6 +5,7 @@ import com.aicodelearning.auth.CurrentUser
 import com.aicodelearning.organization.AuthorizationService
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ForbiddenException
+import com.aicodelearning.platform.LocalOwnerAccess
 import com.aicodelearning.platform.NotFoundException
 import com.aicodelearning.platform.prefixedId
 import org.springframework.stereotype.Service
@@ -18,6 +19,7 @@ class ReviewService(
     private val patternCardRepository: PatternCardRepository,
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
+    private val localOwnerAccess: LocalOwnerAccess,
 ) {
     @Transactional(readOnly = true)
     fun queue(
@@ -42,7 +44,8 @@ class ReviewService(
         val task = reviewTaskRepository.findById(taskId).orElseThrow { NotFoundException("Review task not found") }
         val card = patternCardRepository.findById(task.patternCardId).orElseThrow { NotFoundException("Pattern card not found") }
         authorizationService.requireRole(currentUser, card.organizationId, "reviewer", card.teamId, card.projectId)
-        if (task.authorUserId == currentUser.id) {
+        val isLocalOwner = runCatching { localOwnerAccess.requireLocalOwner(currentUser) }.isSuccess
+        if (task.authorUserId == currentUser.id && !isLocalOwner) {
             throw ForbiddenException("Authors cannot review their own generated cards")
         }
         if (task.status != "open") {

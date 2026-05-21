@@ -21,7 +21,6 @@ import com.aicodelearning.provider.ProviderConfigResolver
 import com.aicodelearning.provider.ProviderFailureCode
 import com.aicodelearning.provider.ProviderGenerationApiException
 import com.aicodelearning.provider.ProviderGenerationException
-import com.aicodelearning.provider.ResolvedProviderConfig
 import com.aicodelearning.source.SourceLinkRepository
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -58,7 +57,7 @@ class GenerationService(
         val existing =
             request.idempotencyKey?.let { idempotencyKey ->
                 transactionTemplate.execute {
-                    existingCompletedGeneration(currentUser, request.organizationId, idempotencyKey)
+                    existingGeneration(currentUser, request, idempotencyKey)
                 }
             }
         if (existing != null) {
@@ -69,14 +68,26 @@ class GenerationService(
             transactionTemplate.execute {
                 prepareGeneration(currentUser, request)
             } ?: throw BadRequestException("Generation could not be prepared")
+        val provider =
+            try {
+                transactionTemplate.execute {
+                    providerConfigResolver.resolve(currentUser, request.organizationId, request.providerConfigId, request.visibility)
+                } ?: throw ProviderGenerationException(ProviderFailureCode.PROVIDER_CONFIGURATION_INVALID)
+            } catch (exception: ProviderGenerationException) {
+                val failedRun =
+                    transactionTemplate.execute {
+                        recordFailedGeneration(currentUser, preflight, exception.failureCode)
+                    } ?: throw exception
+                throw ProviderGenerationApiException(failedRun.id, exception.failureCode)
+            }
 
         val generated =
             try {
                 patternGenerationClientFactory
-                    .clientFor(preflight.provider.provider)
+                    .clientFor(provider.provider)
                     .generate(
                         PatternGenerationClientRequest(
-                            providerConfig = preflight.provider,
+                            providerConfig = provider,
                             promptText = preflight.recognitionPrompt.promptText,
                             evidenceExcerpt = preflight.recognitionPrompt.evidenceExcerpt,
                         ),
@@ -94,23 +105,40 @@ class GenerationService(
         } ?: throw BadRequestException("Generation could not be persisted")
     }
 
-    private fun existingCompletedGeneration(
+    private fun existingGeneration(
         currentUser: CurrentUser,
-        organizationId: String,
+        request: GenerationRequest,
         idempotencyKey: String,
     ): GenerationResponse? {
-        val existing = generationRunRepository.findByOrganizationIdAndIdempotencyKey(organizationId, idempotencyKey)
-        val existingCard = existing?.let { run -> patternCardRepository.findByGenerationRunId(run.id) }
-        val existingTask = existingCard?.let { card -> reviewTaskRepository.findByPatternCardId(card.id) }
-        if (existing != null && existingCard != null && existingTask != null) {
+        val existing = generationRunRepository.findByOrganizationIdAndIdempotencyKey(request.organizationId, idempotencyKey)
+        if (existing != null) {
             if (existing.createdByUserId != currentUser.id) {
                 throw ForbiddenException("Idempotency key belongs to another generation request")
             }
+            if (!existing.samePayloadAs(request)) {
+                throw ForbiddenException("Idempotency key belongs to another generation request")
+            }
+            if (existing.status == "failed") {
+                val failureCode =
+                    ProviderFailureCode.entries.firstOrNull { it.value == existing.failureCode }
+                        ?: ProviderFailureCode.PROVIDER_CONFIGURATION_INVALID
+                throw ProviderGenerationApiException(existing.id, failureCode)
+            }
+        }
+        val existingCard = existing?.let { run -> patternCardRepository.findByGenerationRunId(run.id) }
+        val existingTask = existingCard?.let { card -> reviewTaskRepository.findByPatternCardId(card.id) }
+        if (existing != null && existingCard != null && existingTask != null) {
             authorizationService.requireRole(currentUser, existingCard.organizationId, "contributor", existingCard.teamId, existingCard.projectId)
             return GenerationResponse(existing.toResponse(), patternReadService.toResponse(currentUser, existingCard, true), existingTask.toResponse())
         }
         return null
     }
+
+    private fun GenerationRunEntity.samePayloadAs(request: GenerationRequest): Boolean =
+        providerConfigId == request.providerConfigId &&
+            visibility == request.visibility &&
+            parseStringList(sourceLinkIdsJson) == request.sourceLinkIds.distinct() &&
+            parseStringList(sourceBundleIdsJson) == request.sourceBundleIds.distinct()
 
     private fun prepareGeneration(
         currentUser: CurrentUser,
@@ -125,9 +153,6 @@ class GenerationService(
         if (request.sourceLinkIds.isNotEmpty() && request.sourceBundleIds.isNotEmpty()) {
             throw BadRequestException("Choose either source links or source bundles")
         }
-
-        val provider = providerConfigResolver.resolve(currentUser, request.organizationId, request.providerConfigId, request.visibility)
-
         val sources =
             if (request.sourceLinkIds.isNotEmpty()) {
                 resolveLinkedGenerationSources(currentUser, request)
@@ -146,7 +171,6 @@ class GenerationService(
         val recognitionPrompt = patternRecognitionPromptBuilder.build(evidenceText)
         return GenerationPreflight(
             request = request,
-            provider = provider,
             sources = sources,
             recognitionPrompt = recognitionPrompt,
         )
@@ -390,15 +414,17 @@ class GenerationService(
             return ConversionTraceListResponse(emptyList())
         }
 
-        val sourceLinkIdsByRun = runs.associate { it.id to parseSourceLinkIds(it.sourceLinkIdsJson) }
+        val sourceLinkIdsByRun = runs.associate { it.id to parseStringList(it.sourceLinkIdsJson) }
+        val sourceBundleIdsByRun = runs.associate { it.id to parseStringList(it.sourceBundleIdsJson) }
         val sourceLinks =
             sourceLinkRepository
                 .findByIdIn(sourceLinkIdsByRun.values.flatten().distinct())
                 .associateBy { it.id }
         val bundleIds =
-            sourceLinks.values
-                .flatMap { listOf(it.conversationBundleId, it.codeBundleId) }
-                .distinct()
+            (
+                sourceLinks.values.flatMap { listOf(it.conversationBundleId, it.codeBundleId) } +
+                    sourceBundleIdsByRun.values.flatten()
+            ).distinct()
         val bundlesById = sourceBundleRepository.findAllById(bundleIds).filter { it.deletedAt == null }.associateBy { it.id }
         val cardsByRunId =
             patternCardRepository
@@ -418,9 +444,11 @@ class GenerationService(
                 val links = sourceLinkIdsByRun.getValueOrEmpty(run.id).mapNotNull { sourceLinks[it] }
                 val link = links.firstOrNull()
                 val conversation = link?.conversationBundleId?.let { bundlesById[it] }
-                val code = link?.codeBundleId?.let { bundlesById[it] }
-                if (card == null && code != null && !authorizationService.hasRole(currentUser.id, code.organizationId, "contributor", code.teamId, code.projectId)) {
-                    return@mapNotNull null
+                val directBundle = sourceBundleIdsByRun.getValueOrEmpty(run.id).mapNotNull { bundlesById[it] }.firstOrNull()
+                val code = link?.codeBundleId?.let { bundlesById[it] } ?: directBundle
+                if (card == null) {
+                    if (code == null) return@mapNotNull null
+                    if (!authorizationService.hasRole(currentUser.id, code.organizationId, "contributor", code.teamId, code.projectId)) return@mapNotNull null
                 }
 
                 val pattern = card?.let { patternReadService.toResponse(currentUser, it, includeAnswers = false) }
@@ -430,16 +458,18 @@ class GenerationService(
                 ConversionTraceResponse(
                     generationRunId = run.id,
                     status = run.status,
+                    failureCode = run.failureCode,
                     createdAt = run.createdAt,
                     source =
-                        link?.let {
+                        code?.let {
                             ConversionTraceSourceResponse(
-                                sourceLinkId = it.id,
-                                sourceLinkStatus = it.status,
-                                confidence = it.confidence,
+                                sourceLinkId = link?.id,
+                                sourceBundleId = it.id,
+                                sourceLinkStatus = link?.status,
+                                confidence = link?.confidence,
                                 conversationTitle = conversation?.title,
-                                codeTitle = code?.title,
-                                codeSourceKind = code?.sourceKind,
+                                codeTitle = it.title,
+                                codeSourceKind = it.sourceKind,
                             )
                         },
                     pattern =
@@ -492,9 +522,9 @@ class GenerationService(
             )
     }
 
-    private fun parseSourceLinkIds(sourceLinkIdsJson: String): List<String> =
+    private fun parseStringList(json: String): List<String> =
         try {
-            objectMapper.readValue(sourceLinkIdsJson, sourceLinkIdsType)
+            objectMapper.readValue(json, stringListType)
         } catch (_: Exception) {
             emptyList()
         }
@@ -519,7 +549,7 @@ class GenerationService(
     private companion object {
         const val DEFAULT_TRACE_LIMIT = 25
         const val MAX_TRACE_LIMIT = 50
-        val sourceLinkIdsType = object : TypeReference<List<String>>() {}
+        val stringListType = object : TypeReference<List<String>>() {}
     }
 }
 
@@ -545,6 +575,7 @@ data class ConversionTraceListResponse(
 data class ConversionTraceResponse(
     val generationRunId: String,
     val status: String,
+    val failureCode: String?,
     val createdAt: Instant,
     val source: ConversionTraceSourceResponse?,
     val pattern: ConversionTracePatternResponse?,
@@ -552,9 +583,10 @@ data class ConversionTraceResponse(
 )
 
 data class ConversionTraceSourceResponse(
-    val sourceLinkId: String,
-    val sourceLinkStatus: String,
-    val confidence: java.math.BigDecimal,
+    val sourceLinkId: String?,
+    val sourceBundleId: String,
+    val sourceLinkStatus: String?,
+    val confidence: java.math.BigDecimal?,
     val conversationTitle: String?,
     val codeTitle: String?,
     val codeSourceKind: String?,
@@ -604,7 +636,6 @@ private data class GenerationSources(
 
 private data class GenerationPreflight(
     val request: GenerationRequest,
-    val provider: ResolvedProviderConfig,
     val sources: GenerationSources,
     val recognitionPrompt: PatternRecognitionPrompt,
 )

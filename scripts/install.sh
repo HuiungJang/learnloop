@@ -49,9 +49,21 @@ generate_secret() {
   fi
 }
 
+generate_encryption_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32
+  elif [ -r /dev/urandom ]; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+  else
+    echo "Cannot generate encryption key securely. Install openssl and retry." >&2
+    exit 1
+  fi
+}
+
 write_env_file() {
   db_password=$(generate_secret)
   demo_password=$(generate_secret)
+  credential_key=$(generate_encryption_key)
 
   old_umask=$(umask)
   umask 077
@@ -61,6 +73,7 @@ APP_DATABASE_NAME=learnloop
 APP_DATABASE_USERNAME=learnloop
 APP_DATABASE_PASSWORD=$db_password
 APP_DEMO_PASSWORD=$demo_password
+APP_CREDENTIAL_ENCRYPTION_KEY=$credential_key
 APP_OPENAPI_ENABLED=true
 APP_RUNNER_ENABLED=true
 APP_RUNNER_BASE_URL=
@@ -73,6 +86,7 @@ EOF
 }
 
 ensure_runner_env() {
+  ensure_env_value APP_CREDENTIAL_ENCRYPTION_KEY "$(generate_encryption_key)"
   ensure_env_value APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock
   ensure_env_value APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces"
 }

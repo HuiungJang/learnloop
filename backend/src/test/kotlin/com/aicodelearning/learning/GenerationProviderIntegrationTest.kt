@@ -10,6 +10,8 @@ import com.aicodelearning.evidence.LocalAiSessionPolicy
 import com.aicodelearning.evidence.SourceBundleEntity
 import com.aicodelearning.evidence.SourceBundleRepository
 import com.aicodelearning.provider.FakeProviderServer
+import com.aicodelearning.provider.ProviderEntity
+import com.aicodelearning.provider.ProviderRepository
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -64,6 +66,9 @@ class GenerationProviderIntegrationTest {
     @Autowired
     private lateinit var reviewTaskRepository: ReviewTaskRepository
 
+    @Autowired
+    private lateinit var providerRepository: ProviderRepository
+
     @Test
     fun `non local provider calls HTTP and persists provider output`() {
         FakeProviderServer.start().use { server ->
@@ -76,6 +81,15 @@ class GenerationProviderIntegrationTest {
 
             assertEquals(HttpStatus.CREATED, generated.statusCode)
             assertEquals("Provider Returned Pattern", json(generated)["patternCard"]["title"].asText())
+            val reviewTaskId = json(generated)["reviewTask"]["id"].asText()
+            val decision =
+                postJson(
+                    "/api/review/tasks/$reviewTaskId/decision",
+                    owner.token,
+                    mapOf("decision" to "approve", "comment" to "Local owner approved generated practice."),
+                )
+            assertEquals(HttpStatus.OK, decision.statusCode)
+            assertEquals("approved", json(decision)["reviewTask"]["status"].asText())
             assertEquals(1, server.awaitRequestCount(1).size)
             val request = server.requests.single()
             assertEquals("POST", request.method)
@@ -111,6 +125,72 @@ class GenerationProviderIntegrationTest {
             assertEquals(tagLinksBefore, patternTagLinkRepository.count())
             assertEquals(problemsBefore, problemRepository.count())
             assertEquals(reviewsBefore, reviewTaskRepository.count())
+
+            val trace = getJson("/api/conversion-traces?organizationId=org-demo", owner.token)
+            assertEquals(HttpStatus.OK, trace.statusCode)
+            val traceItem = json(trace)["traces"].first { it["generationRunId"].asText() == run.id }
+            assertEquals("failed", traceItem["status"].asText())
+            assertEquals("provider_invalid_json", traceItem["failureCode"].asText())
+            assertEquals(bundleId, traceItem["source"]["sourceBundleId"].asText())
+            assertTrue(traceItem["pattern"].isNull)
+            assertTrue(traceItem["exercise"].isNull)
+        }
+    }
+
+    @Test
+    fun `failed generation is idempotent and does not call provider twice`() {
+        FakeProviderServer.start().use { server ->
+            val owner = login()
+            val providerId = createProvider(owner.token, server.baseUrl)
+            val bundleId = createCuratedBundle("provider-failed-idempotency")
+            val idempotencyKey = "idem-provider-failure-${System.nanoTime()}"
+            server.enqueue(body = openAiResponseBody("not json"))
+
+            val first = generate(owner.token, providerId, bundleId, idempotencyKey)
+            val second = generate(owner.token, providerId, bundleId, idempotencyKey)
+
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, first.statusCode)
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, second.statusCode)
+            assertEquals(1, server.awaitRequestCount(1).size)
+            assertEquals(
+                json(first)["error"]["fields"]["generationRunId"].asText(),
+                json(second)["error"]["fields"]["generationRunId"].asText(),
+            )
+        }
+    }
+
+    @Test
+    fun `legacy hash only non local provider fails safely without HTTP fallback`() {
+        FakeProviderServer.start().use { server ->
+            val owner = login()
+            val providerId = "provider_legacy_${System.nanoTime()}"
+            providerRepository.save(
+                ProviderEntity(
+                    id = providerId,
+                    organizationId = "org-demo",
+                    ownerUserId = "u-local-owner",
+                    createdByUserId = "u-local-owner",
+                    provider = "openai",
+                    model = "legacy-model",
+                    baseUrl = server.baseUrl,
+                    scope = "personal",
+                    authType = "api_key",
+                    retentionMode = "standard",
+                    credentialRef = "sha256:legacy",
+                    credentialFingerprint = "legacyfingerprint",
+                    secretPreview = "***1234",
+                    status = "active",
+                    orgApproved = false,
+                    createdAt = Instant.now(),
+                ),
+            )
+            val bundleId = createCuratedBundle("provider-legacy-hash-only")
+
+            val failed = generate(owner.token, providerId, bundleId)
+
+            assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, failed.statusCode)
+            assertEquals("provider_configuration_invalid", json(failed)["error"]["fields"]["failureCode"].asText())
+            assertEquals(0, server.requests.size)
         }
     }
 
@@ -233,6 +313,7 @@ class GenerationProviderIntegrationTest {
         token: String,
         providerId: String,
         bundleId: String,
+        idempotencyKey: String? = null,
     ) = postJson(
         "/api/generation/run",
         token,
@@ -241,7 +322,7 @@ class GenerationProviderIntegrationTest {
             "providerConfigId" to providerId,
             "sourceBundleIds" to listOf(bundleId),
             "visibility" to "private",
-        ),
+        ) + listOfNotNull(idempotencyKey?.let { "idempotencyKey" to it }).toMap(),
     )
 
     private fun patternOutput(title: String): String =

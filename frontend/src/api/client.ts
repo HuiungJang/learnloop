@@ -299,11 +299,13 @@ export type ProficiencyResponse = {
 export type ConversionTraceResponse = {
   generationRunId: string;
   status: string;
+  failureCode: string | null;
   createdAt: string;
   source: {
-    sourceLinkId: string;
-    sourceLinkStatus: string;
-    confidence: number;
+    sourceLinkId: string | null;
+    sourceBundleId: string;
+    sourceLinkStatus: string | null;
+    confidence: number | null;
     conversationTitle: string | null;
     codeTitle: string | null;
     codeSourceKind: string | null;

@@ -24,7 +24,7 @@ AI-generated code can improve short-term delivery speed, but developers often lo
 - Analyze design patterns, libraries, algorithms, API usage, and configuration practices.
 - Convert the analysis into implementation exercises, Q&A, and practice cards.
 - Let the local owner curate, edit, delete, or practice generated learning assets.
-- Keep user AI API keys and OAuth settings in the local browser only, without sending them to the server.
+- Encrypt AI API keys in the local backend for generation, while keeping OAuth tool-auth labels in the browser.
 
 ## Recommended Users
 
@@ -231,16 +231,18 @@ The installed app should present one local owner path. Existing internal seed da
 
 ## AI Provider Setup
 
-The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and local-first AI setup surfaces. The Node MVP remains as an internal compatibility oracle and supports both deterministic local generation and real OpenAI-compatible provider calls.
+The installable app runs the Kotlin/Spring Boot backend, React frontend, PostgreSQL persistence, and local-first AI setup surfaces. API-key providers are registered with the local backend, encrypted at rest with `APP_CREDENTIAL_ENCRYPTION_KEY`, and used by backend generation. OAuth setup remains local tool authentication only.
 
-Node MVP provider modes:
+Provider modes:
 
 - `provider-local-mock` keeps deterministic generation for demos, stable tests, and parity checks.
-- Non-mock providers call an OpenAI-compatible Responses API endpoint at `POST /v1/responses` with structured JSON schema output.
+- OpenAI/Codex providers call a Responses-compatible endpoint at `POST /v1/responses`.
+- Gemini providers call `POST /v1beta/models/{model}:generateContent`.
+- Claude providers call `POST /v1/messages`.
 
-For `provider: "openai"`, `baseUrl` defaults to `https://api.openai.com`. Custom `baseUrl` values must use HTTPS. Loopback HTTP is allowed only for local fake-provider tests when `APP_ALLOW_INSECURE_PROVIDER_BASE_URL=1`.
+Default base URLs are applied for OpenAI/Codex, Gemini, and Claude. Custom `baseUrl` values must use HTTPS, without credentials, query strings, or fragments. Loopback HTTP is allowed only for local fake-provider tests when `APP_PROVIDER_ALLOW_LOOPBACK_BASE_URL=true`.
 
-Node MVP provider credentials are encrypted in the local JSON store and redacted from API responses. Set `APP_CREDENTIAL_ENCRYPTION_KEY` outside local development; production mode requires it.
+Provider calls are synchronous and bounded by `APP_PROVIDER_CONNECT_TIMEOUT`, `APP_PROVIDER_REQUEST_TIMEOUT`, `APP_PROVIDER_MAX_REQUEST_BYTES`, `APP_PROVIDER_MAX_RESPONSE_BYTES`, and `APP_PROVIDER_MAX_OUTPUT_TOKENS`. Provider clients do not retry or follow redirects. Generation failures return a safe `provider_generation_failed` error with `generationRunId` and `failureCode`, and the failed run appears in Conversion Trace without storing raw prompts, provider responses, or credentials.
 
 ## License
 

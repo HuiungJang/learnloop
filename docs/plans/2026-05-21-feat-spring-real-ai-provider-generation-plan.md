@@ -797,7 +797,7 @@ Scope:
 Verification:
 
 - [x] Frontend typecheck passes.
-- [ ] UI/API test or Playwright step proves provider save refreshes provider list.
+- [x] UI/API test or Playwright step proves provider save refreshes provider list.
 - [x] `npm --prefix frontend run typecheck`
 
 ### Slice 39: Frontend Secret Storage Cleanup
@@ -810,7 +810,7 @@ Scope:
 
 Verification:
 
-- [ ] Browser/localStorage test proves submitted key is absent after save and after failed save.
+- [x] Browser/localStorage test proves submitted key is absent after save and after failed save.
 - [x] `npm --prefix frontend run typecheck`
 
 ### Slice 40: Frontend Provider Selection
@@ -845,7 +845,7 @@ Verification:
 Scope:
 
 - [x] Display failed generation as terminal failure with safe `failureCode`.
-- [ ] Do not show terminal failures as "Pattern pending" or "Not generated."
+- [x] Do not show terminal failures as "Pattern pending" or "Not generated."
 - [ ] Add retry affordance that creates a new idempotency key.
 
 Verification:
@@ -868,125 +868,125 @@ Verification:
 
 Bundle note:
 
-- Frontend JS gzip after provider setup UI changes: `3,337,836` bytes, `+785` bytes over Slice 0 baseline.
+- Frontend JS gzip after provider setup UI changes: `3,337,911` bytes, `+860` bytes over Slice 0 baseline.
 
 ### Slice 44: Installed E2E Success
 
 Scope:
 
-- [ ] Add installed fake provider server helper or reuse backend helper pattern from scripts.
-- [ ] Configure one OpenAI-compatible provider through UI or API.
-- [ ] Run generation and assert fake provider request count is exactly one.
-- [ ] Assert provider title appears in Practice Library and a generated problem opens in Practice Workbench.
+- [x] Add installed fake provider server helper or reuse backend helper pattern from scripts.
+- [x] Configure one OpenAI-compatible provider through UI or API.
+- [x] Run generation and assert fake provider request count is exactly one.
+- [x] Assert provider title appears in Practice Library and a generated problem opens in Practice Workbench.
 
 Verification:
 
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] Provider-generation segment completes under `10_000ms`.
+- [x] `./scripts/e2e-installed.sh`
+- [x] Provider-generation segment completes under `10_000ms`.
 
 ### Slice 45: Installed E2E Failure
 
 Scope:
 
-- [ ] Add installed fake provider `401` path.
-- [ ] Assert safe failure text and `failureCode`.
-- [ ] Assert local mock makes zero fake-provider requests.
-- [ ] Keep timeout/oversized scenarios in backend tests, not installed E2E.
+- [x] Add installed fake provider `401` path.
+- [x] Assert safe failure text and `failureCode`.
+- [x] Assert local mock makes zero fake-provider requests.
+- [x] Keep timeout/oversized scenarios in backend tests, not installed E2E.
 
 Verification:
 
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] Total installed E2E stays under `120_000ms` locally.
+- [x] `./scripts/e2e-installed.sh`
+- [x] Total installed E2E stays under `120_000ms` locally.
 
 ### Slice 46: Secret And Audit Regression Sweep
 
 Scope:
 
-- [ ] Scan backend logs, E2E artifacts, localStorage dumps, API responses, and stored audit metadata.
-- [ ] Search for raw fake credential, auth header value, ciphertext, provider response body, internal prompt marker, and evidence sentinel strings.
-- [ ] Confirm provider request captures are not printed by default.
+- [x] Scan backend logs, E2E artifacts, localStorage dumps, API responses, and stored audit metadata.
+- [x] Search for raw fake credential, auth header value, ciphertext, provider response body, internal prompt marker, and evidence sentinel strings.
+- [x] Confirm provider request captures are not printed by default.
 
 Verification:
 
-- [ ] `rg "ACL_INTERNAL_PATTERN_PROMPT_V1_DO_NOT_EXPOSE|You are a senior software engineering educator|Evidence excerpt" frontend/dist`
-- [ ] Project-specific secret scan command over generated test artifacts returns no matches for fake credential/sentinel strings.
+- [x] `rg "ACL_INTERNAL_PATTERN_PROMPT_V1_DO_NOT_EXPOSE|You are a senior software engineering educator|Evidence excerpt" frontend/dist`
+- [x] Project-specific secret scan command over generated test artifacts returns no matches for fake credential/sentinel strings.
 
 ### Slice 47: Documentation
 
 Scope:
 
-- [ ] Document API-key provider setup.
-- [ ] Document `APP_CREDENTIAL_ENCRYPTION_KEY`, local dev loopback flag, blocking `RestClient`, timeouts, no retries, and fake-provider tests.
-- [ ] Document OAuth as local tool auth only.
-- [ ] Document failure codes, HTTP status contract, safe message, `generationRunId`, and Conversion Trace failure location.
+- [x] Document API-key provider setup.
+- [x] Document `APP_CREDENTIAL_ENCRYPTION_KEY`, local dev loopback flag, blocking `RestClient`, timeouts, no retries, and fake-provider tests.
+- [x] Document OAuth as local tool auth only.
+- [x] Document failure codes, HTTP status contract, safe message, `generationRunId`, and Conversion Trace failure location.
 
 Verification:
 
-- [ ] Documentation review confirms browser-only API-key claim is removed or scoped to OAuth/local tool setup only.
+- [x] Documentation review confirms browser-only API-key claim is removed or scoped to OAuth/local tool setup only.
 
 ### Slice 48: Final Verification
 
 Scope:
 
-- [ ] Run backend, frontend, installed E2E, and secret/audit checks together.
-- [ ] Confirm no untracked debug artifacts or fake provider logs containing secrets remain.
-- [ ] Confirm all acceptance criteria are either checked or explicitly moved out of scope.
+- [x] Run backend, frontend, installed E2E, and secret/audit checks together.
+- [x] Confirm no untracked debug artifacts or fake provider logs containing secrets remain.
+- [x] Confirm all acceptance criteria are either checked or explicitly moved out of scope.
 
 Verification:
 
-- [ ] `./gradlew :backend:test`
-- [ ] `./scripts/test.sh`
-- [ ] `npm --prefix frontend run typecheck`
-- [ ] `npm --prefix frontend run build`
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] Final secret/audit scan commands from Slice 46.
+- [x] `./gradlew :backend:test`
+- [x] `./scripts/test.sh`
+- [x] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run build`
+- [x] `./scripts/e2e-installed.sh`
+- [x] Final secret/audit scan commands from Slice 46.
 
 ## Acceptance Criteria
 
 Functional requirements:
 
-- [ ] `provider-local-mock` still generates deterministic local drafts.
-- [ ] `provider-local-mock` is used only when explicitly selected; no UI or backend path silently falls back to it for non-local failures.
-- [ ] OpenAI/Codex providers make a real HTTP request during generation.
-- [ ] Gemini providers make a real HTTP request during generation.
-- [ ] Claude providers make a real HTTP request during generation.
-- [ ] Provider-returned title, summary, tags, and problems are the data persisted into the created draft assets.
-- [ ] Wrong provider credentials fail generation instead of falling back to local inference.
-- [ ] Invalid provider JSON/schema fails generation instead of creating partial assets.
-- [ ] Missing, inactive, legacy hash-only, decrypt-failed, or misconfigured non-local providers fail with `provider_configuration_invalid`.
-- [ ] First install with no eligible backend provider disables generation with a safe setup prompt unless local mock is explicitly selected.
-- [ ] OAuth setup saves only local tool-auth status/label and never creates or selects a backend generation provider.
-- [ ] Generation UI sends the exact selected backend provider id.
-- [ ] Failed generation API responses expose safe `generationRunId`, `status=failed`, and `failureCode` through the chosen error-envelope contract.
-- [ ] Repeating the same generation request with the same idempotency key returns the same completed or failed run without a second provider HTTP request.
-- [ ] A visible retry action creates a new idempotency key and performs exactly one new provider HTTP request.
-- [ ] Failed generation creates zero `pattern_cards`, `pattern_tags`, `pattern_tag_links`, `problems`, and `review_tasks`; Practice Library remains unchanged.
-- [ ] Conversion Trace clearly displays successful and failed generation runs.
-- [ ] Conversion Trace shows failed local-session generations linked to their source bundle and does not label terminal failures as pending.
-- [ ] After successful generation, generated provider title appears in Practice Library and generated problems open in Practice Workbench.
+- [x] `provider-local-mock` still generates deterministic local drafts.
+- [x] `provider-local-mock` is used only when explicitly selected; no UI or backend path silently falls back to it for non-local failures.
+- [x] OpenAI/Codex providers make a real HTTP request during generation.
+- [x] Gemini providers make a real HTTP request during generation.
+- [x] Claude providers make a real HTTP request during generation.
+- [x] Provider-returned title, summary, tags, and problems are the data persisted into the created draft assets.
+- [x] Wrong provider credentials fail generation instead of falling back to local inference.
+- [x] Invalid provider JSON/schema fails generation instead of creating partial assets.
+- [x] Missing, inactive, legacy hash-only, decrypt-failed, or misconfigured non-local providers fail with `provider_configuration_invalid`.
+- [x] First install with no eligible backend provider disables generation with a safe setup prompt unless local mock is explicitly selected.
+- [x] OAuth setup saves only local tool-auth status/label and never creates or selects a backend generation provider.
+- [x] Generation UI sends the exact selected backend provider id.
+- [x] Failed generation API responses expose safe `generationRunId`, `status=failed`, and `failureCode` through the chosen error-envelope contract.
+- [x] Repeating the same generation request with the same idempotency key returns the same completed or failed run without a second provider HTTP request.
+- [ ] A visible retry action creates a new idempotency key and performs exactly one new provider HTTP request. Moved out of this implementation batch; see Out Of Scope.
+- [x] Failed generation creates zero `pattern_cards`, `pattern_tags`, `pattern_tag_links`, `problems`, and `review_tasks`; Practice Library remains unchanged.
+- [x] Conversion Trace clearly displays successful and failed generation runs.
+- [x] Conversion Trace shows failed local-session generations linked to their source bundle and does not label terminal failures as pending.
+- [x] After successful generation, generated provider title appears in Practice Library and generated problems open in Practice Workbench.
 
 Security and privacy requirements:
 
-- [ ] Raw API keys are encrypted at rest.
-- [ ] AES-GCM credential fields use random IVs, AAD binding, and all-null/all-present storage constraints.
-- [ ] Raw API keys never appear in provider API responses, audit logs, frontend local storage after save, E2E output, or app logs.
-- [ ] Ciphertext, IV, auth tag, auth headers, base URL query, raw prompt, raw evidence, and raw provider response never appear in API responses, audit logs, frontend storage, E2E artifacts, or app logs.
-- [ ] Raw prompt text, internal prompt marker, raw provider response, and full evidence text are not persisted or exposed through API responses.
-- [ ] Provider base URL validation prevents SSRF-prone configuration by default.
-- [ ] Provider clients do not follow redirects, do not use proxy environment variables by default, and reject private/metadata network targets unless explicit loopback dev mode is enabled.
-- [ ] Provider outputs that echo the internal prompt marker, secret-like content, or large evidence/code excerpts are rejected or sanitized before persistence.
+- [x] Raw API keys are encrypted at rest.
+- [x] AES-GCM credential fields use random IVs, AAD binding, and all-null/all-present storage constraints.
+- [x] Raw API keys never appear in provider API responses, audit logs, frontend local storage after save, E2E output, or app logs.
+- [x] Ciphertext, IV, auth tag, auth headers, base URL query, raw prompt, raw evidence, and raw provider response never appear in API responses, audit logs, frontend storage, E2E artifacts, or app logs.
+- [x] Raw prompt text, internal prompt marker, raw provider response, and full evidence text are not persisted or exposed through API responses.
+- [x] Provider base URL validation prevents SSRF-prone configuration by default.
+- [x] Provider clients do not follow redirects, do not use proxy environment variables by default, and reject private/metadata network targets unless explicit loopback dev mode is enabled.
+- [x] Provider outputs that echo the internal prompt marker, secret-like content, or large evidence/code excerpts are rejected or sanitized before persistence.
 
 Quality gates:
 
-- [ ] Unit tests cover credential crypto, provider validation, parser validation, and client request mapping.
-- [ ] Backend integration tests cover success and all major provider failure codes.
-- [ ] Non-local provider generation never performs provider HTTP inside a DB transaction or while holding source-bundle locks.
-- [ ] Provider calls enforce connect, read/total, request-size, response-size, output-token, and JSON parser bounds.
-- [ ] Stored `audit_logs.metadata_json` is inspected for provider and generation events.
-- [ ] Installed E2E proves at least one fake provider was actually called.
-- [ ] Installed E2E proves local mock makes zero provider requests and does not add slow timeout waits.
-- [ ] Frontend bundle gzip delta is measured and stays within `5 KiB` or has an explicit exception.
-- [ ] Existing local collection, evidence, trace, and practice flows still pass.
+- [x] Unit tests cover credential crypto, provider validation, parser validation, and client request mapping.
+- [x] Backend integration tests cover success and all major provider failure codes.
+- [x] Non-local provider generation never performs provider HTTP inside a DB transaction or while holding source-bundle locks.
+- [x] Provider calls enforce connect, read/total, request-size, response-size, output-token, and JSON parser bounds.
+- [x] Stored `audit_logs.metadata_json` is inspected for provider and generation events.
+- [x] Installed E2E proves at least one fake provider was actually called.
+- [x] Installed E2E proves local mock makes zero provider requests and does not add slow timeout waits.
+- [x] Frontend bundle gzip delta is measured and stays within `5 KiB` or has an explicit exception.
+- [x] Existing local collection, evidence, trace, and practice flows still pass.
 
 ## Success Metrics
 
@@ -1014,18 +1014,19 @@ Quality gates:
 
 - OAuth-backed provider generation.
 - Async queues, retries, streaming, and cancellation.
+- Visible retry UI and concurrent in-flight idempotency reservation. This implementation covers completed/failed same-key replay without a second provider call.
 - Cost estimation and token accounting beyond provider-reported usage.
 - Multi-pattern generation UI.
 - Provider SDK dependencies unless plain HTTP proves insufficient.
 
 ## Final Verification
 
-- [ ] `./gradlew :backend:test`
-- [ ] `./scripts/test.sh`
-- [ ] `npm --prefix frontend run typecheck`
-- [ ] `npm --prefix frontend run build`
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] Secret scan assertions:
+- [x] `./gradlew :backend:test`
+- [x] `./scripts/test.sh`
+- [x] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run build`
+- [x] `./scripts/e2e-installed.sh`
+- [x] Secret scan assertions:
 
 ```sh
 rg "ACL_INTERNAL_PATTERN_PROMPT_V1_DO_NOT_EXPOSE|You are a senior software engineering educator|Evidence excerpt" frontend/dist
@@ -1035,9 +1036,9 @@ The final `rg` command must return no matches.
 
 Additional secret/audit checks:
 
-- [ ] Inspect `audit_logs.metadata_json` for `provider.created`, `generation.completed`, and `generation.failed`.
-- [ ] Scan E2E artifacts/logs/local storage dumps for the raw fake credential, auth header value, ciphertext, provider response body, internal prompt marker, and evidence sentinel strings.
-- [ ] Compare frontend gzip byte total before and after provider setup UI changes.
+- [x] Inspect `audit_logs.metadata_json` for `provider.created`, `generation.completed`, and `generation.failed`.
+- [x] Scan E2E artifacts/logs/local storage dumps for the raw fake credential, auth header value, ciphertext, provider response body, internal prompt marker, and evidence sentinel strings.
+- [x] Compare frontend gzip byte total before and after provider setup UI changes.
 
 ## Next Step
 

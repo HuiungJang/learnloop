@@ -60,15 +60,16 @@ class ProviderBaseUrlValidator(
 
         val scheme = uri.scheme.lowercase(Locale.ROOT)
         val host = uri.host.lowercase(Locale.ROOT)
-        val addresses = resolveHost(host)
+        val devHostBridge = properties.allowLoopbackBaseUrl && host == DOCKER_HOST_INTERNAL
+        val addresses = if (devHostBridge) emptyList() else resolveHost(host)
         val loopbackOnly = addresses.isNotEmpty() && addresses.all { it.isLoopbackAddress }
-        if (scheme != "https" && !(scheme == "http" && properties.allowLoopbackBaseUrl && loopbackOnly)) {
+        if (scheme != "https" && !(scheme == "http" && properties.allowLoopbackBaseUrl && (loopbackOnly || devHostBridge))) {
             throw BadRequestException("baseUrl must use https")
         }
         if (!properties.allowLoopbackBaseUrl && addresses.any { it.isUnsafePrivateAddress() }) {
             throw BadRequestException("baseUrl host is not allowed")
         }
-        if (properties.allowLoopbackBaseUrl && addresses.any { it.isUnsafePrivateAddress() && !it.isLoopbackAddress }) {
+        if (properties.allowLoopbackBaseUrl && !devHostBridge && addresses.any { it.isUnsafePrivateAddress() && !it.isLoopbackAddress }) {
             throw BadRequestException("baseUrl host is not allowed")
         }
 
@@ -107,5 +108,9 @@ class ProviderBaseUrlValidator(
             return first in 0xfc..0xfd
         }
         return false
+    }
+
+    private companion object {
+        const val DOCKER_HOST_INTERNAL = "host.docker.internal"
     }
 }

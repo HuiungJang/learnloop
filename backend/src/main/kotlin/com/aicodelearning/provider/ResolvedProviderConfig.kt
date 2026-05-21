@@ -3,7 +3,6 @@ package com.aicodelearning.provider
 import com.aicodelearning.auth.CurrentUser
 import com.aicodelearning.platform.BadRequestException
 import com.aicodelearning.platform.ForbiddenException
-import com.aicodelearning.platform.NotFoundException
 import org.springframework.stereotype.Service
 import java.net.URI
 
@@ -20,9 +19,9 @@ class ProviderConfigResolver(
         providerConfigId: String,
         visibility: String,
     ): ResolvedProviderConfig {
-        val provider = providerRepository.findById(providerConfigId).orElseThrow { NotFoundException("Provider not found") }
+        val provider = providerRepository.findById(providerConfigId).orElseThrow { ProviderGenerationException(ProviderFailureCode.PROVIDER_CONFIGURATION_INVALID) }
         if (provider.organizationId != organizationId || provider.status != "active") {
-            throw BadRequestException("Provider is not active for this organization")
+            throw ProviderGenerationException(ProviderFailureCode.PROVIDER_CONFIGURATION_INVALID)
         }
         if (provider.scope == "personal" && provider.ownerUserId != currentUser.id) {
             throw ForbiddenException("Personal provider can only be used by its owner")

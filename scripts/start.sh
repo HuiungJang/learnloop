@@ -15,6 +15,14 @@ fi
 if ! grep -q "^APP_RUNNER_WORKSPACE_HOST_ROOT=" .env; then
   printf '%s=%s\n' APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces" >> .env
 fi
+if ! grep -q "^APP_CREDENTIAL_ENCRYPTION_KEY=" .env; then
+  if command -v openssl >/dev/null 2>&1; then
+    credential_key=$(openssl rand -base64 32)
+  else
+    credential_key=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+  fi
+  printf '%s=%s\n' APP_CREDENTIAL_ENCRYPTION_KEY "$credential_key" >> .env
+fi
 
 set -a
 . ./.env

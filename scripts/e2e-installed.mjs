@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -18,6 +20,8 @@ const companionToken = `local-token-${Date.now()}`;
 const postedRequests = [];
 const companionRequests = [];
 const demoProblemId = "problem-demo-practice-workbench";
+const fakeProvider = await startFakeOpenAiProvider();
+const fakeProviderBackendBaseUrl = process.env.E2E_FAKE_PROVIDER_BASE_URL ?? defaultFakeProviderBackendBaseUrl(fakeProvider.port);
 
 const browser = await chromium.launch({ headless: true, ...launchOptions });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -150,17 +154,123 @@ try {
   await page.getByText(/^codex login$/i).waitFor();
   await page.getByRole("radio", { name: /Claude/i }).click();
   assert.equal(await page.getByRole("button", { name: /^OAuth$/i }).isDisabled(), true);
+  await page.getByRole("radio", { name: /Codex/i }).click();
+  await page.getByRole("button", { name: /^API key$/i }).click();
+  await page.getByLabel("Base URL").fill(fakeProviderBackendBaseUrl);
   await page.getByLabel("API key").fill(localAiKey);
-  await page.getByRole("button", { name: /Save local setup/i }).click();
+  const [providerCreateResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/providers") && response.request().method() === "POST" && response.status() === 201),
+    page.getByRole("button", { name: /Save local setup/i }).click()
+  ]);
+  const providerCreateBody = await providerCreateResponse.text();
+  assert.equal(providerCreateBody.includes(localAiKey), false);
+  const providerCreatePayload = JSON.parse(providerCreateBody);
+  const apiProviderConfigId = providerCreatePayload.provider.id;
+  assert.equal(providerCreatePayload.provider.provider, "codex");
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
-  const storedApiKeySettings = await page.evaluate((needle) => {
-    const entry = Object.entries(window.localStorage).find(([key, value]) => key.startsWith("learnloop:local-ai:") && value.includes(needle));
+  const storedApiKeySettings = await page.evaluate(() => {
+    const entry = Object.entries(window.localStorage).find(([key]) => key.startsWith("learnloop:local-ai:"));
     return entry ? JSON.parse(entry[1]) : null;
-  }, localAiKey);
-  assert.equal(storedApiKeySettings.provider, "claude");
+  });
+  const apiKeyInLocalStorage = await page.evaluate((needle) => Object.values(window.localStorage).some((value) => value.includes(needle)), localAiKey);
+  assert.equal(apiKeyInLocalStorage, false);
+  assert.equal(storedApiKeySettings.provider, "codex");
   assert.equal(storedApiKeySettings.authMethod, "api_key");
-  assert.equal(storedApiKeySettings.apiKey, localAiKey);
+  assert.equal(storedApiKeySettings.providerConfigId, apiProviderConfigId);
+  assert.equal(Object.prototype.hasOwnProperty.call(storedApiKeySettings, "apiKey"), false);
+
+  const ownerProviderSession = await apiRequest("/api/session", {
+    method: "POST",
+    body: { email, password }
+  });
+  const generationCredential = `fake-provider-generation-${Date.now()}`;
+  const generationProvider = await apiRequest("/api/providers", {
+    method: "POST",
+    token: ownerProviderSession.token,
+    body: {
+      organizationId: "org-demo",
+      provider: "codex",
+      model: "gpt-5.2",
+      baseUrl: fakeProviderBackendBaseUrl,
+      scope: "organization",
+      credential: generationCredential,
+      retentionMode: "standard",
+      authType: "byok"
+    }
+  });
+  const generationProviderConfigId = generationProvider.provider.id;
+  const providerEvidenceBundleId = await createLocalAiSessionEvidence(ownerProviderSession.token, "provider-success");
+  fakeProvider.enqueue({ body: openAiResponseBody(providerPatternOutput("E2E Provider Pattern")) });
+  const providerGenerationStartedAt = Date.now();
+  const providerGeneration = await apiRequest("/api/generation/run", {
+    method: "POST",
+    token: ownerProviderSession.token,
+    body: {
+      organizationId: "org-demo",
+      providerConfigId: generationProviderConfigId,
+      sourceBundleIds: [providerEvidenceBundleId],
+      visibility: "organization",
+      idempotencyKey: `e2e-provider-success-${Date.now()}`
+    }
+  });
+  assert.equal(providerGeneration.patternCard.title, "E2E Provider Pattern");
+  assert.equal(fakeProvider.awaitRequestCount(1).length, 1);
+  assert.equal(fakeProvider.requests[0].method, "POST");
+  assert.equal(fakeProvider.requests[0].url, "/v1/responses");
+  assert.equal(fakeProvider.requests[0].headers.authorization, `Bearer ${generationCredential}`);
+  assert.ok(Date.now() - providerGenerationStartedAt < 10_000);
+  await apiRequest(`/api/review/tasks/${providerGeneration.reviewTask.id}/decision`, {
+    method: "POST",
+    token: ownerProviderSession.token,
+    body: { decision: "approve", comment: "E2E provider generation approved." }
+  });
+
+  const failureEvidenceBundleId = await createLocalAiSessionEvidence(ownerProviderSession.token, "provider-failure");
+  fakeProvider.enqueue({ status: 401, body: JSON.stringify({ error: "do-not-leak-provider-body" }) });
+  const failedGeneration = await apiRequestRaw("/api/generation/run", {
+    method: "POST",
+    token: ownerProviderSession.token,
+    body: {
+      organizationId: "org-demo",
+      providerConfigId: generationProviderConfigId,
+      sourceBundleIds: [failureEvidenceBundleId],
+      visibility: "organization",
+      idempotencyKey: `e2e-provider-failure-${Date.now()}`
+    }
+  });
+  assert.equal(failedGeneration.status, 503);
+  assert.equal(failedGeneration.payload.error.fields.failureCode, "provider_http_error");
+  assert.equal(fakeProvider.awaitRequestCount(2).length, 2);
+
+  const localMockBundleId = await createLocalAiSessionEvidence(ownerProviderSession.token, "local-mock");
+  const requestsBeforeLocalMock = fakeProvider.requests.length;
+  await apiRequest("/api/generation/run", {
+    method: "POST",
+    token: ownerProviderSession.token,
+    body: {
+      organizationId: "org-demo",
+      providerConfigId: "provider-local-mock",
+      sourceBundleIds: [localMockBundleId],
+      visibility: "organization",
+      idempotencyKey: `e2e-local-mock-${Date.now()}`
+    }
+  });
+  assert.equal(fakeProvider.requests.length, requestsBeforeLocalMock);
+
+  await page.getByRole("button", { name: /Practice/i }).click();
+  await page.getByRole("heading", { name: /Practice Library/i }).waitFor();
+  const providerPracticeCard = page.locator(".practice-list-row", { hasText: /E2E Provider Pattern/i }).first();
+  await providerPracticeCard.waitFor({ timeout: 20_000 });
+  await providerPracticeCard.click();
+  const [providerPracticeResponse] = await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/problems/") && response.url().includes("/practice") && response.status() === 200),
+    page.locator(".problem-action-list button").nth(1).click()
+  ]);
+  const providerPracticePayload = await providerPracticeResponse.json();
+  assert.equal(providerPracticePayload.problem.title, "E2E Provider Pattern");
+  await page.getByText(/Implement a validated adapter/i).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /Overview/i }).click();
 
   await page.getByRole("button", { name: /Run flow/i }).click();
   await page.getByText(/Card draft|Card published|Curation open/i).first().waitFor({ timeout: 20_000 });
@@ -341,23 +451,27 @@ export function formatTag(input: string): string {
   const firstAttemptsBefore = await apiRequest(`/api/problems/${demoProblemId}/attempts/me`, { token: ownerSession.token });
   assert.ok(firstAttemptsBefore.attempts.some((attempt) => attempt.files.some((file) => file.content.includes("toLowerCase()"))));
 
-  const apiKeyLeakedToServer = postedRequests.some((request) => request.postData.includes(localAiKey));
+  const apiKeyProviderPosts = postedRequests.filter((request) => request.url.includes("/api/providers") && request.postData.includes(localAiKey));
+  const apiKeyLeakedOutsideProviderSave = postedRequests.some((request) => !request.url.includes("/api/providers") && request.postData.includes(localAiKey));
   const oauthLabelLeakedToServer = postedRequests.some((request) => request.postData.includes(oauthLabel));
-  assert.equal(apiKeyLeakedToServer, false);
+  assert.equal(apiKeyProviderPosts.length, 1);
+  assert.equal(apiKeyLeakedOutsideProviderSave, false);
   assert.equal(oauthLabelLeakedToServer, false);
 
   console.log(JSON.stringify({
     appUrl,
     email,
     postRequestCount: postedRequests.length,
+    fakeProviderRequestCount: fakeProvider.requests.length,
     localStorageProvider: storedOauthSettings.provider,
     localStorageAuthMethod: storedOauthSettings.authMethod,
     registrationDisabled: true,
-    apiKeyLeakedToServer,
+    apiKeyLeakedOutsideProviderSave,
     oauthLabelLeakedToServer
   }, null, 2));
 } finally {
   await browser.close();
+  await fakeProvider.close();
 }
 
 function assertLocalAppUrl(value, overrideEnv) {
@@ -369,6 +483,14 @@ function assertLocalAppUrl(value, overrideEnv) {
 }
 
 async function apiRequest(path, options = {}) {
+  const { payload, status } = await apiRequestRaw(path, options);
+  if (status < 200 || status >= 300) {
+    throw new Error(`API ${options.method ?? "GET"} ${path} failed with ${status}: ${JSON.stringify(payload)}`);
+  }
+  return payload;
+}
+
+async function apiRequestRaw(path, options = {}) {
   const response = await fetch(`${appUrl}${path}`, {
     method: options.method ?? "GET",
     headers: {
@@ -379,8 +501,146 @@ async function apiRequest(path, options = {}) {
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   });
   const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(`API ${options.method ?? "GET"} ${path} failed with ${response.status}: ${JSON.stringify(payload)}`);
-  }
-  return payload;
+  return { status: response.status, payload };
+}
+
+async function createLocalAiSessionEvidence(token, suffix) {
+  const repoIdentityHash = `e2e-provider-repo-${suffix}-${Date.now()}`;
+  const repositoryDisplayLabel = `e2e-provider-${suffix}`;
+  await apiRequest(`/api/local-repositories/${encodeURIComponent(repoIdentityHash)}`, {
+    method: "PATCH",
+    token,
+    body: {
+      organizationId: "org-demo",
+      displayLabel: repositoryDisplayLabel,
+      status: "approved",
+      repoRoot: "/app"
+    }
+  });
+  const created = await apiRequest("/api/ingest/local-ai-session", {
+    method: "POST",
+    token,
+    body: {
+      organizationId: "org-demo",
+      teamId: "team-platform",
+      projectId: "project-learning",
+      title: `E2E provider evidence ${suffix}`,
+      sourceKind: "local_ai_session",
+      repoIdentityHash,
+      repositoryDisplayLabel,
+      repositoryUrl: "file:///app",
+      commitSha: sha256Hex(`commit-${suffix}`).slice(0, 16),
+      branchName: `e2e/provider-${suffix}`,
+      toolProvider: "codex-cli",
+      toolSessionId: `session-${suffix}`,
+      toolEventId: `event-${suffix}`,
+      timestampBucket: new Date().toISOString().slice(0, 16),
+      idempotencyKey: `${repoIdentityHash}:event-${suffix}`,
+      autoAttribution: "ai_assisted",
+      attributionConfidence: 0.92,
+      attributionReasons: ["tool_session", "e2e"],
+      artifacts: [
+        localSessionArtifact("prompt", null, `Generate a reusable API boundary pattern for ${suffix}.`),
+        localSessionArtifact("ai_response", null, `Use validated provider output and no partial assets for ${suffix}.`),
+        localSessionArtifact("file_after", "src/provider.ts", `export const providerPattern = "${suffix}";`),
+        localSessionArtifact("diff", "src/provider.ts", `+export const providerPattern = "${suffix}";`)
+      ]
+    }
+  });
+  await apiRequest(`/api/evidence/${created.bundle.id}/attribution`, {
+    method: "PATCH",
+    token,
+    body: {
+      userAttribution: "use_for_generation",
+      attributionConfidence: 0.9,
+      attributionReasons: ["curation_approved"]
+    }
+  });
+  return created.bundle.id;
+}
+
+function localSessionArtifact(itemType, repoRelativePath, content) {
+  return {
+    itemType,
+    repoRelativePath,
+    content,
+    contentHash: sha256Hex(`${itemType}:${repoRelativePath ?? ""}:${content}`),
+    metadata: {}
+  };
+}
+
+async function startFakeOpenAiProvider() {
+  const requests = [];
+  const responses = [];
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body
+      });
+      const next = responses.shift() ?? { status: 500, body: JSON.stringify({ error: "No fake provider response enqueued" }) };
+      response.writeHead(next.status ?? 200, { "content-type": "application/json", ...(next.headers ?? {}) });
+      response.end(next.body ?? "{}");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    port: server.address().port,
+    requests,
+    enqueue(response) {
+      responses.push(response);
+    },
+    awaitRequestCount(expected, timeoutMs = 2_000) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        if (requests.length >= expected) return requests;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+      assert.ok(requests.length >= expected, `Expected ${expected} fake provider requests but received ${requests.length}`);
+      return requests;
+    },
+    close() {
+      return new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  };
+}
+
+function defaultFakeProviderBackendBaseUrl(port) {
+  return process.platform === "darwin" ? `http://host.docker.internal:${port}` : `http://127.0.0.1:${port}`;
+}
+
+function openAiResponseBody(outputText) {
+  return JSON.stringify({ output_text: outputText });
+}
+
+function providerPatternOutput(title) {
+  return JSON.stringify({
+    patterns: [
+      {
+        title,
+        summary: "Provider generated summary.",
+        confidence: 0.91,
+        tags: [{ type: "framework", name: "Provider React" }],
+        evidenceRefs: ["bundle"],
+        languageAgnosticExplanation: "Keep the boundary explicit.",
+        implementationGuidance: ["Validate provider output before persistence."],
+        commonFailureModes: ["Invalid provider JSON."],
+        problems: [
+          { type: "qa", difficulty: "beginner", prompt: "When is this pattern useful?", referenceAnswer: "When provider output must be validated before use." },
+          { type: "short_implementation", difficulty: "intermediate", prompt: "Implement a validated adapter.", referenceAnswer: "Parse into a strict DTO before persistence." },
+          { type: "debugging", difficulty: "intermediate", prompt: "What should fail safely?", referenceAnswer: "Invalid JSON and HTTP failures should create no assets." }
+        ],
+        reviewRisks: ["correctness"]
+      }
+    ]
+  });
+}
+
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
 }

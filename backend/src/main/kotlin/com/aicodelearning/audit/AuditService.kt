@@ -69,17 +69,27 @@ class AuditService(
     private fun sanitizeMetadata(metadata: Map<String, Any?>): Map<String, Any?> =
         metadata
             .filterKeys { it in allowedMetadataKeys && !sensitiveKeyRegex.containsMatchIn(it) }
-            .mapValues { (_, value) -> sanitizeValue(value) }
+            .mapNotNull { (key, value) -> sanitizeValue(value)?.let { key to it.value } }
+            .toMap()
 
-    private fun sanitizeValue(value: Any?): Any? =
+    private fun sanitizeValue(value: Any?): SanitizedValue? =
         when (value) {
-            null -> null
-            is String -> if (sensitiveValueRegex.containsMatchIn(value)) "[redacted]" else value.take(MAX_METADATA_STRING_CHARS)
-            is Number, is Boolean -> value
-            is Iterable<*> -> value.map { sanitizeValue(it) }
-            is Array<*> -> value.map { sanitizeValue(it) }
+            null -> SanitizedValue(null)
+            is String ->
+                when {
+                    unsafeMetadataValueRegex.containsMatchIn(value) -> null
+                    sensitiveValueRegex.containsMatchIn(value) -> SanitizedValue("[redacted]")
+                    else -> SanitizedValue(value.take(MAX_METADATA_STRING_CHARS))
+                }
+            is Number, is Boolean -> SanitizedValue(value)
+            is Iterable<*> -> SanitizedValue(value.mapNotNull { sanitizeValue(it)?.value })
+            is Array<*> -> SanitizedValue(value.mapNotNull { sanitizeValue(it)?.value })
             else -> sanitizeValue(value.toString())
         }
+
+    private data class SanitizedValue(
+        val value: Any?,
+    )
 
     private companion object {
         const val MAX_METADATA_STRING_CHARS = 200
@@ -101,6 +111,7 @@ class AuditService(
                 "failureCode",
             )
         val sensitiveKeyRegex = Regex("credential|token|password|apiKey|rawContent|content|prompt|response|diff|stdout|stderr|path", RegexOption.IGNORE_CASE)
+        val unsafeMetadataValueRegex = Regex("\\b(?:rawContent|content|prompt|response|diff|stdout|stderr|path)\\s*:", RegexOption.IGNORE_CASE)
         val sensitiveValueRegex =
             Regex(
                 "sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\\b(?:api[_-]?key|password|secret|token)\\s*[:=]\\s*[\"']?[^\"'\\s]{8,}",

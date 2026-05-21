@@ -1458,10 +1458,10 @@ export function App() {
                   type="button"
                 >
                   <span>
-                    <strong>{trace.source?.codeTitle ?? trace.pattern?.title ?? "Unlinked trace"}</strong>
-                    <small>{trace.pattern?.title ?? trace.status} · {formatShortDate(trace.createdAt)}</small>
+                    <strong>{trace.source?.codeTitle ?? trace.pattern?.title ?? (trace.status === "failed" ? "Failed generation" : "Unlinked trace")}</strong>
+                    <small>{trace.pattern?.title ?? trace.failureCode ?? trace.status} · {formatShortDate(trace.createdAt)}</small>
                   </span>
-                  <span className={`status-badge ${trace.exercise === null ? "status-warning" : "status-success"}`}>{exerciseStateLabel(trace)}</span>
+                  <span className={`status-badge ${traceBadgeClass(trace)}`}>{exerciseStateLabel(trace)}</span>
                 </button>
               );
             })}
@@ -1474,7 +1474,7 @@ export function App() {
                   <strong>Source</strong>
                   <span>{selectedTrace.source?.codeTitle ?? "Unlinked source"}</span>
                   <small>{selectedTrace.source?.conversationTitle ?? selectedTrace.source?.sourceLinkStatus ?? selectedTrace.status}</small>
-                  {selectedTrace.source !== null ? (
+                  {selectedTrace.source !== null && selectedTrace.source.confidence !== null ? (
                     <div className="evidence-meta-grid">
                       <span>Confidence {Math.round(selectedTrace.source.confidence * 100)}%</span>
                       <span>{selectedTrace.source.codeSourceKind ?? "source kind unknown"}</span>
@@ -1483,8 +1483,8 @@ export function App() {
                 </div>
                 <div className="trace-detail-section">
                   <strong>Pattern</strong>
-                  <span>{selectedTrace.pattern?.title ?? "Pattern pending"}</span>
-                  <small>{selectedTrace.pattern?.summary ?? "No pattern summary yet."}</small>
+                  <span>{selectedTrace.pattern?.title ?? (selectedTrace.status === "failed" ? "Generation failed" : "Pattern pending")}</span>
+                  <small>{selectedTrace.pattern?.summary ?? selectedTrace.failureCode ?? "No pattern summary yet."}</small>
                   {selectedTrace.pattern?.tags.length ? (
                     <div className="tag-row">
                       {selectedTrace.pattern.tags.slice(0, 6).map((tag) => (
@@ -2681,9 +2681,16 @@ export function App() {
   }
 
   function exerciseStateLabel(trace: ConversionTraceResponse): string {
+    if (trace.status === "failed") return trace.failureCode ?? "Generation failed";
     if (trace.exercise === null) return "Not generated";
     if (trace.exercise.publicationStatus === "published") return "Published";
     return reviewStatusLabel(trace.exercise.reviewStatus);
+  }
+
+  function traceBadgeClass(trace: ConversionTraceResponse): string {
+    if (trace.status === "failed") return "status-danger";
+    if (trace.exercise === null) return "status-warning";
+    return "status-success";
   }
 
   function reviewStatusLabel(status: string | null): string {
