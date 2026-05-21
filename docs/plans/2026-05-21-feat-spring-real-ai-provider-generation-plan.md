@@ -608,80 +608,80 @@ Verification:
 
 Scope:
 
-- [ ] Implement `OpenAiPatternGenerationClient`.
-- [ ] POST to `{baseUrl}/v1/responses`.
-- [ ] Send bearer auth, model, prompt input, `text.format.type=json_schema`, schema name, strict mode, and bounded output tokens.
+- [x] Implement `OpenAiPatternGenerationClient`.
+- [x] POST to `{baseUrl}/v1/responses`.
+- [x] Send bearer auth, model, prompt input, `text.format.type=json_schema`, schema name, strict mode, and bounded output tokens.
 
 Verification:
 
-- [ ] Fake OpenAI-compatible server asserts path, method, auth header, model, schema shape, and max output tokens.
-- [ ] `./gradlew :backend:test --tests "*OpenAi*"`
+- [x] Fake OpenAI-compatible server asserts path, method, auth header, model, schema shape, and max output tokens.
+- [x] `./gradlew :backend:test --tests "*OpenAi*"`
 
 ### Slice 26: OpenAI/Codex Client Response And Failure Mapping
 
 Scope:
 
-- [ ] Extract JSON text from `output_text` and nested `output[].content[].text`.
+- [x] Extract JSON text from `output_text` and nested `output[].content[].text`.
 - [ ] Map 401/403/429/5xx, timeout, network, missing output, and invalid output safely.
-- [ ] Reuse this client for `codex`.
+- [x] Reuse this client for `codex`.
 
 Verification:
 
 - [ ] Fake server tests cover success, 401, 429, 500, missing output, invalid JSON, and timeout.
-- [ ] Auth header and provider response body do not appear in exception/audit/log assertions.
-- [ ] `./gradlew :backend:test --tests "*OpenAi*"`
+- [x] Auth header and provider response body do not appear in exception/audit/log assertions.
+- [x] `./gradlew :backend:test --tests "*OpenAi*"`
 
 ### Slice 27: Gemini Client Request Shape
 
 Scope:
 
-- [ ] Implement `GeminiPatternGenerationClient`.
-- [ ] POST to `{baseUrl}/v1beta/models/{model}:generateContent` using URI builder/path encoding.
-- [ ] Send supported API-key auth plus `generationConfig.responseMimeType=application/json` and `responseSchema`.
+- [x] Implement `GeminiPatternGenerationClient`.
+- [x] POST to `{baseUrl}/v1beta/models/{model}:generateContent` using URI builder/path encoding.
+- [x] Send supported API-key auth plus `generationConfig.responseMimeType=application/json` and `responseSchema`.
 
 Verification:
 
-- [ ] Fake Gemini server asserts endpoint, auth style, model path encoding, and schema fields.
-- [ ] `./gradlew :backend:test --tests "*Gemini*"`
+- [x] Fake Gemini server asserts endpoint, auth style, model path encoding, and schema fields.
+- [x] `./gradlew :backend:test --tests "*Gemini*"`
 
 ### Slice 28: Gemini Client Response And Failure Mapping
 
 Scope:
 
-- [ ] Extract candidate text/parts and pass only JSON text to shared parser.
-- [ ] Keep Gemini-specific DTOs private to the adapter.
-- [ ] Map Gemini error statuses and malformed responses to safe codes.
+- [x] Extract candidate text/parts and pass only JSON text to shared parser.
+- [x] Keep Gemini-specific DTOs private to the adapter.
+- [x] Map Gemini error statuses and malformed responses to safe codes.
 
 Verification:
 
-- [ ] Fake server tests cover success, provider HTTP error, missing candidate, invalid JSON, and invalid schema.
-- [ ] `./gradlew :backend:test --tests "*Gemini*"`
+- [x] Fake server tests cover success, provider HTTP error, missing candidate, invalid JSON, and invalid schema.
+- [x] `./gradlew :backend:test --tests "*Gemini*"`
 
 ### Slice 29: Claude Client Request Shape
 
 Scope:
 
-- [ ] Implement `ClaudePatternGenerationClient`.
-- [ ] POST to `{baseUrl}/v1/messages`.
-- [ ] Send `x-api-key`, `anthropic-version`, model, max tokens, prompt messages, and structured output config/schema.
+- [x] Implement `ClaudePatternGenerationClient`.
+- [x] POST to `{baseUrl}/v1/messages`.
+- [x] Send `x-api-key`, `anthropic-version`, model, max tokens, prompt messages, and structured output config/schema.
 
 Verification:
 
-- [ ] Fake Claude server asserts endpoint, headers, model, max tokens, and structured output config.
-- [ ] `./gradlew :backend:test --tests "*Claude*"`
+- [x] Fake Claude server asserts endpoint, headers, model, max tokens, and structured output config.
+- [x] `./gradlew :backend:test --tests "*Claude*"`
 
 ### Slice 30: Claude Client Response And Failure Mapping
 
 Scope:
 
-- [ ] Extract JSON text from Claude content.
-- [ ] Treat refusal, max-token stop, missing text, malformed response, invalid JSON, and invalid schema as failed generation.
-- [ ] Keep Claude-specific DTOs private to the adapter.
+- [x] Extract JSON text from Claude content.
+- [x] Treat refusal, max-token stop, missing text, malformed response, invalid JSON, and invalid schema as failed generation.
+- [x] Keep Claude-specific DTOs private to the adapter.
 
 Verification:
 
-- [ ] Fake server tests cover success, refusal, stop due to max tokens, missing text, invalid JSON, and HTTP errors.
-- [ ] `./gradlew :backend:test --tests "*Claude*"`
+- [x] Fake server tests cover success, refusal, stop due to max tokens, missing text, invalid JSON, and HTTP errors.
+- [x] `./gradlew :backend:test --tests "*Claude*"`
 
 ### Slice 31: Generation Preflight Snapshot
 

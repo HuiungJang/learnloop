@@ -211,6 +211,9 @@ class ClaudePatternGenerationClient(
 
     private fun extractClaudeJson(body: String): String {
         val root = parseProviderBody(body)
+        if (root.path("stop_reason").asText() == "refusal") {
+            throw ProviderGenerationException(ProviderFailureCode.PROVIDER_UNUSABLE_OUTPUT)
+        }
         if (root.path("stop_reason").asText() == "max_tokens") {
             throw ProviderGenerationException(ProviderFailureCode.PROVIDER_UNUSABLE_OUTPUT)
         }
