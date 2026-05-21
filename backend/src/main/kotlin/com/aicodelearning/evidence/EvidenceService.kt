@@ -209,6 +209,7 @@ class EvidenceService(
             throw BadRequestException("displayLabel is too long")
         }
         val normalizedStatus = normalizeRepositoryConsentStatus(request.status)
+        val normalizedRepoRoot = normalizeRepositoryRoot(request.repoRoot)
         val now = Instant.now()
         val consent =
             localRepositoryConsentRepository.findByOrganizationIdAndRepoIdentityHash(request.organizationId, normalizedHash)
@@ -220,6 +221,9 @@ class EvidenceService(
                     createdAt = now,
                 )
         consent.displayLabel = normalizedLabel
+        if (normalizedRepoRoot != null) {
+            consent.repoRoot = normalizedRepoRoot
+        }
         consent.status = normalizedStatus
         consent.updatedAt = now
         return localRepositoryConsentRepository.save(consent)
@@ -637,6 +641,23 @@ class EvidenceService(
         return normalized
     }
 
+    private fun normalizeRepositoryRoot(value: String?): String? {
+        val normalized = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        if (normalized.length > MAX_REPOSITORY_ROOT_LENGTH) {
+            throw BadRequestException("repoRoot is too long")
+        }
+        val path =
+            try {
+                Path.of(normalized)
+            } catch (_: Exception) {
+                throw BadRequestException("repoRoot is invalid")
+            }
+        if (!path.isAbsolute) {
+            throw BadRequestException("repoRoot must be an absolute path")
+        }
+        return normalized
+    }
+
     private fun localSessionDedupeKey(
         request: LocalAiSessionIngestRequest,
         preflight: LocalSessionPreflightResult,
@@ -776,6 +797,7 @@ class EvidenceService(
         const val MAX_BRANCH_CHARS = 120
         const val MAX_EVIDENCE_LIST_PAGE_SIZE = 100
         const val MAX_REPOSITORY_DISPLAY_LABEL_LENGTH = 240
+        const val MAX_REPOSITORY_ROOT_LENGTH = 2048
         const val REPOSITORY_CONSENT_APPROVED = "approved"
         val allowedLocalAutoAttributions =
             setOf(

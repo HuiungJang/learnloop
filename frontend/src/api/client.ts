@@ -128,6 +128,7 @@ export type LocalRepositoryConsentResponse = {
   repoIdentityHash: string;
   organizationId: string;
   displayLabel: string;
+  repoRoot: string | null;
   status: "approved" | "revoked" | "always_ignored" | "missing";
   updatedAt: string;
 };
@@ -514,7 +515,7 @@ export async function listLocalRepositories(token: string, organizationId: strin
 export async function updateLocalRepository(
   token: string,
   repoIdentityHash: string,
-  body: { organizationId: string; displayLabel: string; status: LocalRepositoryConsentResponse["status"] }
+  body: { organizationId: string; displayLabel: string; status: LocalRepositoryConsentResponse["status"]; repoRoot?: string }
 ): Promise<LocalRepositoryConsentResponse> {
   return request<LocalRepositoryConsentResponse>(`/api/local-repositories/${encodeURIComponent(repoIdentityHash)}`, {
     token,

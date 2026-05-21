@@ -9,9 +9,11 @@ import {
   Database,
   Eye,
   FolderGit2,
+  FolderOpen,
   GitPullRequest,
   KeyRound,
   Library,
+  LayoutDashboard,
   ListChecks,
   LockKeyhole,
   LogIn,
@@ -85,6 +87,7 @@ import { loadRevealedHintIds, logHintReveal, saveRevealedHintId } from "./practi
 
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
+type WorkspacePage = "dashboard" | "aiSetup" | "collection" | "evidence" | "trace" | "practice";
 type EditorTheme = "vs" | "vs-dark";
 type HealthState =
   | { status: "pending" }
@@ -131,10 +134,16 @@ type CompanionTokenResponse = {
   token?: string;
   message?: string;
 };
+type CompanionDirectoryPickerResponse = {
+  status?: "ok" | "cancelled" | "failed";
+  path?: string | null;
+  message?: string;
+};
 type RepositoryConsentStatus = "approved" | "revoked" | "always_ignored" | "missing";
 type LocalRepositoryConsent = {
   repoIdentityHash: string;
   displayLabel: string;
+  repoRoot: string | null;
   status: RepositoryConsentStatus;
   updatedAt: string;
 };
@@ -223,13 +232,54 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
   { id: "claude", label: "Claude", icon: Cloud, oauth: false }
 ];
 
+const workspacePages: Array<{ id: WorkspacePage; label: string; icon: LucideIcon }> = [
+  { id: "dashboard", label: "Overview", icon: LayoutDashboard },
+  { id: "aiSetup", label: "AI setup", icon: KeyRound },
+  { id: "collection", label: "Collection", icon: FolderGit2 },
+  { id: "evidence", label: "Evidence", icon: Database },
+  { id: "trace", label: "Trace", icon: GitPullRequest },
+  { id: "practice", label: "Practice", icon: BookOpen }
+];
+
+const pageCopy: Record<WorkspacePage, { eyebrow: string; title: string; description: string }> = {
+  dashboard: {
+    eyebrow: "AI-assisted code learning workspace",
+    title: "Generated code becomes curated practice.",
+    description: "Run the local learning flow and review system health without mixing it with operational tools."
+  },
+  aiSetup: {
+    eyebrow: "Local AI setup",
+    title: "Choose your coding assistant.",
+    description: "Connect the assistant used on this machine. Credentials stay local to this browser and companion."
+  },
+  collection: {
+    eyebrow: "Local collection",
+    title: "Control what local code can be collected.",
+    description: "Approve repositories, monitor the watcher, and manage raw evidence retention in one operational screen."
+  },
+  evidence: {
+    eyebrow: "Evidence curation",
+    title: "Review collected source evidence.",
+    description: "Inspect bounded excerpts, decide what can feed pattern generation, and purge or remove unsafe raw evidence."
+  },
+  trace: {
+    eyebrow: "Learning pipeline",
+    title: "Trace evidence into practice assets.",
+    description: "Follow how collected evidence becomes patterns and exercises so gaps are easy to spot."
+  },
+  practice: {
+    eyebrow: "Practice library",
+    title: "Open generated exercises.",
+    description: "Filter practice cards and continue work in the coding workbench only when a problem is open."
+  }
+};
+
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const SESSION_STORAGE_KEY = "learnloop:session";
 const LOCAL_OWNER_USER_ID = "u-local-owner";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
 const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
-const LOCAL_AI_SETUP_HISTORY_VIEW = "local-ai-setup";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
 );
@@ -406,6 +456,7 @@ function toLocalRepositoryConsent(repository: LocalRepositoryConsentResponse): L
   return {
     repoIdentityHash: repository.repoIdentityHash,
     displayLabel: repository.displayLabel,
+    repoRoot: typeof repository.repoRoot === "string" && repository.repoRoot.length > 0 ? repository.repoRoot : null,
     status: repository.status,
     updatedAt: repository.updatedAt
   };
@@ -554,10 +605,6 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function isLocalAiSetupHistoryState(state: unknown) {
-  return typeof state === "object" && state !== null && "learnloopView" in state && state.learnloopView === LOCAL_AI_SETUP_HISTORY_VIEW;
-}
-
 async function readCompanionResponse(response: Response): Promise<CompanionOAuthResponse> {
   const payload = (await response.json().catch(() => ({}))) as Partial<CompanionOAuthResponse>;
   return {
@@ -638,7 +685,10 @@ export function App() {
   const [retentionLoading, setRetentionLoading] = useState(false);
   const [retentionMessage, setRetentionMessage] = useState("");
   const [repositoryLabel, setRepositoryLabel] = useState("");
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [repositoryPickerLoading, setRepositoryPickerLoading] = useState(false);
+  const [activePage, setActivePage] = useState<WorkspacePage>("dashboard");
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [selectedPracticeCardId, setSelectedPracticeCardId] = useState<string | null>(null);
   const [selectedAiProvider, setSelectedAiProvider] = useState<LocalAiProvider>("codex");
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<LocalAuthMethod>("api_key");
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => readEditorTheme());
@@ -647,13 +697,13 @@ export function App() {
   const [oauthConnection, setOauthConnection] = useState<LocalOAuthConnection>({ status: "idle", message: "" });
   const [onboardingError, setOnboardingError] = useState("");
   const [health, setHealth] = useState<HealthState>({ status: "pending" });
-  const showOnboardingRef = useRef(showOnboarding);
   const sessionRef = useRef(session);
   const restoredSessionRef = useRef(session !== null);
   const evidenceDetailRequestRef = useRef(0);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
+  const activePageContent = pageCopy[activePage];
 
   const healthLabel =
     health.status === "success"
@@ -689,13 +739,10 @@ export function App() {
   }, [selectedAiProvider, selectedAuthMethod]);
 
   useEffect(() => {
-    showOnboardingRef.current = showOnboarding;
-  }, [showOnboarding]);
-
-  useEffect(() => {
     sessionRef.current = session;
     storeSession(session);
     if (session === null) {
+      setActivePage("dashboard");
       setLocalRepositories([]);
       setLocalWatcherStatus(null);
       setLocalAdapterStatuses([]);
@@ -708,24 +755,9 @@ export function App() {
   }, [session]);
 
   useEffect(() => {
-    if (session === null || !showOnboarding) return;
+    if (session === null || activePage !== "collection") return;
     void refreshLocalWatcherStatus();
-  }, [session, showOnboarding]);
-
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (sessionRef.current !== null && isLocalAiSetupHistoryState(event.state)) {
-        setShowOnboarding(true);
-        return;
-      }
-      if (showOnboardingRef.current) {
-        setShowOnboarding(false);
-      }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [activePage, session]);
 
   useEffect(() => {
     if (!restoredSessionRef.current || session === null) return;
@@ -736,22 +768,28 @@ export function App() {
     if (storedSettings === null) {
       openLocalAiSetup();
     } else {
-      setShowOnboarding(false);
+      setActivePage("dashboard");
     }
     refreshProviders(session).catch(() => logout());
   }, [session]);
 
   useEffect(() => {
-    if (session === null || membership === null || showOnboarding) return;
+    if (session === null || membership === null || activePage !== "practice") return;
     void refreshLibrary(session);
-  }, [libraryFilters, membership, session, showOnboarding]);
+  }, [activePage, libraryFilters, membership, session]);
 
   useEffect(() => {
-    if (session === null || membership === null || showOnboarding) return;
-    void refreshLearningSignals(session);
-    void refreshConversionTraces(session);
-    void refreshEvidence(session);
-  }, [membership, session, showOnboarding]);
+    if (session === null || membership === null) return;
+    if (activePage === "dashboard" || activePage === "practice") {
+      void refreshLearningSignals(session);
+    }
+    if (activePage === "trace") {
+      void refreshConversionTraces(session);
+    }
+    if (activePage === "evidence") {
+      void refreshEvidence(session);
+    }
+  }, [activePage, membership, session]);
 
   if (session === null) {
     return (
@@ -825,15 +863,26 @@ export function App() {
           <small>{membership?.role === "admin" ? "Local owner" : membership?.role ?? "member"}</small>
         </div>
 
-        <button className="local-ai-card" onClick={openLocalAiSetup} type="button">
-          <span className="icon-pill">
-            <KeyRound aria-hidden="true" size={16} />
-          </span>
-          <span>
-            <strong>{localAiSettings?.provider ?? "AI setup"}</strong>
-            <small>{localAiSettings ? localAiSettings.authMethod.replace("_", " ") : "Required"}</small>
-          </span>
-        </button>
+        <nav className="nav-list" aria-label="Workspace pages">
+          {workspacePages.map((page) => {
+            const Icon = page.icon;
+            const status =
+              page.id === "aiSetup"
+                ? localAiSettings === null
+                  ? "Required"
+                  : `${localAiSettings.provider} · ${localAiSettings.authMethod.replace("_", " ")}`
+                : pageCopy[page.id].eyebrow;
+            return (
+              <button className={activePage === page.id ? "nav-active" : ""} key={page.id} onClick={() => setActivePage(page.id)} type="button">
+                <Icon aria-hidden="true" size={16} />
+                <span>
+                  <strong>{page.label}</strong>
+                  <small>{status}</small>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
 
         <button className="secondary-button sidebar-action" onClick={logout} type="button">
           <LogOut aria-hidden="true" size={16} />
@@ -847,492 +896,235 @@ export function App() {
       </aside>
 
       <main className="workspace">
-        {showOnboarding ? (
-          <section className="onboarding-panel">
-            <div className="onboarding-header">
-              <div>
-                <p className="eyebrow">Local AI setup</p>
-                <h1>Choose your coding assistant.</h1>
-              </div>
-              <button className="secondary-button" onClick={goToDashboard} type="button">
-                <ChevronLeft aria-hidden="true" size={16} />
-                Back to dashboard
-              </button>
-            </div>
-            <form className="onboarding-form" onSubmit={saveLocalAiSettings}>
-              <div className="provider-grid" role="radiogroup" aria-label="AI provider">
-                {aiProviders.map((provider) => {
-                  const Icon = provider.icon;
-                  return (
-                    <button
-                      aria-checked={selectedAiProvider === provider.id}
-                      className={selectedAiProvider === provider.id ? "provider-selected" : ""}
-                      key={provider.id}
-                      onClick={() => setSelectedAiProvider(provider.id)}
-                      role="radio"
-                      type="button"
-                    >
-                      <Icon aria-hidden="true" size={18} />
-                      <span>{provider.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="auth-method-row">
-                <button className={selectedAuthMethod === "api_key" ? "nav-active" : ""} onClick={() => setSelectedAuthMethod("api_key")} type="button">
-                  <LockKeyhole aria-hidden="true" size={16} />
-                  API key
-                </button>
-                <button
-                  className={selectedAuthMethod === "oauth" ? "nav-active" : ""}
-                  disabled={!selectedProvider.oauth}
-                  onClick={() => setSelectedAuthMethod("oauth")}
-                  type="button"
-                >
-                  <Cloud aria-hidden="true" size={16} />
-                  OAuth
-                </button>
-              </div>
-
-              {selectedAuthMethod === "api_key" ? (
-                <label>
-                  <span>API key</span>
-                  <input autoComplete="off" onChange={(event) => setLocalApiKey(event.target.value)} type="password" value={localApiKey} />
-                </label>
-              ) : (
-                <div className="oauth-setup-stack">
-                  <div className="oauth-connect-row">
-                    <button
-                      className="secondary-button"
-                      disabled={oauthConnection.status === "starting" || oauthConnection.status === "running"}
-                      onClick={startOAuthConnection}
-                      type="button"
-                    >
-                      <Cloud aria-hidden="true" size={16} />
-                      {oauthConnection.status === "starting" || oauthConnection.status === "running" ? "Connecting" : `Connect ${selectedProvider.label}`}
-                    </button>
-                    <span aria-live="polite" className={`oauth-status oauth-status-${oauthConnection.status}`}>
-                      {oauthStatusLabel(oauthConnection.status)}
-                    </span>
-                  </div>
-                  <label>
-                    <span>Local OAuth profile</span>
-                    <input
-                      autoComplete="off"
-                      onChange={(event) => setOauthLabel(event.target.value)}
-                      placeholder={selectedAiProvider === "codex" ? "Codex CLI OAuth" : "Google OAuth"}
-                      type="text"
-                      value={oauthLabel}
-                    />
-                  </label>
-                  {oauthConnection.message.length > 0 ? <p className="oauth-message">{oauthConnection.message}</p> : null}
-                </div>
-              )}
-
-              <div className="local-only-note">
-                <ShieldCheck aria-hidden="true" size={16} />
-                <span>Stored only in this browser.</span>
-              </div>
-
-              {selectedAuthMethod === "oauth" ? (
-                <div className="oauth-command">
-                  <span>{oauthCommand(selectedAiProvider)}</span>
-                </div>
-              ) : null}
-
-              {onboardingError.length > 0 ? <p className="form-error">{onboardingError}</p> : null}
-              <button className="primary-button" type="submit">
-                <CheckCircle2 aria-hidden="true" size={16} />
-                Save local setup
-              </button>
-            </form>
-            {renderRepositorySettings()}
-          </section>
-        ) : (
-          <>
-            <header className="topbar">
-              <div>
-                <p className="eyebrow">AI-assisted code learning workspace</p>
-                <h1>Generated code becomes curated practice.</h1>
-              </div>
-              <div className={`health-pill ${health.status}`}>
-                <CheckCircle2 aria-hidden="true" size={16} />
-                <span>{healthLabel}</span>
-              </div>
-            </header>
-
-            <section className="summary-grid" aria-label="Local learning workflow">
-              {workflowCards.map((card) => {
-                const Icon = card.icon;
-
-                return (
-                  <article className="workflow-card" key={card.title}>
-                    <div className="card-heading">
-                      <span className="icon-pill">
-                        <Icon aria-hidden="true" size={18} />
-                      </span>
-                      <span>{card.metric}</span>
-                    </div>
-                    <h2>{card.title}</h2>
-                    <p>{card.description}</p>
-                  </article>
-                );
-              })}
-            </section>
-
-            <section className="workbench" id="evidence">
-              <div className="panel panel-wide">
-                <div className="panel-title">
-                  <GitPullRequest aria-hidden="true" size={20} />
-                  <h2>Workflow Run</h2>
-                </div>
-                <div className="action-row">
-                  <button className="secondary-button" onClick={() => refreshProviders(session)} type="button">
-                    <RefreshCw aria-hidden="true" size={16} />
-                    {session.user.displayName}
-                  </button>
-                  <button className="primary-button" disabled={isRunning} onClick={runDemo} type="button">
-                    <Play aria-hidden="true" size={16} />
-                    {isRunning ? "Running" : "Run flow"}
-                  </button>
-                </div>
-                <div className="status-list">
-                  {activity.map((item) => (
-                    <span key={item}>{item}</span>
-                  ))}
-                  {activity.length === 0 ? <span>Ready</span> : null}
-                </div>
-              </div>
-
-              {renderCollectedEvidencePanel()}
-
-              <div className="panel panel-wide">
-                <div className="panel-title">
-                  <GitPullRequest aria-hidden="true" size={20} />
-                  <h2>Conversion Trace</h2>
-                </div>
-                {conversionTraceError.length > 0 ? <p className="form-error">{conversionTraceError}</p> : null}
-                <div className="trace-list">
-                  {conversionTraces.length === 0 && conversionTraceError.length === 0 ? <p className="muted-copy">No conversion traces yet.</p> : null}
-                  {conversionTraces.map((trace) => (
-                    <div className="trace-row" key={trace.generationRunId}>
-                      <div className="trace-cell">
-                        <strong>Source</strong>
-                        <span>{trace.source?.codeTitle ?? "Unlinked source"}</span>
-                        <small>{trace.source?.conversationTitle ?? trace.source?.sourceLinkStatus ?? trace.status}</small>
-                      </div>
-                      <div className="trace-cell">
-                        <strong>Pattern</strong>
-                        <span>{trace.pattern?.title ?? "Pattern pending"}</span>
-                        <small>{trace.pattern?.tags.map((tag) => tag.name).slice(0, 3).join(", ") || trace.pattern?.summary || "No pattern summary"}</small>
-                      </div>
-                      <div className="trace-cell">
-                        <strong>Exercise</strong>
-                        <span>{exerciseStateLabel(trace)}</span>
-                        <small>
-                          {trace.exercise === null
-                            ? "No exercise state"
-                            : `${trace.exercise.problemCount} exercises · ${trace.exercise.difficulties.join(", ") || "difficulty pending"}`}
-                        </small>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="panel" id="review">
-                <div className="panel-title">
-                  <BookOpen aria-hidden="true" size={20} />
-                  <h2>Practice Library</h2>
-                </div>
-                <div className="library-filters" aria-label="Practice filters">
-                  <label>
-                    <span>Language</span>
-                    <select value={libraryFilters.language} onChange={(event) => updateLibraryFilter("language", event.target.value)}>
-                      <option value="">Any</option>
-                      <option value="TypeScript">TypeScript</option>
-                      <option value="Kotlin">Kotlin</option>
-                      <option value="Java">Java</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Pattern/API</span>
-                    <input
-                      onChange={(event) => updateLibraryFilter("tag", event.target.value)}
-                      placeholder="Pure Function"
-                      type="search"
-                      value={libraryFilters.tag}
-                    />
-                  </label>
-                  <label>
-                    <span>Difficulty</span>
-                    <select value={libraryFilters.difficulty} onChange={(event) => updateLibraryFilter("difficulty", event.target.value)}>
-                      <option value="">Any</option>
-                      <option value="easy">Easy</option>
-                      <option value="medium">Medium</option>
-                      <option value="hard">Hard</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Status</span>
-                    <select
-                      value={libraryFilters.publicationStatus}
-                      onChange={(event) => updateLibraryFilter("publicationStatus", event.target.value as LibraryFilters["publicationStatus"])}
-                    >
-                      <option value="published">Published</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="practice-card-list" aria-live="polite">
-                  {libraryLoading ? <p className="muted-copy">Loading practice cards.</p> : null}
-                  {libraryError.length > 0 ? <p className="form-error">{libraryError}</p> : null}
-                  {!libraryLoading && libraryError.length === 0 && libraryCards.length === 0 ? (
-                    <p className="muted-copy">No practice cards match these filters.</p>
-                  ) : null}
-                  {!libraryLoading && libraryError.length === 0
-                    ? libraryCards.map((card) => (
-                        <article className="practice-card" key={card.id}>
-                          <div className="practice-card-header">
-                            <strong>{card.title}</strong>
-                            <span>{card.problems[0]?.difficulty ?? "practice"}</span>
-                          </div>
-                          <p>{card.summary}</p>
-                          <div className="tag-row">
-                            {card.tags.slice(0, 4).map((tag) => (
-                              <span key={`${card.id}:${tag.tagType}:${tag.name}`}>{tag.name}</span>
-                            ))}
-                          </div>
-                          <div className="problem-list">
-                            {card.problems.map((problem) => (
-                              <span key={problem.id}>{problem.type}</span>
-                            ))}
-                          </div>
-                          <button
-                            className="secondary-button practice-open-button"
-                            disabled={card.problems[0] === undefined}
-                            onClick={() => {
-                              const problem = card.problems[0];
-                              if (problem !== undefined) void openPractice(problem.id);
-                            }}
-                            type="button"
-                          >
-                            <BookOpen aria-hidden="true" size={16} />
-                            Open practice
-                          </button>
-                        </article>
-                      ))
-                    : null}
-                </div>
-              </div>
-            </section>
-
-            <section className="practice-workbench" id="practice">
-              <div className="panel practice-main-panel">
-                <div className="panel-title">
-                  <Library aria-hidden="true" size={20} />
-                  <h2>Practice Workbench</h2>
-                </div>
-                {practiceLoading ? <p className="muted-copy">Loading practice problem.</p> : null}
-                {practiceError.length > 0 ? <p className="form-error">{practiceError}</p> : null}
-                {!practiceLoading && practiceError.length === 0 && activePractice === null ? (
-                  <p className="muted-copy">Open a practice card to start.</p>
-                ) : null}
-                {!practiceLoading && practiceError.length === 0 && activePractice !== null ? (
-                  <div className="practice-shell">
-                    <div className="practice-statement">
-                      <div>
-                        <p className="eyebrow">{activePractice.difficulty} · {activePractice.assetRevision}</p>
-                        <h3>{activePractice.title}</h3>
-                      </div>
-                      <p>{activePractice.prompt}</p>
-                    </div>
-                    <div className="editor-shell-placeholder" aria-label="Practice files">
-                      <div className="editor-topbar">
-                        <div className="file-strip" role="tablist" aria-label="Practice files">
-                          {activePractice.files.map((file) => (
-                            <button
-                              aria-selected={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path}
-                              className={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path ? "file-tab active" : "file-tab"}
-                              key={file.path}
-                              onClick={() => setActivePracticePath(file.path)}
-                              role="tab"
-                              title={file.readOnly ? `${file.path} (read-only)` : file.path}
-                              type="button"
-                            >
-                              <span>{file.path}</span>
-                              {file.readOnly ? <LockKeyhole aria-hidden="true" size={12} /> : null}
-                            </button>
-                          ))}
-                        </div>
-                        <span className={`save-status ${practiceSaveStatus.state}`} aria-live="polite">
-                          {practiceSaveStatus.message}
-                        </span>
-                        <button
-                          aria-label="Run tests"
-                          className="editor-tool-button"
-                          disabled={practiceSaveStatus.state === "running"}
-                          onClick={() => {
-                            const snapshot = editorSnapshotRef.current;
-                            if (snapshot === null) {
-                              setPracticeSaveStatus({ state: "idle", message: "Editor is still loading" });
-                              return;
-                            }
-                            void runPracticeSolution(snapshot());
-                          }}
-                          title="Run tests"
-                          type="button"
-                        >
-                          <Play aria-hidden="true" size={16} />
-                        </button>
-                        <button
-                          aria-label={editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme"}
-                          className="editor-tool-button"
-                          onClick={toggleEditorTheme}
-                          title={editorTheme === "vs-dark" ? "Light editor theme" : "Dark editor theme"}
-                          type="button"
-                        >
-                          {editorTheme === "vs-dark" ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
-                        </button>
-                      </div>
-                      <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
-                        <PracticeEditorShell
-                          activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
-                          files={activePractice.files}
-                          onCommandPalette={openCommandPalette}
-                          onOpenQuickFile={openQuickOpen}
-                          onRun={(files) => {
-                            void runPracticeSolution(files);
-                          }}
-                          onSave={(files) => {
-                            void savePracticeDraft(files);
-                          }}
-                          onSnapshotReady={(snapshotter) => {
-                            editorSnapshotRef.current = snapshotter;
-                          }}
-                          onStatus={showEditorStatus}
-                          onSubmit={(files) => {
-                            void submitPracticeSolution(files);
-                          }}
-                          onToggleDiff={togglePracticeDiff}
-                          onToggleTheme={toggleEditorTheme}
-                          theme={editorTheme}
-                        />
-                      </Suspense>
-                      {diffVisible && activePractice.latestRun?.failedDiff != null ? (
-                        <pre className="diff-panel">{activePractice.latestRun.failedDiff}</pre>
-                      ) : null}
-                      {answerDiff !== null ? (
-                        <Suspense fallback={<pre className="answer-diff-fallback">Loading answer diff.</pre>}>
-                          <PracticeAnswerDiff
-                            language={answerDiff.language}
-                            path={answerDiff.path}
-                            referenceAnswer={answerDiff.referenceAnswer}
-                            submittedAnswer={answerDiff.submittedAnswer}
-                            theme={editorTheme}
-                          />
-                        </Suspense>
-                      ) : null}
-                      {workbenchOverlay !== null ? renderWorkbenchOverlay(activePractice) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="panel practice-side-panel">
-                <div className="panel-title">
-                  <ListChecks aria-hidden="true" size={20} />
-                  <h2>Guidance</h2>
-                </div>
-                {activePractice === null ? (
-                  <p className="muted-copy">Hints, provenance, and feedback appear after a problem opens.</p>
-                ) : (
-                  <div className="guidance-stack">
-                    <div>
-                      <strong>Hints</strong>
-                      <div className="review-table">
-                        {activePractice.hints.map((hint) => (
-                          <div className="guidance-row hint-row" key={hint.id}>
-                            <span>{hint.label}</span>
-                            {isHintRevealed(hint) ? <small>{hint.content}</small> : <small>Locked</small>}
-                            {!isHintRevealed(hint) ? (
-                              <button disabled={!canRevealHint(hint)} onClick={() => revealHint(hint)} type="button">
-                                Reveal
-                              </button>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="collapsible-section">
-                      <button
-                        aria-expanded={provenanceExpanded}
-                        className="section-toggle"
-                        onClick={() => setProvenanceExpanded((current) => !current)}
-                        type="button"
-                      >
-                        <strong>Provenance</strong>
-                        {provenanceExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
-                      </button>
-                      {provenanceExpanded ? (
-                        <div className="review-table">
-                          {activePractice.provenance.map((source) => (
-                            <div className="guidance-row" key={`${source.sourceType}:${source.sourceLabel}`}>
-                              <span>{source.sourceLabel}</span>
-                              <small>{source.sourceType}: {source.redactedExcerpt}</small>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    {renderFeedbackPanel(activePractice)}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="split-grid">
-              <div className="panel">
-                <div className="panel-title">
-                  <ShieldCheck aria-hidden="true" size={20} />
-                  <h2>Providers</h2>
-                </div>
-                <div className="review-table">
-                  {providers.map((provider) => (
-                    <div className="review-row" key={provider.id}>
-                      <span>{provider.provider} / {provider.model}</span>
-                      <small>{provider.scope}</small>
-                      <strong>{provider.status}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="panel">
-                <div className="panel-title">
-                  <Library aria-hidden="true" size={20} />
-                  <h2>Progress</h2>
-                </div>
-                <div className="review-table">
-                  {progressScores.length === 0 ? (
-                    <p className="muted-copy">No submissions yet.</p>
-                  ) : (
-                    progressScores.slice(0, 6).map((score) => (
-                      <div className="review-row" key={score.tagName}>
-                        <span>{score.tagName}</span>
-                        <strong>{score.score}</strong>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
-          </>
-        )}
+        {renderPageHeader()}
+        {renderActivePage()}
       </main>
     </div>
   );
+
+  function renderPageHeader() {
+    return (
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">{activePageContent.eyebrow}</p>
+          <h1>{activePageContent.title}</h1>
+          <p className="page-description">{activePageContent.description}</p>
+        </div>
+        <div className={`health-pill ${health.status}`}>
+          <CheckCircle2 aria-hidden="true" size={16} />
+          <span>{healthLabel}</span>
+        </div>
+      </header>
+    );
+  }
+
+  function renderActivePage() {
+    if (activePage === "aiSetup") return renderAiSetupPage();
+    if (activePage === "collection") return renderCollectionPage();
+    if (activePage === "evidence") return renderEvidencePage();
+    if (activePage === "trace") return renderTracePage();
+    if (activePage === "practice") return renderPracticePage();
+    return renderDashboardPage();
+  }
+
+  function renderDashboardPage() {
+    if (session === null) return null;
+    const currentSession = session;
+
+    return (
+      <>
+        <section className="summary-grid" aria-label="Local learning workflow">
+          {workflowCards.map((card) => {
+            const Icon = card.icon;
+
+            return (
+              <article className="workflow-card" key={card.title}>
+                <div className="card-heading">
+                  <span className="icon-pill">
+                    <Icon aria-hidden="true" size={18} />
+                  </span>
+                  <span>{card.metric}</span>
+                </div>
+                <h2>{card.title}</h2>
+                <p>{card.description}</p>
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="dashboard-grid">
+          <div className="panel panel-wide">
+            <div className="panel-title">
+              <GitPullRequest aria-hidden="true" size={20} />
+              <h2>Workflow Run</h2>
+            </div>
+            <div className="action-row">
+              <button className="secondary-button" onClick={() => refreshProviders(currentSession)} type="button">
+                <RefreshCw aria-hidden="true" size={16} />
+                {currentSession.user.displayName}
+              </button>
+              <button className="primary-button" disabled={isRunning} onClick={runDemo} type="button">
+                <Play aria-hidden="true" size={16} />
+                {isRunning ? "Running" : "Run flow"}
+              </button>
+            </div>
+            <div className="status-list">
+              {activity.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+              {activity.length === 0 ? <span>Ready</span> : null}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">
+              <ShieldCheck aria-hidden="true" size={20} />
+              <h2>Providers</h2>
+            </div>
+            <div className="review-table">
+              {providers.map((provider) => (
+                <div className="review-row" key={provider.id}>
+                  <span>{provider.provider} / {provider.model}</span>
+                  <small>{provider.scope}</small>
+                  <strong>{provider.status}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">
+              <Library aria-hidden="true" size={20} />
+              <h2>Progress</h2>
+            </div>
+            <div className="review-table">
+              {progressScores.length === 0 ? (
+                <p className="muted-copy">No submissions yet.</p>
+              ) : (
+                progressScores.slice(0, 6).map((score) => (
+                  <div className="review-row" key={score.tagName}>
+                    <span>{score.tagName}</span>
+                    <strong>{score.score}</strong>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  function renderAiSetupPage() {
+    return (
+      <section className="onboarding-panel ai-setup-page">
+        <form className="onboarding-form" onSubmit={saveLocalAiSettings}>
+          <div className="provider-grid" role="radiogroup" aria-label="AI provider">
+            {aiProviders.map((provider) => {
+              const Icon = provider.icon;
+              return (
+                <button
+                  aria-checked={selectedAiProvider === provider.id}
+                  className={selectedAiProvider === provider.id ? "provider-selected" : ""}
+                  key={provider.id}
+                  onClick={() => setSelectedAiProvider(provider.id)}
+                  role="radio"
+                  type="button"
+                >
+                  <Icon aria-hidden="true" size={18} />
+                  <span>{provider.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="auth-method-row">
+            <button className={selectedAuthMethod === "api_key" ? "nav-active" : ""} onClick={() => setSelectedAuthMethod("api_key")} type="button">
+              <LockKeyhole aria-hidden="true" size={16} />
+              API key
+            </button>
+            <button
+              className={selectedAuthMethod === "oauth" ? "nav-active" : ""}
+              disabled={!selectedProvider.oauth}
+              onClick={() => setSelectedAuthMethod("oauth")}
+              type="button"
+            >
+              <Cloud aria-hidden="true" size={16} />
+              OAuth
+            </button>
+          </div>
+
+          {selectedAuthMethod === "api_key" ? (
+            <label>
+              <span>API key</span>
+              <input autoComplete="off" onChange={(event) => setLocalApiKey(event.target.value)} type="password" value={localApiKey} />
+            </label>
+          ) : (
+            <div className="oauth-setup-stack">
+              <div className="oauth-connect-row">
+                <button
+                  className="secondary-button"
+                  disabled={oauthConnection.status === "starting" || oauthConnection.status === "running"}
+                  onClick={startOAuthConnection}
+                  type="button"
+                >
+                  <Cloud aria-hidden="true" size={16} />
+                  {oauthConnection.status === "starting" || oauthConnection.status === "running" ? "Connecting" : `Connect ${selectedProvider.label}`}
+                </button>
+                <span aria-live="polite" className={`oauth-status oauth-status-${oauthConnection.status}`}>
+                  {oauthStatusLabel(oauthConnection.status)}
+                </span>
+              </div>
+              <label>
+                <span>Local OAuth profile</span>
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setOauthLabel(event.target.value)}
+                  placeholder={selectedAiProvider === "codex" ? "Codex CLI OAuth" : "Google OAuth"}
+                  type="text"
+                  value={oauthLabel}
+                />
+              </label>
+              {oauthConnection.message.length > 0 ? <p className="oauth-message">{oauthConnection.message}</p> : null}
+            </div>
+          )}
+
+          <div className="local-only-note">
+            <ShieldCheck aria-hidden="true" size={16} />
+            <span>Stored only in this browser.</span>
+          </div>
+
+          {selectedAuthMethod === "oauth" ? (
+            <div className="oauth-command">
+              <span>{oauthCommand(selectedAiProvider)}</span>
+            </div>
+          ) : null}
+
+          {onboardingError.length > 0 ? <p className="form-error">{onboardingError}</p> : null}
+          <button className="primary-button" type="submit">
+            <CheckCircle2 aria-hidden="true" size={16} />
+            Save local setup
+          </button>
+        </form>
+      </section>
+    );
+  }
+
+  function renderCollectionPage() {
+    return <section className="page-stack">{renderRepositorySettings()}</section>;
+  }
+
+  function renderEvidencePage() {
+    return <section className="page-stack">{renderCollectedEvidencePanel()}</section>;
+  }
+
+  function renderTracePage() {
+    return <section className="page-stack">{renderConversionTracePanel()}</section>;
+  }
+
+  function renderPracticePage() {
+    return <section className="page-stack">{renderPracticeLibraryPanel()}</section>;
+  }
 
   function renderRepositorySettings() {
     const counts = repositoryStatusCounts(localRepositories);
@@ -1399,39 +1191,41 @@ export function App() {
           </div>
         ) : null}
         <div className="retention-policy-row" aria-label="Raw evidence retention">
-          <div>
+          <div className="setting-copy">
             <strong>Raw Evidence Retention</strong>
             <small>{retentionSummary(retentionSettings)} · metadata, generated cards, and practice progress remain after raw purge</small>
           </div>
-          <select
-            aria-label="Retention mode"
-            disabled={retentionLoading}
-            onChange={(event) => setRetentionMode(event.target.value as EvidenceRetentionMode)}
-            value={retentionMode}
-          >
-            <option value="default">Default cleanup</option>
-            <option value="disabled">Disabled</option>
-            <option value="immediate">Immediate purge</option>
-          </select>
-          {retentionMode === "default" ? (
-            <input
-              aria-label="Retention days"
+          <div className="retention-controls">
+            <select
+              aria-label="Retention mode"
               disabled={retentionLoading}
-              max={3650}
-              min={1}
-              onChange={(event) => setRetentionDays(event.target.value)}
-              type="number"
-              value={retentionDays}
-            />
-          ) : null}
-          <button className="secondary-button" disabled={retentionLoading} onClick={() => void saveRetentionSettings()} type="button">
-            <ShieldCheck aria-hidden="true" size={16} />
-            Save
-          </button>
-          <button className="secondary-button danger-button" disabled={retentionLoading} onClick={() => void purgeAllRawEvidenceNow()} type="button">
-            <Trash2 aria-hidden="true" size={16} />
-            Purge now
-          </button>
+              onChange={(event) => setRetentionMode(event.target.value as EvidenceRetentionMode)}
+              value={retentionMode}
+            >
+              <option value="default">Default cleanup</option>
+              <option value="disabled">Disabled</option>
+              <option value="immediate">Immediate purge</option>
+            </select>
+            {retentionMode === "default" ? (
+              <input
+                aria-label="Retention days"
+                disabled={retentionLoading}
+                max={3650}
+                min={1}
+                onChange={(event) => setRetentionDays(event.target.value)}
+                type="number"
+                value={retentionDays}
+              />
+            ) : null}
+            <button className="secondary-button" disabled={retentionLoading} onClick={() => void saveRetentionSettings()} type="button">
+              <ShieldCheck aria-hidden="true" size={16} />
+              Save
+            </button>
+            <button className="secondary-button danger-button" disabled={retentionLoading} onClick={() => void purgeAllRawEvidenceNow()} type="button">
+              <Trash2 aria-hidden="true" size={16} />
+              Purge now
+            </button>
+          </div>
         </div>
         {retentionMessage.length > 0 ? <p className="muted-copy">{retentionMessage}</p> : null}
         <div className="watcher-list" aria-live="polite">
@@ -1446,6 +1240,7 @@ export function App() {
                   {watcher.lastReconciliationStatus ?? "status unknown"}
                   {" · "}
                   {watcher.lastReconciliationDiffCandidateCount} diff candidates
+                  {watcher.reason !== null ? ` · ${watcher.reason}` : ""}
                 </small>
               </div>
               <span className={`status-badge ${watcherStatusClass(watcher)}`}>{watcherStateLabel(watcher)}</span>
@@ -1453,19 +1248,11 @@ export function App() {
           ))}
         </div>
         <div className="repository-approval-row">
-          <input
-            onChange={(event) => setRepositoryLabel(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void approveRepository();
-              }
-            }}
-            placeholder="Repository label or path"
-            type="text"
-            value={repositoryLabel}
-          />
-          <button className="primary-button" onClick={() => void approveRepository()} type="button">
+          <button className="path-picker-button" disabled={repositoryPickerLoading} onClick={() => void chooseRepositoryPath()} type="button">
+            <FolderOpen aria-hidden="true" size={16} />
+            <span>{repositoryLabel.trim().length > 0 ? repositoryLabel : "Select repository folder"}</span>
+          </button>
+          <button className="primary-button" disabled={repositoryLabel.trim().length === 0 || repositoryPickerLoading} onClick={() => void approveRepository()} type="button">
             <CheckCircle2 aria-hidden="true" size={16} />
             Approve
           </button>
@@ -1477,6 +1264,7 @@ export function App() {
               <div>
                 <strong>{repository.displayLabel}</strong>
                 <small>{repositoryStatusLabel(repository.status)} · {formatShortDate(repository.updatedAt)}</small>
+                <small>{repository.repoRoot ?? "Repository path needs reselecting."}</small>
               </div>
               <div className="mini-action-row">
                 <button onClick={() => void updateRepositoryStatus(repository, "approved")} type="button">Approve</button>
@@ -1554,6 +1342,374 @@ export function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  function renderConversionTracePanel() {
+    const selectedTrace = conversionTraces.find((trace) => trace.generationRunId === selectedTraceId) ?? conversionTraces[0] ?? null;
+
+    return (
+      <div className="panel panel-wide trace-panel">
+        <div className="panel-title">
+          <GitPullRequest aria-hidden="true" size={20} />
+          <h2>Conversion Trace</h2>
+        </div>
+        {conversionTraceError.length > 0 ? <p className="form-error">{conversionTraceError}</p> : null}
+        <div className="evidence-browser trace-browser">
+          <div className="evidence-list" aria-label="Conversion trace list">
+            {conversionTraces.length === 0 && conversionTraceError.length === 0 ? <p className="muted-copy">No conversion traces yet.</p> : null}
+            {conversionTraces.map((trace) => {
+              const isSelected = selectedTrace?.generationRunId === trace.generationRunId;
+              return (
+                <button
+                  className={isSelected ? "evidence-row evidence-row-active" : "evidence-row"}
+                  key={trace.generationRunId}
+                  onClick={() => setSelectedTraceId(trace.generationRunId)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{trace.source?.codeTitle ?? trace.pattern?.title ?? "Unlinked trace"}</strong>
+                    <small>{trace.pattern?.title ?? trace.status} · {formatShortDate(trace.createdAt)}</small>
+                  </span>
+                  <span className={`status-badge ${trace.exercise === null ? "status-warning" : "status-success"}`}>{exerciseStateLabel(trace)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="evidence-detail trace-detail" aria-live="polite">
+            {selectedTrace === null ? <p className="muted-copy">Select a trace to inspect its source, pattern, and exercise state.</p> : null}
+            {selectedTrace !== null ? (
+              <>
+                <div className="trace-detail-section">
+                  <strong>Source</strong>
+                  <span>{selectedTrace.source?.codeTitle ?? "Unlinked source"}</span>
+                  <small>{selectedTrace.source?.conversationTitle ?? selectedTrace.source?.sourceLinkStatus ?? selectedTrace.status}</small>
+                  {selectedTrace.source !== null ? (
+                    <div className="evidence-meta-grid">
+                      <span>Confidence {Math.round(selectedTrace.source.confidence * 100)}%</span>
+                      <span>{selectedTrace.source.codeSourceKind ?? "source kind unknown"}</span>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="trace-detail-section">
+                  <strong>Pattern</strong>
+                  <span>{selectedTrace.pattern?.title ?? "Pattern pending"}</span>
+                  <small>{selectedTrace.pattern?.summary ?? "No pattern summary yet."}</small>
+                  {selectedTrace.pattern?.tags.length ? (
+                    <div className="tag-row">
+                      {selectedTrace.pattern.tags.slice(0, 6).map((tag) => (
+                        <span key={`${selectedTrace.generationRunId}:${tag.tagType}:${tag.name}`}>{tag.name}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="trace-detail-section">
+                  <strong>Exercise</strong>
+                  <span>{exerciseStateLabel(selectedTrace)}</span>
+                  <small>
+                    {selectedTrace.exercise === null
+                      ? "No exercise state"
+                      : `${selectedTrace.exercise.problemCount} exercises · ${selectedTrace.exercise.difficulties.join(", ") || "difficulty pending"}`}
+                  </small>
+                  {selectedTrace.exercise !== null ? (
+                    <div className="evidence-meta-grid">
+                      <span>{selectedTrace.exercise.publicationStatus}</span>
+                      <span>{selectedTrace.exercise.reviewStatus ?? "review status unknown"}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPracticeLibraryPanel() {
+    const selectedCard = libraryCards.find((card) => card.id === selectedPracticeCardId) ?? libraryCards[0] ?? null;
+    const activePracticeBelongsToSelectedCard = activePractice !== null && activePractice.patternCardId === selectedCard?.id;
+
+    return (
+      <div className="panel panel-wide practice-library-panel">
+        <div className="panel-title">
+          <BookOpen aria-hidden="true" size={20} />
+          <h2>Practice Library</h2>
+        </div>
+        <div className="library-filters" aria-label="Practice filters">
+          <label>
+            <span>Language</span>
+            <select value={libraryFilters.language} onChange={(event) => updateLibraryFilter("language", event.target.value)}>
+              <option value="">Any</option>
+              <option value="TypeScript">TypeScript</option>
+              <option value="Kotlin">Kotlin</option>
+              <option value="Java">Java</option>
+            </select>
+          </label>
+          <label>
+            <span>Pattern/API</span>
+            <input
+              onChange={(event) => updateLibraryFilter("tag", event.target.value)}
+              placeholder="Pure Function"
+              type="search"
+              value={libraryFilters.tag}
+            />
+          </label>
+          <label>
+            <span>Difficulty</span>
+            <select value={libraryFilters.difficulty} onChange={(event) => updateLibraryFilter("difficulty", event.target.value)}>
+              <option value="">Any</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select
+              value={libraryFilters.publicationStatus}
+              onChange={(event) => updateLibraryFilter("publicationStatus", event.target.value as LibraryFilters["publicationStatus"])}
+            >
+              <option value="published">Published</option>
+            </select>
+          </label>
+        </div>
+
+        {libraryError.length > 0 ? <p className="form-error">{libraryError}</p> : null}
+        <div className="evidence-browser practice-browser">
+          <div className="evidence-list practice-list" aria-label="Practice card list">
+            {libraryLoading ? <p className="muted-copy">Loading practice cards.</p> : null}
+            {!libraryLoading && libraryError.length === 0 && libraryCards.length === 0 ? (
+              <p className="muted-copy">No practice cards match these filters.</p>
+            ) : null}
+            {!libraryLoading && libraryError.length === 0
+              ? libraryCards.map((card) => {
+                  const isSelected = selectedCard?.id === card.id;
+                  return (
+                    <button
+                      className={isSelected ? "evidence-row evidence-row-active practice-list-row" : "evidence-row practice-list-row"}
+                      key={card.id}
+                      onClick={() => setSelectedPracticeCardId(card.id)}
+                      type="button"
+                    >
+                      <span>
+                        <strong>{card.title}</strong>
+                        <small>{card.summary}</small>
+                      </span>
+                      <span className="status-badge status-neutral">{card.problems[0]?.difficulty ?? "practice"}</span>
+                    </button>
+                  );
+                })
+              : null}
+          </div>
+          <div className="evidence-detail practice-detail" aria-live="polite">
+            {selectedCard === null ? <p className="muted-copy">Select a practice card to view problems and open the workbench.</p> : null}
+            {selectedCard !== null ? (
+              <>
+                <div className="practice-detail-summary">
+                  <div className="practice-card-header">
+                    <strong>{selectedCard.title}</strong>
+                    <span>{selectedCard.problems[0]?.difficulty ?? "practice"}</span>
+                  </div>
+                  <p>{selectedCard.summary}</p>
+                  <div className="tag-row">
+                    {selectedCard.tags.slice(0, 6).map((tag) => (
+                      <span key={`${selectedCard.id}:${tag.tagType}:${tag.name}`}>{tag.name}</span>
+                    ))}
+                  </div>
+                  <div className="problem-list problem-action-list">
+                    {selectedCard.problems.map((problem) => (
+                      <button
+                        className="secondary-button"
+                        key={problem.id}
+                        onClick={() => void openPractice(problem.id)}
+                        type="button"
+                      >
+                        <BookOpen aria-hidden="true" size={16} />
+                        {problem.type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {activePracticeBelongsToSelectedCard ? renderPracticeWorkbenchPanels() : (
+                  <div className="empty-detail-panel">
+                    <Library aria-hidden="true" size={20} />
+                    <p className="muted-copy">Open a problem from this card to start the workbench.</p>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPracticeWorkbenchPanels() {
+    return (
+      <section className="practice-workbench" id="practice">
+        <div className="panel practice-main-panel">
+          <div className="panel-title">
+            <Library aria-hidden="true" size={20} />
+            <h2>Practice Workbench</h2>
+          </div>
+          {practiceLoading ? <p className="muted-copy">Loading practice problem.</p> : null}
+          {practiceError.length > 0 ? <p className="form-error">{practiceError}</p> : null}
+          {!practiceLoading && practiceError.length === 0 && activePractice === null ? (
+            <p className="muted-copy">Open a practice card to start.</p>
+          ) : null}
+          {!practiceLoading && practiceError.length === 0 && activePractice !== null ? (
+            <div className="practice-shell">
+              <div className="practice-statement">
+                <div>
+                  <p className="eyebrow">{activePractice.difficulty} · {activePractice.assetRevision}</p>
+                  <h3>{activePractice.title}</h3>
+                </div>
+                <p>{activePractice.prompt}</p>
+              </div>
+              <div className="editor-shell-placeholder" aria-label="Practice files">
+                <div className="editor-topbar">
+                  <div className="file-strip" role="tablist" aria-label="Practice files">
+                    {activePractice.files.map((file) => (
+                      <button
+                        aria-selected={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path}
+                        className={(activePracticePath ?? activePractice.files[0]?.path ?? null) === file.path ? "file-tab active" : "file-tab"}
+                        key={file.path}
+                        onClick={() => setActivePracticePath(file.path)}
+                        role="tab"
+                        title={file.readOnly ? `${file.path} (read-only)` : file.path}
+                        type="button"
+                      >
+                        <span>{file.path}</span>
+                        {file.readOnly ? <LockKeyhole aria-hidden="true" size={12} /> : null}
+                      </button>
+                    ))}
+                  </div>
+                  <span className={`save-status ${practiceSaveStatus.state}`} aria-live="polite">
+                    {practiceSaveStatus.message}
+                  </span>
+                  <button
+                    aria-label="Run tests"
+                    className="editor-tool-button"
+                    disabled={practiceSaveStatus.state === "running"}
+                    onClick={() => {
+                      const snapshot = editorSnapshotRef.current;
+                      if (snapshot === null) {
+                        setPracticeSaveStatus({ state: "idle", message: "Editor is still loading" });
+                        return;
+                      }
+                      void runPracticeSolution(snapshot());
+                    }}
+                    title="Run tests"
+                    type="button"
+                  >
+                    <Play aria-hidden="true" size={16} />
+                  </button>
+                  <button
+                    aria-label={editorTheme === "vs-dark" ? "Switch editor to light theme" : "Switch editor to dark theme"}
+                    className="editor-tool-button"
+                    onClick={toggleEditorTheme}
+                    title={editorTheme === "vs-dark" ? "Light editor theme" : "Dark editor theme"}
+                    type="button"
+                  >
+                    {editorTheme === "vs-dark" ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
+                  </button>
+                </div>
+                <Suspense fallback={<pre>{activePractice.files[0]?.content ?? "// Loading editor bundle."}</pre>}>
+                  <PracticeEditorShell
+                    activePath={activePracticePath ?? activePractice.files[0]?.path ?? null}
+                    files={activePractice.files}
+                    onCommandPalette={openCommandPalette}
+                    onOpenQuickFile={openQuickOpen}
+                    onRun={(files) => {
+                      void runPracticeSolution(files);
+                    }}
+                    onSave={(files) => {
+                      void savePracticeDraft(files);
+                    }}
+                    onSnapshotReady={(snapshotter) => {
+                      editorSnapshotRef.current = snapshotter;
+                    }}
+                    onStatus={showEditorStatus}
+                    onSubmit={(files) => {
+                      void submitPracticeSolution(files);
+                    }}
+                    onToggleDiff={togglePracticeDiff}
+                    onToggleTheme={toggleEditorTheme}
+                    theme={editorTheme}
+                  />
+                </Suspense>
+                {diffVisible && activePractice.latestRun?.failedDiff != null ? (
+                  <pre className="diff-panel">{activePractice.latestRun.failedDiff}</pre>
+                ) : null}
+                {answerDiff !== null ? (
+                  <Suspense fallback={<pre className="answer-diff-fallback">Loading answer diff.</pre>}>
+                    <PracticeAnswerDiff
+                      language={answerDiff.language}
+                      path={answerDiff.path}
+                      referenceAnswer={answerDiff.referenceAnswer}
+                      submittedAnswer={answerDiff.submittedAnswer}
+                      theme={editorTheme}
+                    />
+                  </Suspense>
+                ) : null}
+                {workbenchOverlay !== null ? renderWorkbenchOverlay(activePractice) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="panel practice-side-panel">
+          <div className="panel-title">
+            <ListChecks aria-hidden="true" size={20} />
+            <h2>Guidance</h2>
+          </div>
+          {activePractice === null ? (
+            <p className="muted-copy">Hints, provenance, and feedback appear after a problem opens.</p>
+          ) : (
+            <div className="guidance-stack">
+              <div>
+                <strong>Hints</strong>
+                <div className="review-table">
+                  {activePractice.hints.map((hint) => (
+                    <div className="guidance-row hint-row" key={hint.id}>
+                      <span>{hint.label}</span>
+                      {isHintRevealed(hint) ? <small>{hint.content}</small> : <small>Locked</small>}
+                      {!isHintRevealed(hint) ? (
+                        <button disabled={!canRevealHint(hint)} onClick={() => revealHint(hint)} type="button">
+                          Reveal
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="collapsible-section">
+                <button
+                  aria-expanded={provenanceExpanded}
+                  className="section-toggle"
+                  onClick={() => setProvenanceExpanded((current) => !current)}
+                  type="button"
+                >
+                  <strong>Provenance</strong>
+                  {provenanceExpanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
+                </button>
+                {provenanceExpanded ? (
+                  <div className="review-table">
+                    {activePractice.provenance.map((source) => (
+                      <div className="guidance-row" key={`${source.sourceType}:${source.sourceLabel}`}>
+                        <span>{source.sourceLabel}</span>
+                        <small>{source.sourceType}: {source.redactedExcerpt}</small>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {renderFeedbackPanel(activePractice)}
+            </div>
+          )}
+        </div>
+      </section>
     );
   }
 
@@ -1660,7 +1816,7 @@ export function App() {
       if (storedSettings === null) {
         openLocalAiSetup();
       } else {
-        setShowOnboarding(false);
+        setActivePage("dashboard");
       }
       await refreshProviders(nextSession);
     } catch (error) {
@@ -1692,7 +1848,7 @@ export function App() {
         tag: libraryFilters.tag,
         difficulty: libraryFilters.difficulty,
         page: 0,
-        pageSize: 24
+        pageSize: 100
       });
       setLibraryCards(cards.filter((card) => card.publicationStatus === libraryFilters.publicationStatus));
     } catch (error) {
@@ -1802,11 +1958,23 @@ export function App() {
 
     try {
       const repositories = await listLocalRepositories(currentSession.token, currentMembership.organizationId);
-      setLocalRepositories(repositories.map(toLocalRepositoryConsent));
+      const localConsents = repositories.map(toLocalRepositoryConsent);
+      setLocalRepositories(localConsents);
+      await syncApprovedLocalRepositories(localConsents);
     } catch {
       setLocalRepositories([]);
     }
     await refreshRetentionSettings(currentSession, currentMembership.organizationId);
+  }
+
+  async function syncApprovedLocalRepositories(repositories: LocalRepositoryConsent[]) {
+    const approvedRepositories = repositories.filter((repository) => repository.status === "approved" && repository.repoRoot !== null);
+    for (const repository of approvedRepositories) {
+      await syncCompanionWatcherRepository(repository.repoIdentityHash, repository.displayLabel, repository.status, repository.repoRoot ?? undefined, false);
+    }
+    if (approvedRepositories.length > 0) {
+      await refreshLocalWatcherStatus();
+    }
   }
 
   async function refreshRetentionSettings(currentSession: SessionResponse, organizationId: string) {
@@ -1878,7 +2046,8 @@ export function App() {
     repoIdentityHash: string,
     displayLabel: string,
     status: RepositoryConsentStatus,
-    repoRoot?: string
+    repoRoot?: string,
+    refreshAfter = true
   ) {
     try {
       const localToken = await readLocalCompanionToken();
@@ -1894,9 +2063,36 @@ export function App() {
       });
       const payload = (await response.json().catch(() => ({}))) as CompanionWatcherStatusResponse;
       if (!response.ok) throw new Error(payload.message || "Watcher repository sync failed");
-      await refreshLocalWatcherStatus();
+      if (refreshAfter) {
+        await refreshLocalWatcherStatus();
+      }
     } catch (error) {
       setLocalWatcherError(error instanceof Error ? error.message : "Watcher repository sync failed");
+    }
+  }
+
+  async function chooseRepositoryPath() {
+    setLocalWatcherError("");
+    setOnboardingError("");
+    setRepositoryPickerLoading(true);
+    try {
+      const localToken = await readLocalCompanionToken();
+      const response = await fetch(`${LOCAL_AI_COMPANION_URL}/host/directory-picker`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-learnloop-local-token": localToken },
+        body: JSON.stringify({ prompt: "Choose a repository folder for LearnLoop collection." })
+      });
+      const payload = (await response.json().catch(() => ({}))) as CompanionDirectoryPickerResponse;
+      if (!response.ok) throw new Error(payload.message || "Repository folder picker failed");
+      if (payload.status === "cancelled") return;
+      if (typeof payload.path !== "string" || payload.path.length === 0) {
+        throw new Error("No repository folder was selected");
+      }
+      setRepositoryLabel(payload.path);
+    } catch (error) {
+      setLocalWatcherError(error instanceof Error ? error.message : "Repository folder picker failed");
+    } finally {
+      setRepositoryPickerLoading(false);
     }
   }
 
@@ -1910,6 +2106,7 @@ export function App() {
       await updateLocalRepository(session.token, repoIdentityHash, {
         organizationId: membership.organizationId,
         displayLabel: repositoryDisplayLabel(label),
+        repoRoot: label,
         status: "approved"
       });
       await syncCompanionWatcherRepository(repoIdentityHash, repositoryDisplayLabel(label), "approved", label);
@@ -1927,9 +2124,10 @@ export function App() {
       await updateLocalRepository(session.token, repository.repoIdentityHash, {
         organizationId: membership.organizationId,
         displayLabel: repository.displayLabel,
+        ...(repository.repoRoot !== null ? { repoRoot: repository.repoRoot } : {}),
         status
       });
-      await syncCompanionWatcherRepository(repository.repoIdentityHash, repository.displayLabel, status);
+      await syncCompanionWatcherRepository(repository.repoIdentityHash, repository.displayLabel, status, repository.repoRoot ?? undefined);
       await refreshLocalRepositories(session);
     } catch (error) {
       setOnboardingError(error instanceof Error ? error.message : "Repository status update failed");
@@ -2476,6 +2674,8 @@ export function App() {
     try {
       const problem = await getPracticeProblem(session.token, problemId);
       setActivePractice(problem);
+      setSelectedPracticeCardId(problem.patternCardId);
+      setActivePage("practice");
       setActivePracticePath(problem.files[0]?.path ?? null);
       setRevealedHintIds(loadRevealedHintIds({ userId: session.user.id, problemId: problem.id }));
       setProvenanceExpanded(true);
@@ -2484,6 +2684,7 @@ export function App() {
       setDiffVisible(false);
       setAnswerDiff(null);
       setPracticeSaveStatus({ state: "idle", message: "Not saved" });
+      window.setTimeout(() => document.getElementById("practice")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (error) {
       setActivePractice(null);
       setActivePracticePath(null);
@@ -2528,9 +2729,8 @@ export function App() {
     setPracticeSaveStatus({ state: "idle", message: "Not saved" });
     setPracticeError("");
     setActivity([]);
-    setShowOnboarding(false);
+    setActivePage("dashboard");
     evidenceDetailRequestRef.current += 1;
-    replaceLocalAiSetupHistoryState();
   }
 
   function saveLocalAiSettings(event: FormEvent<HTMLFormElement>) {
@@ -2563,24 +2763,12 @@ export function App() {
   }
 
   function openLocalAiSetup() {
-    if (!isLocalAiSetupHistoryState(window.history.state)) {
-      const currentState = typeof window.history.state === "object" && window.history.state !== null ? window.history.state : {};
-      window.history.pushState({ ...currentState, learnloopView: LOCAL_AI_SETUP_HISTORY_VIEW }, "", window.location.href);
-    }
-    setShowOnboarding(true);
+    setActivePage("aiSetup");
   }
 
   function goToDashboard() {
     setOnboardingError("");
-    setShowOnboarding(false);
-    replaceLocalAiSetupHistoryState();
-  }
-
-  function replaceLocalAiSetupHistoryState() {
-    if (!isLocalAiSetupHistoryState(window.history.state)) return;
-    const currentState = typeof window.history.state === "object" && window.history.state !== null ? { ...window.history.state } : {};
-    delete currentState.learnloopView;
-    window.history.replaceState(Object.keys(currentState).length > 0 ? currentState : null, "", window.location.href);
+    setActivePage("dashboard");
   }
 
   async function startOAuthConnection() {
@@ -2645,7 +2833,7 @@ export function App() {
   async function runDemo() {
     if (session === null || membership === null) return;
     if (localAiSettings === null) {
-      setShowOnboarding(true);
+      openLocalAiSetup();
       return;
     }
 

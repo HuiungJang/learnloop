@@ -21,6 +21,9 @@ class LocalRepositoryConsentEntity(
     @Column(name = "display_label", nullable = false)
     var displayLabel: String = "",
 
+    @Column(name = "repo_root")
+    var repoRoot: String? = null,
+
     @Column(nullable = false)
     var status: String = "",
 

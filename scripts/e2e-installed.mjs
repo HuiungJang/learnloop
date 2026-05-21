@@ -87,6 +87,42 @@ await page.route("http://127.0.0.1:4317/**", async (route) => {
     });
     return;
   }
+  if (url.pathname === "/watchers/status") {
+    assert.equal(route.request().headers()["x-learnloop-local-token"], companionToken);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({
+        status: "ok",
+        collectionEnabled: true,
+        uploadQueue: { queued: 0, discardedCount: 0, nextAttemptAt: null },
+        watcherCounts: { active: 0, stopped: 0, degraded: 0, unavailable: 0 },
+        watchers: []
+      })
+    });
+    return;
+  }
+  if (url.pathname === "/adapters/status") {
+    assert.equal(route.request().headers()["x-learnloop-local-token"], companionToken);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({ status: "ok", adapters: [] })
+    });
+    return;
+  }
+  if (url.pathname === "/host/directory-picker") {
+    assert.equal(route.request().headers()["x-learnloop-local-token"], companionToken);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({ status: "ok", path: "/tmp/learnloop-e2e-repository" })
+    });
+    return;
+  }
   await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
 });
 
@@ -104,7 +140,7 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
-  await page.goBack();
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
@@ -129,6 +165,11 @@ try {
   await page.getByRole("button", { name: /Run flow/i }).click();
   await page.getByText(/Card draft|Card published|Curation open/i).first().waitFor({ timeout: 20_000 });
 
+  await page.getByRole("button", { name: /Collection/i }).click();
+  await page.getByRole("heading", { name: /Collection Status/i }).waitFor();
+  await page.getByRole("button", { name: /Select repository folder/i }).click();
+  await page.getByRole("button", { name: /learnloop-e2e-repository/i }).waitFor();
+
   await page.getByRole("button", { name: /Logout/i }).click();
   await page.getByRole("button", { name: /^Login$/i }).first().click();
   await page.getByLabel("Email").fill(email);
@@ -140,24 +181,24 @@ try {
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
-  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
-  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
-  await page.goBack();
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
-  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
-  await page.getByRole("button", { name: /Back to dashboard/i }).click();
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
 
-  await page.getByRole("button", { name: /claude/i }).click();
+  await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("radio", { name: /Gemini/i }).click();
   await page.getByRole("button", { name: /^OAuth$/i }).click();
   await page.getByRole("button", { name: /Connect Gemini/i }).click();
@@ -181,11 +222,17 @@ try {
   assert.equal(storedOauthSettings.credentialLabel, oauthLabel);
   assert.equal(Object.prototype.hasOwnProperty.call(storedOauthSettings, "apiKey"), false);
 
-  await page.locator("#review").getByRole("heading", { name: /Practice Library/i }).waitFor();
-  await page.getByText(/Normalize AI-generated tag labels/i).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /Practice/i }).click();
+  await page.getByRole("heading", { name: /Practice Library/i }).waitFor();
+  await page.getByLabel("Pattern/API").fill("Pure Function");
+  const practiceCardItem = page.locator(".practice-list-row", { hasText: /Normalize AI-generated tag labels/i }).first();
+  await practiceCardItem.waitFor({ timeout: 20_000 });
+  await practiceCardItem.click();
+  const practiceProblemButton = page.locator(".problem-action-list button").first();
+  await practiceProblemButton.waitFor({ timeout: 20_000 });
   const [practiceResponse] = await Promise.all([
     page.waitForResponse((response) => response.url().includes("/api/problems/") && response.url().includes("/practice") && response.status() === 200),
-    page.getByRole("button", { name: /Open practice/i }).first().click()
+    practiceProblemButton.click()
   ]);
   const practicePayload = await practiceResponse.text();
   assert.equal(practicePayload.includes("referenceAnswer"), false);
@@ -231,6 +278,7 @@ export function formatTag(input: string): string {
   await page.waitForResponse((response) => response.url().includes("/api/progress") && response.status() === 200);
   await page.getByText(/Submitted/i).waitFor();
   await page.getByText(/Answer diff/i).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.waitForFunction(() => !document.body.innerText.includes("No submissions yet."));
   const progressPanel = page.locator(".panel").filter({ has: page.getByRole("heading", { name: /^Progress$/i }) });
   await progressPanel.getByText(/Pure Function/i).waitFor({ timeout: 20_000 });

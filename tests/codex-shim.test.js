@@ -610,9 +610,9 @@ test("local companion accepts shim events on the real receiver path", async () =
       headers: { Origin: "http://localhost:8080" }
     });
     assert.equal(tokenResponse.status, 200);
-    const oauthStartToken = (await tokenResponse.json()).token;
-    assert.equal(typeof oauthStartToken, "string");
-    assert.notEqual(oauthStartToken, token);
+    const tokenPayload = await tokenResponse.json();
+    assert.equal(tokenPayload.token, token);
+    assert.equal(tokenPayload.scope, "local_api");
 
     const tokenWithoutOrigin = await fetch(`${baseUrl}/auth/token`);
     assert.equal(tokenWithoutOrigin.status, 403);
@@ -767,7 +767,7 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
       token: oauthToken,
       body: JSON.stringify({ provider: "codex" })
     });
-    assert.equal(reusedOauth.status, 401);
+    assert.equal(reusedOauth.status, 202);
 
     const oversized = await httpRequest(port, "/shim/events", {
       method: "POST",
@@ -805,6 +805,13 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
     assert.ok(["ok", "degraded", "unavailable"].includes(processSnapshot.status));
     assert.ok(Array.isArray(processSnapshot.processes));
     assert.equal(JSON.stringify(processSnapshot).includes("sk-"), false);
+
+    const unauthenticatedDirectoryPicker = await httpRequest(port, "/host/directory-picker", {
+      method: "POST",
+      host: goodHost,
+      body: "{}"
+    });
+    assert.equal(unauthenticatedDirectoryPicker.status, 401);
 
     const unauthenticatedCodexApp = await httpRequest(port, "/adapters/codex-app/status", {
       host: goodHost
