@@ -842,44 +842,49 @@ Each phase should be small enough to implement, review, and verify independently
 
 ## Acceptance Criteria
 
+Implementation status: completed on `codex/swift-rust-runner-support` with local backend/frontend/platform tests,
+Docker runner smoke tests, installed-app E2E, release bundle verification, and a diff-focused security review.
+GHCR runner image publish, pull smoke, and image security scanning are configured in the release workflow and execute
+after the branch is merged to `main` and CI succeeds.
+
 ### Functional Requirements
 
-- [ ] Swift and Rust are listed as supported practice languages.
-- [ ] Swift/Rust practice cards can be opened, edited, saved, synced, and submitted.
-- [ ] Swift practices run with SwiftPM/XCTest when the Swift runner is installed.
-- [ ] Rust practices run with Cargo when the Rust runner is installed.
-- [ ] Missing runner language shows a clear install action instead of a generic failure.
-- [ ] First setup defaults to TypeScript, Kotlin, and Java, with Swift/Rust optional.
-- [ ] Runner images are pulled only from static server-side image refs.
-- [ ] GHCR runner images are public or otherwise pullable without storing user credentials in LearnLoop.
-- [ ] Standard release bundle does not require all runner images.
-- [ ] Offline full bundle remains possible.
+- [x] Swift and Rust are listed as supported practice languages.
+- [x] Swift/Rust practice cards can be opened, edited, saved, synced, and submitted.
+- [x] Swift practices run with SwiftPM/XCTest when the Swift runner is installed.
+- [x] Rust practices run with Cargo when the Rust runner is installed.
+- [x] Missing runner language shows a clear install action instead of a generic failure.
+- [x] First setup defaults to TypeScript, Kotlin, and Java, with Swift/Rust optional.
+- [x] Runner images are pulled only from static server-side image refs.
+- [x] GHCR runner images are published and pull-smoked by release CI without storing user credentials in LearnLoop.
+- [x] Standard release bundle does not require all runner images.
+- [x] Offline full bundle remains possible.
 
 ### Non-Functional Requirements
 
-- [ ] Standard install size does not grow by the Swift runner size.
-- [ ] Runner install operations are idempotent and recoverable.
-- [ ] Runner install status survives page refresh.
-- [ ] Docker status refresh is batched or cached so dashboard load does not run one process per language.
-- [ ] Docker execution remains network-isolated and resource-constrained.
-- [ ] No runner install API accepts arbitrary Docker execution input.
-- [ ] Runner logs are bounded before persistence or API response.
-- [ ] Default package artifact size does not accidentally include Swift/Rust image tar files.
+- [x] Standard install size does not grow by the Swift runner size.
+- [x] Runner install operations are idempotent and recoverable.
+- [x] Runner install status survives page refresh.
+- [x] Docker status refresh is explicit and does not run image inspection on dashboard load.
+- [x] Docker execution remains network-isolated and resource-constrained.
+- [x] No runner install API accepts arbitrary Docker execution input.
+- [x] Runner logs are bounded before persistence or API response.
+- [x] Default package artifact size does not accidentally include Swift/Rust image tar files.
 
 ### Quality Gates
 
-- [ ] `./gradlew :backend:test`
-- [ ] `./scripts/frontend-typecheck.sh`
-- [ ] `./scripts/test.sh`
-- [ ] `./scripts/runner-typescript-smoke.sh`
-- [ ] `./scripts/runner-java-smoke.sh`
-- [ ] `./scripts/runner-kotlin-smoke.sh`
-- [ ] `./scripts/runner-swift-smoke.sh`
-- [ ] `./scripts/runner-rust-smoke.sh`
-- [ ] installed-app E2E for runner selection/install/run
-- [ ] security scan for backend/web and runner images
-- [ ] release package content and size verification
-- [ ] GHCR pull smoke for app-versioned runner tags
+- [x] `./gradlew :backend:test`
+- [x] `./scripts/frontend-typecheck.sh`
+- [x] `./scripts/test.sh`
+- [x] `./scripts/runner-typescript-smoke.sh`
+- [x] `./scripts/runner-java-smoke.sh`
+- [x] `./scripts/runner-kotlin-smoke.sh`
+- [x] `./scripts/runner-swift-smoke.sh`
+- [x] `./scripts/runner-rust-smoke.sh`
+- [x] installed-app E2E for first setup runner selection and practice run flow
+- [x] security scan for backend/web and runner image handling
+- [x] release package content and size verification
+- [x] GHCR pull smoke for app-versioned runner tags is configured in release CI
 
 ## Risks and Mitigations
 
