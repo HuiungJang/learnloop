@@ -226,6 +226,7 @@ const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon;
 const LOCAL_AI_STORAGE_PREFIX = "learnloop:local-ai:";
 const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const SESSION_STORAGE_KEY = "learnloop:session";
+const LOCAL_OWNER_USER_ID = "u-local-owner";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
 const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
 const LOCAL_AI_SETUP_HISTORY_VIEW = "local-ai-setup";
@@ -514,7 +515,12 @@ function readStoredSession(): SessionResponse | null {
     ) {
       throw new Error("Invalid stored session");
     }
-    return nextSession as SessionResponse;
+    const session = nextSession as SessionResponse;
+    if (!isLocalOwnerSession(session)) {
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+    return session;
   } catch {
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
@@ -573,6 +579,10 @@ async function readLocalCompanionToken(): Promise<string> {
 
 function primaryMembership(session: SessionResponse | null): Membership | null {
   return session?.user.memberships[0] ?? null;
+}
+
+function isLocalOwnerSession(session: SessionResponse): boolean {
+  return session.user.id === LOCAL_OWNER_USER_ID;
 }
 
 export function App() {
@@ -1636,6 +1646,12 @@ export function App() {
 
     try {
       const nextSession = await createSession(email, password);
+      if (!isLocalOwnerSession(nextSession)) {
+        storeSession(null);
+        setSession(null);
+        setAuthError("Sign in with the local owner account.");
+        return;
+      }
 
       setSession(nextSession);
       setPassword("");

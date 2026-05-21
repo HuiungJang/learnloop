@@ -1,6 +1,8 @@
 package com.aicodelearning.auth
 
+import com.aicodelearning.organization.MembershipEntity
 import com.aicodelearning.organization.MembershipRepository
+import com.aicodelearning.organization.UserEntity
 import com.aicodelearning.organization.UserRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -10,12 +12,17 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.context.annotation.Import
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import java.time.Instant
 
 @Testcontainers
 @ActiveProfiles("local")
@@ -30,6 +37,12 @@ class LocalOwnerModeIntegrationTest {
 
     @Autowired
     private lateinit var membershipRepository: MembershipRepository
+
+    @Autowired
+    private lateinit var sessionTokenRepository: SessionTokenRepository
+
+    @Autowired
+    private lateinit var passwordEncoder: PasswordEncoder
 
     @Test
     fun `local mode seeds exactly one owner profile and no demo role users`() {
@@ -79,6 +92,74 @@ class LocalOwnerModeIntegrationTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
         assertEquals(1L, userRepository.count())
+    }
+
+    @Test
+    fun `local owner mode rejects legacy non owner login and session tokens`() {
+        val now = Instant.now()
+        val legacyToken = "legacy-admin-token"
+        try {
+            userRepository.save(
+                UserEntity(
+                    id = "u-admin",
+                    email = "admin@example.com",
+                    displayName = "Admin",
+                    passwordHash = passwordEncoder.encode("demo-password"),
+                    createdAt = now,
+                ),
+            )
+            membershipRepository.save(
+                MembershipEntity(
+                    id = "membership_u-admin",
+                    userId = "u-admin",
+                    organizationId = "org-demo",
+                    teamId = "team-platform",
+                    projectId = "project-learning",
+                    role = "admin",
+                    createdAt = now,
+                ),
+            )
+
+            val login =
+                restTemplate.postForEntity(
+                    "/api/session",
+                    LoginRequest(email = "admin@example.com", password = "demo-password"),
+                    String::class.java,
+                )
+            assertEquals(HttpStatus.UNAUTHORIZED, login.statusCode)
+
+            sessionTokenRepository.save(
+                SessionTokenEntity(
+                    id = "session_legacy_admin",
+                    userId = "u-admin",
+                    tokenHash = sha256Hex(legacyToken),
+                    createdAt = now,
+                    expiresAt = now.plusSeconds(3600),
+                ),
+            )
+            val oldSession =
+                restTemplate.exchange(
+                    "/api/me",
+                    HttpMethod.GET,
+                    HttpEntity<Void>(
+                        HttpHeaders().apply {
+                            setBearerAuth(legacyToken)
+                        },
+                    ),
+                    String::class.java,
+                )
+            assertEquals(HttpStatus.UNAUTHORIZED, oldSession.statusCode)
+        } finally {
+            if (sessionTokenRepository.existsById("session_legacy_admin")) {
+                sessionTokenRepository.deleteById("session_legacy_admin")
+            }
+            if (membershipRepository.existsById("membership_u-admin")) {
+                membershipRepository.deleteById("membership_u-admin")
+            }
+            if (userRepository.existsById("u-admin")) {
+                userRepository.deleteById("u-admin")
+            }
+        }
     }
 
     companion object {

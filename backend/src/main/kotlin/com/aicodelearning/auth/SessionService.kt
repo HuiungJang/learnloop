@@ -12,6 +12,7 @@ import com.aicodelearning.organization.TeamRepository
 import com.aicodelearning.organization.UserEntity
 import com.aicodelearning.organization.UserRepository
 import com.aicodelearning.platform.ConflictException
+import com.aicodelearning.platform.LocalOwnerAccess
 import com.aicodelearning.platform.prefixedId
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
@@ -33,6 +34,12 @@ class SessionService(
     private val passwordEncoder: PasswordEncoder,
     @param:Value("\${app.session.ttl:PT8H}")
     private val sessionTtl: Duration,
+    @param:Value("\${app.local-owner.enforce-session-owner:true}")
+    private val enforceLocalOwnerSession: Boolean,
+    @param:Value("\${app.seed-demo-roles:false}")
+    private val seedDemoRoles: Boolean,
+    @param:Value("\${app.local-owner.email:owner@local.learnloop}")
+    private val localOwnerEmail: String,
 ) {
     @Transactional
     fun register(
@@ -86,6 +93,7 @@ class SessionService(
         if (user.deactivatedAt != null || !passwordEncoder.matches(password, user.passwordHash)) {
             return null
         }
+        if (!isAllowedSessionUser(user)) return null
 
         val token = createSessionToken()
         val now = Instant.now()
@@ -119,6 +127,7 @@ class SessionService(
         if (user.deactivatedAt != null) {
             return null
         }
+        if (!isAllowedSessionUser(user)) return null
 
         session.lastUsedAt = now
         return user.toCurrentUser()
@@ -165,6 +174,11 @@ class SessionService(
                         )
                     },
         )
+
+    private fun isAllowedSessionUser(user: UserEntity): Boolean =
+        !enforceLocalOwnerSession ||
+            seedDemoRoles ||
+            (user.id == LocalOwnerAccess.LOCAL_OWNER_ID && user.email.equals(localOwnerEmail.trim(), ignoreCase = true))
 }
 
 data class CreatedSession(
