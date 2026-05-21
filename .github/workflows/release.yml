@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
   security-events: write
 
 concurrency:
@@ -174,6 +175,118 @@ jobs:
           EOF
           docker compose --env-file .ci.env -f docker-compose.install.yml build backend web
 
+  runner-images:
+    name: Build and publish runner images
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
+
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push runner image
+        uses: docker/build-push-action@v6
+        with:
+          context: runner/${{ matrix.language }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}
+            ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:latest
+
+  runner-pull-smoke:
+    name: GHCR runner pull smoke
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - runner-images
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
+    steps:
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull published runner image
+        run: docker pull "${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}"
+
+  runner-image-security:
+    name: Runner image security scan
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - runner-images
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
+    steps:
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan runner image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -253,6 +366,8 @@ jobs:
     needs:
       - prepare
       - security
+      - runner-pull-smoke
+      - runner-image-security
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

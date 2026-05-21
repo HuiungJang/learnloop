@@ -8,6 +8,7 @@ ENV_FILE=".env"
 COMPOSE_FILE="docker-compose.yml"
 RUNNER_COMPOSE_FILE="docker-compose.runner.yml"
 RELEASE_VERSION_FILE=".release-version"
+RELEASE_RUNNER_FILE=".release-runner.env"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -24,6 +25,12 @@ load_release_version() {
 
   AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < "$RELEASE_VERSION_FILE")
   export AI_CODE_RELEASE_VERSION
+
+  if [ -f "$RELEASE_RUNNER_FILE" ]; then
+    set -a
+    . "./$RELEASE_RUNNER_FILE"
+    set +a
+  fi
 }
 
 compose() {
@@ -72,6 +79,8 @@ write_env_file() {
   runner_base_url=${APP_RUNNER_BASE_URL:-}
   runner_token=${APP_RUNNER_TOKEN:-}
   runner_require_limits=${APP_RUNNER_REQUIRE_LIMITS:-true}
+  runner_image_registry=${APP_RUNNER_IMAGE_REGISTRY:-${RELEASE_RUNNER_IMAGE_REGISTRY:-}}
+  runner_image_version=${APP_RUNNER_IMAGE_VERSION:-${RELEASE_RUNNER_IMAGE_VERSION:-$AI_CODE_RELEASE_VERSION}}
   runner_docker_socket=${APP_RUNNER_DOCKER_SOCKET:-/var/run/docker.sock}
   runner_workspace_host_root=${APP_RUNNER_WORKSPACE_HOST_ROOT:-$ROOT_DIR/.local-runner-workspaces}
 
@@ -89,6 +98,8 @@ APP_RUNNER_ENABLED=$runner_enabled
 APP_RUNNER_BASE_URL=$runner_base_url
 APP_RUNNER_TOKEN=$runner_token
 APP_RUNNER_REQUIRE_LIMITS=$runner_require_limits
+APP_RUNNER_IMAGE_REGISTRY=$runner_image_registry
+APP_RUNNER_IMAGE_VERSION=$runner_image_version
 APP_RUNNER_DOCKER_SOCKET=$runner_docker_socket
 APP_RUNNER_WORKSPACE_HOST_ROOT=$runner_workspace_host_root
 EOF
@@ -98,6 +109,8 @@ EOF
 ensure_runner_env() {
   ensure_env_value APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock
   ensure_env_value APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces"
+  ensure_env_value APP_RUNNER_IMAGE_REGISTRY "${RELEASE_RUNNER_IMAGE_REGISTRY:-}"
+  ensure_env_value APP_RUNNER_IMAGE_VERSION "${RELEASE_RUNNER_IMAGE_VERSION:-$AI_CODE_RELEASE_VERSION}"
 }
 
 prepare_runner_workspace() {

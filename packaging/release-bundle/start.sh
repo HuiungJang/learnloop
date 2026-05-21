@@ -24,6 +24,18 @@ fi
 AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < .release-version)
 export AI_CODE_RELEASE_VERSION
 
+if [ -f ".release-runner.env" ]; then
+  set -a
+  . ./.release-runner.env
+  set +a
+fi
+if ! grep -q "^APP_RUNNER_IMAGE_REGISTRY=" .env; then
+  printf '%s=%s\n' APP_RUNNER_IMAGE_REGISTRY "${RELEASE_RUNNER_IMAGE_REGISTRY:-}" >> .env
+fi
+if ! grep -q "^APP_RUNNER_IMAGE_VERSION=" .env; then
+  printf '%s=%s\n' APP_RUNNER_IMAGE_VERSION "${RELEASE_RUNNER_IMAGE_VERSION:-$AI_CODE_RELEASE_VERSION}" >> .env
+fi
+
 set -a
 . ./.env
 set +a

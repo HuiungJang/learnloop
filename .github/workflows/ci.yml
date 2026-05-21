@@ -50,6 +50,14 @@ jobs:
           fi
           sh -n scripts/install.sh
           sh -n scripts/package-release.sh
+          sh -n scripts/build-runner-images.sh
+          sh -n scripts/runner-typescript-smoke.sh
+          sh -n scripts/runner-java-smoke.sh
+          sh -n scripts/runner-kotlin-smoke.sh
+          sh -n scripts/runner-swift-smoke.sh
+          sh -n scripts/runner-rust-smoke.sh
+          sh -n runner/swift/run-tests.sh
+          sh -n runner/rust/run-tests.sh
           sh -n packaging/release-bundle/install.sh
           sh -n packaging/release-bundle/start.sh
           sh -n packaging/release-bundle/status.sh
@@ -67,6 +75,40 @@ jobs:
 
       - name: Typecheck frontend
         run: ./scripts/frontend-typecheck.sh
+
+      - name: Detect changed runner files
+        id: runner_changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          changed="$(git diff --name-only "origin/${GITHUB_BASE_REF}"...HEAD)"
+          for language in typescript java kotlin swift rust; do
+            if printf '%s\n' "$changed" | grep -Eq "(^runner/${language}/|^scripts/runner-${language}-smoke.sh|^scripts/build-runner-images.sh|^backend/src/main/kotlin/com/aicodelearning/runner/|^backend/src/main/kotlin/com/aicodelearning/learning/PracticeService.kt)"; then
+              echo "$language=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$language=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+      - name: Smoke changed TypeScript runner
+        if: steps.runner_changes.outputs.typescript == 'true'
+        run: ./scripts/runner-typescript-smoke.sh
+
+      - name: Smoke changed Java runner
+        if: steps.runner_changes.outputs.java == 'true'
+        run: ./scripts/runner-java-smoke.sh
+
+      - name: Smoke changed Kotlin runner
+        if: steps.runner_changes.outputs.kotlin == 'true'
+        run: ./scripts/runner-kotlin-smoke.sh
+
+      - name: Smoke changed Swift runner
+        if: steps.runner_changes.outputs.swift == 'true'
+        run: ./scripts/runner-swift-smoke.sh
+
+      - name: Smoke changed Rust runner
+        if: steps.runner_changes.outputs.rust == 'true'
+        run: ./scripts/runner-rust-smoke.sh
 
   build:
     name: Build

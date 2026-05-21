@@ -100,13 +100,13 @@ MVP는 개인 로컬 앱입니다.
 
 ### 실습 워크벤치와 샌드박스 실행
 
-실습 워크벤치는 TypeScript, Java, Kotlin 문제를 VS Code에 익숙한 편집 경험으로 풀 수 있게 합니다. 사용자는 로컬 코드 실행이 불가능한 환경에서도 실습을 탐색하고, 파일을 수정하고, 초안을 저장하고, 답안을 제출하고, 피드백과 정답 diff를 확인할 수 있습니다.
+실습 워크벤치는 TypeScript, Java, Kotlin, Swift, Rust 문제를 VS Code에 익숙한 편집 경험으로 풀 수 있게 합니다. 사용자는 로컬 코드 실행이 불가능한 환경에서도 실습을 탐색하고, 파일을 수정하고, 초안을 저장하고, 답안을 제출하고, 피드백과 정답 diff를 확인할 수 있습니다.
 
-샌드박스 실행은 선택 기능이며 실패 시 안전하게 비활성화됩니다. Run 동작은 backend runtime이 Docker CLI, 접근 가능한 Docker daemon, 로컬 언어별 runner image를 사용할 수 있을 때만 동작합니다. 이 조건이 없으면 앱은 `runner_unavailable`을 표시하지만 읽기, 편집, 로컬 저장, draft sync, 제출 흐름은 유지합니다.
+샌드박스 실행은 선택 기능이며 실패 시 안전하게 비활성화됩니다. Run 동작은 backend runtime이 Docker CLI, 접근 가능한 Docker daemon, 로컬 언어별 runner image를 사용할 수 있을 때만 동작합니다. Runner가 없으면 앱은 `runner_unavailable`을 표시하고 실습 피드백 패널 또는 Runners 페이지에서 설치 동작을 제공합니다. 읽기, 편집, 로컬 저장, draft sync, 제출 흐름은 계속 유지됩니다.
 
 현재 runner 제한:
 
-- 지원 언어: TypeScript, Java, Kotlin
+- 지원 언어: TypeScript, Java, Kotlin, Swift, Rust
 - 코드 실행 중 네트워크 접근 없음
 - 실행 중 package 설치 없음; 필요한 의존성은 runner image에 포함해야 함
 - browser가 아니라 backend가 고정 harness command를 선택
@@ -119,10 +119,12 @@ MVP는 개인 로컬 앱입니다.
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
+./scripts/runner-swift-smoke.sh
+./scripts/runner-rust-smoke.sh
 ./scripts/status.sh
 ```
 
-설치형 앱은 이제 기본으로 로컬 샌드박스 실행을 활성화합니다. backend image에 Docker CLI를 포함하고, host Docker socket을 mount하고, TypeScript/Java/Kotlin runner image를 빌드하며, `.local-runner-workspaces/`를 host/container 공유 workspace로 사용합니다. 이 기능은 강력한 로컬 실행 권한을 사용하므로 backend container가 host Docker daemon에 접근하지 않게 하려면 시작 전에 `APP_RUNNER_ENABLED=false`로 설정하세요.
+소스 설치 스크립트는 기본으로 TypeScript, Java, Kotlin runner만 빌드합니다. 모든 runner를 로컬에서 빌드하려면 `./scripts/install.sh` 전에 `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"`를 설정하세요. 설치형 앱은 host Docker socket을 mount하고 `.local-runner-workspaces/`를 host/container 공유 workspace로 사용합니다. 이 기능은 강력한 로컬 실행 권한을 사용하므로 backend container가 host Docker daemon에 접근하지 않게 하려면 시작 전에 `APP_RUNNER_ENABLED=false`로 설정하세요.
 
 ### 풀이기록과 동기화
 
@@ -164,17 +166,23 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 패키지에 포함된 application, database, 언어별 runner Docker image를 로드하고 로컬 stack을 시작합니다.
+릴리즈 번들 설치는 소스 빌드를 하지 않습니다. 표준 번들은 runner image에 대해 online-first 방식입니다. Application과 database image를 로드한 뒤, Runners 페이지에서 사용자가 선택한 언어 runner만 다운로드합니다.
 
-릴리즈 번들은 application, database, TypeScript/Java/Kotlin runner image를 포함합니다. Runner 실행은 여전히 mounted Docker socket을 통한 로컬 Docker daemon 접근이 필요합니다. Runner 조건이 준비되지 않았거나 `APP_RUNNER_ENABLED=false`인 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
+Swift는 압축 기준으로도 약 1.1GB 수준이므로 표준 패키지에 포함하지 않습니다. 전체 offline 패키지가 필요하면 다음처럼 빌드합니다.
+
+```sh
+RUNNER_IMAGE_MODE=offline RUNNER_OFFLINE_LANGUAGES="typescript java kotlin swift rust" ./scripts/package-release.sh
+```
+
+Runner 실행은 여전히 mounted Docker socket을 통한 로컬 Docker daemon 접근이 필요합니다. Runner 조건이 준비되지 않았거나 `APP_RUNNER_ENABLED=false`인 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
 
 ## CI/CD
 
 LearnLoop는 GitHub Actions로 주요 품질 게이트와 릴리즈 흐름을 실행합니다.
 
-- `CI`는 pull request와 `main` push에서 변경 파일 검증, 테스트, 빌드, dependency check, secret scan, filesystem scan, container image scan을 실행합니다.
+- `CI`는 pull request와 `main` push에서 변경 파일 검증, 테스트, 빌드, dependency check, secret scan, filesystem scan, container image scan을 실행합니다. PR에서는 runner 파일 또는 공통 runner 인프라가 바뀐 경우에만 해당 runner smoke test를 실행합니다.
 - `CodeQL`은 pull request, `main` push, 주간 schedule에서 Kotlin과 TypeScript 정적 분석을 실행합니다.
-- `Release`는 `main`의 `CI` 성공 후, `v0.1.0` 같은 version tag, 또는 manual dispatch에서 실행됩니다. `main` CI 성공 시에는 prerelease snapshot을, version tag에서는 stable GitHub Release를 발행합니다.
+- `Release`는 `main`의 `CI` 성공 후, `v0.1.0` 같은 version tag, 또는 manual dispatch에서 실행됩니다. `main` CI 성공 시에는 prerelease snapshot을, version tag에서는 stable GitHub Release와 app-versioned runner image를 GHCR에 발행합니다.
 
 ## 개발 실행
 
@@ -221,6 +229,8 @@ Health: http://localhost:8080/api/health
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
+./scripts/runner-swift-smoke.sh
+./scripts/runner-rust-smoke.sh
 ```
 
 추후 새로운 runner 언어를 추가하려면 `runner/` 아래에 runner image를 만들고, `backend/src/main/kotlin/com/aicodelearning/runner/RunnerRegistry.kt`에 고정 harness를 등록하고, practice contract test를 확장하고, 네트워크 없이 passing/failing exercise를 모두 증명하는 smoke script를 추가합니다.

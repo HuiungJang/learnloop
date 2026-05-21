@@ -15,6 +15,12 @@ fi
 if ! grep -q "^APP_RUNNER_WORKSPACE_HOST_ROOT=" .env; then
   printf '%s=%s\n' APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces" >> .env
 fi
+if ! grep -q "^APP_RUNNER_IMAGE_REGISTRY=" .env; then
+  printf '%s=\n' APP_RUNNER_IMAGE_REGISTRY >> .env
+fi
+if ! grep -q "^APP_RUNNER_IMAGE_VERSION=" .env; then
+  printf '%s=%s\n' APP_RUNNER_IMAGE_VERSION latest >> .env
+fi
 
 set -a
 . ./.env

@@ -33,6 +33,8 @@ services:
       APP_RUNNER_BASE_URL: ${APP_RUNNER_BASE_URL:-}
       APP_RUNNER_TOKEN: ${APP_RUNNER_TOKEN:-}
       APP_RUNNER_REQUIRE_LIMITS: ${APP_RUNNER_REQUIRE_LIMITS:-true}
+      APP_RUNNER_IMAGE_REGISTRY: ${APP_RUNNER_IMAGE_REGISTRY:-}
+      APP_RUNNER_IMAGE_VERSION: ${APP_RUNNER_IMAGE_VERSION:-latest}
     depends_on:
       postgres:
         condition: service_healthy
