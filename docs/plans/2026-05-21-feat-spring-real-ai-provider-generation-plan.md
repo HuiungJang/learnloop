@@ -790,81 +790,85 @@ Verification:
 
 Scope:
 
-- [ ] Add API client support for provider creation with `baseUrl` and safe provider response.
-- [ ] API-key setup calls `POST /api/providers`, then refreshes `GET /api/providers`.
-- [ ] Save browser settings only after backend registration succeeds.
+- [x] Add API client support for provider creation with `baseUrl` and safe provider response.
+- [x] API-key setup calls `POST /api/providers`, then refreshes `GET /api/providers`.
+- [x] Save browser settings only after backend registration succeeds.
 
 Verification:
 
-- [ ] Frontend typecheck passes.
+- [x] Frontend typecheck passes.
 - [ ] UI/API test or Playwright step proves provider save refreshes provider list.
-- [ ] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run typecheck`
 
 ### Slice 39: Frontend Secret Storage Cleanup
 
 Scope:
 
-- [ ] Clear raw API key component state after save.
-- [ ] Store only provider id, provider label, auth mode, and redacted metadata in localStorage.
-- [ ] Add legacy cleanup for `learnloop:local-ai:*` and `ai-code-learning:local-ai:*` entries containing `apiKey`.
+- [x] Clear raw API key component state after save.
+- [x] Store only provider id, provider label, auth mode, and redacted metadata in localStorage.
+- [x] Add legacy cleanup for `learnloop:local-ai:*` and `ai-code-learning:local-ai:*` entries containing `apiKey`.
 
 Verification:
 
 - [ ] Browser/localStorage test proves submitted key is absent after save and after failed save.
-- [ ] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run typecheck`
 
 ### Slice 40: Frontend Provider Selection
 
 Scope:
 
-- [ ] Generation UI sends the exact selected backend provider id.
-- [ ] Remove implicit first-active-provider selection.
-- [ ] Disable generation when no eligible backend provider exists unless local mock is explicitly selected.
+- [x] Generation UI sends the exact selected backend provider id.
+- [x] Remove implicit first-active-provider selection.
+- [x] Disable generation when no eligible backend provider exists unless local mock is explicitly selected.
 
 Verification:
 
 - [ ] UI test proves multiple providers use the selected provider id.
 - [ ] UI test proves no-provider state disables generation.
-- [ ] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run typecheck`
 
 ### Slice 41: Frontend OAuth Unsupported State
 
 Scope:
 
-- [ ] Keep OAuth setup as local tool auth only.
+- [x] Keep OAuth setup as local tool auth only.
 - [ ] Label OAuth-only setup as unsupported for backend generation.
-- [ ] Ensure OAuth-only setup never creates/selects a backend generation provider.
+- [x] Ensure OAuth-only setup never creates/selects a backend generation provider.
 
 Verification:
 
 - [ ] UI test proves OAuth-only setup cannot trigger non-local generation.
-- [ ] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run typecheck`
 
 ### Slice 42: Frontend Failure Display
 
 Scope:
 
-- [ ] Display failed generation as terminal failure with safe `failureCode`.
+- [x] Display failed generation as terminal failure with safe `failureCode`.
 - [ ] Do not show terminal failures as "Pattern pending" or "Not generated."
 - [ ] Add retry affordance that creates a new idempotency key.
 
 Verification:
 
 - [ ] Playwright or component test covers failed generation display and retry request body.
-- [ ] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run typecheck`
 
 ### Slice 43: Frontend Copy And Bundle Budget
 
 Scope:
 
-- [ ] Remove or conditionalize "Stored only in this browser" copy for API-key mode.
-- [ ] Add local-backend encrypted storage copy.
-- [ ] Keep frontend dependency-free for provider setup changes.
+- [x] Remove or conditionalize "Stored only in this browser" copy for API-key mode.
+- [x] Add local-backend encrypted storage copy.
+- [x] Keep frontend dependency-free for provider setup changes.
 
 Verification:
 
-- [ ] `npm --prefix frontend run build`
-- [ ] Compare gzip byte total for `frontend/dist/assets/*.js` against Slice 0 baseline; delta <= `5 KiB` or explicitly documented.
+- [x] `npm --prefix frontend run build`
+- [x] Compare gzip byte total for `frontend/dist/assets/*.js` against Slice 0 baseline; delta <= `5 KiB` or explicitly documented.
+
+Bundle note:
+
+- Frontend JS gzip after provider setup UI changes: `3,337,836` bytes, `+785` bytes over Slice 0 baseline.
 
 ### Slice 44: Installed E2E Success
 

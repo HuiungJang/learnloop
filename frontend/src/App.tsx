@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { Suspense, lazy, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ApiRequestError,
+  createProvider,
   deleteEvidence,
   generateFromEvidence,
   getConversionTraces,
@@ -116,6 +118,9 @@ type LocalAiSettings = {
   provider: LocalAiProvider;
   authMethod: LocalAuthMethod;
   credentialLabel: string;
+  providerConfigId?: string;
+  model?: string;
+  baseUrl?: string | null;
   apiKey?: string;
   configuredAt: string;
 };
@@ -226,10 +231,17 @@ const workflowCards = [
   }
 ];
 
-const aiProviders: Array<{ id: LocalAiProvider; label: string; icon: LucideIcon; oauth: boolean }> = [
-  { id: "codex", label: "Codex", icon: Bot, oauth: true },
-  { id: "gemini", label: "Gemini", icon: Sparkles, oauth: true },
-  { id: "claude", label: "Claude", icon: Cloud, oauth: false }
+const aiProviders: Array<{
+  id: LocalAiProvider;
+  label: string;
+  backendProvider: "codex" | "gemini" | "claude";
+  defaultModel: string;
+  icon: LucideIcon;
+  oauth: boolean;
+}> = [
+  { id: "codex", label: "Codex", backendProvider: "codex", defaultModel: "gpt-5.2", icon: Bot, oauth: true },
+  { id: "gemini", label: "Gemini", backendProvider: "gemini", defaultModel: "gemini-2.5-flash", icon: Sparkles, oauth: true },
+  { id: "claude", label: "Claude", backendProvider: "claude", defaultModel: "claude-sonnet-4-20250514", icon: Cloud, oauth: false }
 ];
 
 const workspacePages: Array<{ id: WorkspacePage; label: string; icon: LucideIcon }> = [
@@ -302,10 +314,17 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
   if (raw === null) return null;
 
   try {
-    const settings = JSON.parse(raw) as LocalAiSettings;
-    if (window.localStorage.getItem(key) === null) {
-      window.localStorage.setItem(key, raw);
+    const settings = sanitizeLocalAiSettings(JSON.parse(raw));
+    if (settings === null) {
+      window.localStorage.removeItem(key);
       window.localStorage.removeItem(legacyKey);
+      return null;
+    }
+    if (window.localStorage.getItem(key) === null) {
+      window.localStorage.setItem(key, JSON.stringify(settings));
+      window.localStorage.removeItem(legacyKey);
+    } else if (raw.includes("apiKey")) {
+      window.localStorage.setItem(key, JSON.stringify(settings));
     }
     return settings;
   } catch {
@@ -313,6 +332,26 @@ function readLocalAiSettings(userId: string): LocalAiSettings | null {
     window.localStorage.removeItem(legacyKey);
     return null;
   }
+}
+
+function sanitizeLocalAiSettings(value: unknown): LocalAiSettings | null {
+  if (value === null || typeof value !== "object") return null;
+  const settings = value as Partial<LocalAiSettings>;
+  const providerId = aiProviders.find((provider) => provider.id === settings.provider)?.id;
+  if (providerId === undefined) return null;
+  if (settings.authMethod !== "api_key" && settings.authMethod !== "oauth") return null;
+  if (typeof settings.credentialLabel !== "string" || typeof settings.configuredAt !== "string") return null;
+  if (settings.authMethod === "api_key" && (typeof settings.providerConfigId !== "string" || settings.providerConfigId.length === 0)) return null;
+
+  return {
+    provider: providerId,
+    authMethod: settings.authMethod,
+    credentialLabel: settings.credentialLabel,
+    providerConfigId: settings.providerConfigId,
+    model: settings.model,
+    baseUrl: settings.baseUrl ?? null,
+    configuredAt: settings.configuredAt
+  };
 }
 
 function repositoryStatusCounts(repositories: LocalRepositoryConsent[]): Record<RepositoryConsentStatus, number> {
@@ -693,6 +732,10 @@ export function App() {
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<LocalAuthMethod>("api_key");
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => readEditorTheme());
   const [localApiKey, setLocalApiKey] = useState("");
+  const [localProviderModel, setLocalProviderModel] = useState(aiProviders[0].defaultModel);
+  const [localProviderBaseUrl, setLocalProviderBaseUrl] = useState("");
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [selectedGenerationProviderId, setSelectedGenerationProviderId] = useState("provider-local-mock");
   const [oauthLabel, setOauthLabel] = useState("");
   const [oauthConnection, setOauthConnection] = useState<LocalOAuthConnection>({ status: "idle", message: "" });
   const [onboardingError, setOnboardingError] = useState("");
@@ -703,6 +746,8 @@ export function App() {
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
+  const generationProviders = useMemo(() => providers.filter((provider) => provider.status === "active"), [providers]);
+  const selectedGenerationProvider = generationProviders.find((provider) => provider.id === selectedGenerationProviderId) ?? null;
   const activePageContent = pageCopy[activePage];
 
   const healthLabel =
@@ -733,6 +778,21 @@ export function App() {
       setSelectedAuthMethod("api_key");
     }
   }, [selectedAuthMethod, selectedProvider.oauth]);
+
+  useEffect(() => {
+    setLocalProviderModel(selectedProvider.defaultModel);
+    setLocalProviderBaseUrl("");
+  }, [selectedProvider.defaultModel]);
+
+  useEffect(() => {
+    if (generationProviders.length === 0) {
+      setSelectedGenerationProviderId("");
+      return;
+    }
+    if (!generationProviders.some((provider) => provider.id === selectedGenerationProviderId)) {
+      setSelectedGenerationProviderId(generationProviders[0].id);
+    }
+  }, [generationProviders, selectedGenerationProviderId]);
 
   useEffect(() => {
     setOauthConnection({ status: "idle", message: "" });
@@ -1055,10 +1115,26 @@ export function App() {
           </div>
 
           {selectedAuthMethod === "api_key" ? (
-            <label>
-              <span>API key</span>
-              <input autoComplete="off" onChange={(event) => setLocalApiKey(event.target.value)} type="password" value={localApiKey} />
-            </label>
+            <>
+              <label>
+                <span>Model</span>
+                <input autoComplete="off" onChange={(event) => setLocalProviderModel(event.target.value)} type="text" value={localProviderModel} />
+              </label>
+              <label>
+                <span>Base URL</span>
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setLocalProviderBaseUrl(event.target.value)}
+                  placeholder="Default provider endpoint"
+                  type="url"
+                  value={localProviderBaseUrl}
+                />
+              </label>
+              <label>
+                <span>API key</span>
+                <input autoComplete="off" onChange={(event) => setLocalApiKey(event.target.value)} type="password" value={localApiKey} />
+              </label>
+            </>
           ) : (
             <div className="oauth-setup-stack">
               <div className="oauth-connect-row">
@@ -1091,7 +1167,7 @@ export function App() {
 
           <div className="local-only-note">
             <ShieldCheck aria-hidden="true" size={16} />
-            <span>Stored only in this browser.</span>
+            <span>{selectedAuthMethod === "api_key" ? "Encrypted in this local backend." : "Stored only in this browser."}</span>
           </div>
 
           {selectedAuthMethod === "oauth" ? (
@@ -1101,9 +1177,9 @@ export function App() {
           ) : null}
 
           {onboardingError.length > 0 ? <p className="form-error">{onboardingError}</p> : null}
-          <button className="primary-button" type="submit">
+          <button className="primary-button" disabled={onboardingSaving} type="submit">
             <CheckCircle2 aria-hidden="true" size={16} />
-            Save local setup
+            {onboardingSaving ? "Saving" : "Save local setup"}
           </button>
         </form>
       </section>
@@ -1294,6 +1370,20 @@ export function App() {
             <RefreshCw aria-hidden="true" size={16} />
             {evidenceLoading ? "Loading" : "Refresh"}
           </button>
+          <label className="inline-control">
+            <span>Generation provider</span>
+            <select
+              disabled={generationProviders.length === 0}
+              onChange={(event) => setSelectedGenerationProviderId(event.target.value)}
+              value={selectedGenerationProviderId}
+            >
+              {generationProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.provider} · {provider.model}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="secondary-button"
             disabled={evidenceList.page === 0 || evidenceLoading || session === null}
@@ -1715,7 +1805,7 @@ export function App() {
 
   function renderEvidenceSummary(bundle: SourceBundleSummaryResponse) {
     const canUseForGeneration = bundle.sourceKind === "local_ai_session" && bundle.status === "generation_eligible";
-    const canGenerate = canUseForGeneration && bundle.userAttribution === "use_for_generation";
+    const canGenerate = canUseForGeneration && bundle.userAttribution === "use_for_generation" && selectedGenerationProvider !== null;
     const isGuiCorrelated = isGuiCorrelatedEvidence(bundle);
     const blockedReason = generationBlockedReason(bundle);
     const reasons = reasonCodes(bundle.attributionReasonsJson);
@@ -1830,7 +1920,13 @@ export function App() {
       setProviders([]);
       return;
     }
-    setProviders(await listProviders(currentSession.token, currentMembership.organizationId));
+    const nextProviders = await listProviders(currentSession.token, currentMembership.organizationId);
+    setProviders(nextProviders);
+    const preferredProviderId = readLocalAiSettings(currentSession.user.id)?.providerConfigId;
+    const preferredProvider = nextProviders.find((provider) => provider.id === preferredProviderId && provider.status === "active");
+    if (preferredProvider !== undefined) {
+      setSelectedGenerationProviderId(preferredProvider.id);
+    }
   }
 
   async function refreshLibrary(currentSession: SessionResponse) {
@@ -2239,7 +2335,11 @@ export function App() {
 
   async function generatePracticeFromEvidence(bundle: SourceBundleSummaryResponse) {
     if (session === null || membership === null) return;
-    const providerId = providers.find((provider) => provider.status === "active")?.id ?? "provider-local-mock";
+    const providerId = selectedGenerationProvider?.id;
+    if (providerId === undefined) {
+      setEvidenceActionMessage("Select an active generation provider.");
+      return;
+    }
     setEvidenceActionMessage("");
     try {
       const result = await generateFromEvidence(session.token, {
@@ -2254,7 +2354,11 @@ export function App() {
       await refreshLibrary(session);
       await refreshConversionTraces(session);
     } catch (error) {
-      setEvidenceActionMessage(error instanceof Error ? error.message : "Generation failed");
+      if (error instanceof ApiRequestError && error.fields?.failureCode) {
+        setEvidenceActionMessage(`${error.message}: ${error.fields.failureCode}`);
+      } else {
+        setEvidenceActionMessage(error instanceof Error ? error.message : "Generation failed");
+      }
     }
   }
 
@@ -2733,33 +2837,67 @@ export function App() {
     evidenceDetailRequestRef.current += 1;
   }
 
-  function saveLocalAiSettings(event: FormEvent<HTMLFormElement>) {
+  async function saveLocalAiSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (session === null) return;
+    if (session === null || membership === null) return;
 
     const apiKey = localApiKey.trim();
+    const model = localProviderModel.trim();
+    const baseUrl = localProviderBaseUrl.trim();
     const label = oauthLabel.trim();
     if (selectedAuthMethod === "api_key" && apiKey.length === 0) {
       setOnboardingError("API key is required");
       return;
     }
+    if (selectedAuthMethod === "api_key" && model.length === 0) {
+      setOnboardingError("Model is required");
+      return;
+    }
 
-    const nextSettings: LocalAiSettings = {
-      provider: selectedAiProvider,
-      authMethod: selectedAuthMethod,
-      credentialLabel:
-        selectedAuthMethod === "oauth"
-          ? label || (selectedAiProvider === "codex" ? "Codex CLI OAuth" : "Google OAuth")
-          : `${selectedProvider.label} API key`,
-      ...(selectedAuthMethod === "api_key" ? { apiKey } : {}),
-      configuredAt: new Date().toISOString()
-    };
-
-    window.localStorage.setItem(localAiStorageKey(session.user.id), JSON.stringify(nextSettings));
-    setLocalAiSettings(nextSettings);
-    setLocalApiKey("");
+    setOnboardingSaving(true);
     setOnboardingError("");
-    goToDashboard();
+    try {
+      let providerConfigId: string | undefined;
+      if (selectedAuthMethod === "api_key") {
+        const provider = await createProvider(session.token, {
+          organizationId: membership.organizationId,
+          provider: selectedProvider.backendProvider,
+          model,
+          baseUrl: baseUrl.length > 0 ? baseUrl : null,
+          scope: "personal",
+          credential: apiKey,
+          retentionMode: "standard",
+          authType: "byok"
+        });
+        providerConfigId = provider.id;
+        setSelectedGenerationProviderId(provider.id);
+        setProviders(await listProviders(session.token, membership.organizationId));
+      }
+
+      const nextSettings: LocalAiSettings = {
+        provider: selectedAiProvider,
+        authMethod: selectedAuthMethod,
+        credentialLabel:
+          selectedAuthMethod === "oauth"
+            ? label || defaultOauthLabel(selectedAiProvider)
+            : `${selectedProvider.label} API key · ${model}`,
+        providerConfigId,
+        model: selectedAuthMethod === "api_key" ? model : undefined,
+        baseUrl: selectedAuthMethod === "api_key" ? baseUrl || null : null,
+        configuredAt: new Date().toISOString()
+      };
+
+      window.localStorage.setItem(localAiStorageKey(session.user.id), JSON.stringify(nextSettings));
+      window.localStorage.removeItem(legacyLocalAiStorageKey(session.user.id));
+      setLocalAiSettings(nextSettings);
+      setLocalApiKey("");
+      goToDashboard();
+    } catch (error) {
+      setLocalApiKey("");
+      setOnboardingError(error instanceof Error ? error.message : "Local setup failed");
+    } finally {
+      setOnboardingSaving(false);
+    }
   }
 
   function openLocalAiSetup() {

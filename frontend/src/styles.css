@@ -526,8 +526,35 @@ h1 {
 .action-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.inline-control select {
+  min-height: 40px;
+  min-width: 220px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: var(--cream);
+}
+
+.inline-control select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
 }
 
 .primary-button,

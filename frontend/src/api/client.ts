@@ -24,11 +24,20 @@ export type SessionResponse = {
 
 export type ProviderResponse = {
   id: string;
+  organizationId: string;
+  ownerUserId: string | null;
   provider: string;
   model: string;
+  baseUrl: string | null;
   scope: string;
+  authType: string;
+  retentionMode: string;
+  credentialRef: string;
+  credentialFingerprint: string;
+  secretPreview: string | null;
   status: string;
   orgApproved: boolean;
+  createdAt: string;
 };
 
 export type SourceBundleResponse = {
@@ -321,7 +330,8 @@ export class ApiRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code: string | null
+    readonly code: string | null,
+    readonly fields: Record<string, string> | null = null
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -364,6 +374,27 @@ export async function registerUser(
 export async function listProviders(token: string, organizationId: string): Promise<ProviderResponse[]> {
   const response = await request<{ providers: ProviderResponse[] }>(`/api/providers?organizationId=${encodeURIComponent(organizationId)}`, { token });
   return response.providers;
+}
+
+export async function createProvider(
+  token: string,
+  body: {
+    organizationId: string;
+    provider: string;
+    model: string;
+    baseUrl?: string | null;
+    scope: "personal" | "organization";
+    credential: string;
+    retentionMode: string;
+    authType: string;
+  }
+): Promise<ProviderResponse> {
+  const response = await request<{ provider: ProviderResponse }>("/api/providers", {
+    token,
+    method: "POST",
+    body
+  });
+  return response.provider;
 }
 
 export async function runLearningDemo(token: string, membership: Membership): Promise<{
@@ -664,9 +695,9 @@ async function request<T>(
   const responseText = await response.text();
   const payload = parseJsonPayload(responseText);
   if (!response.ok) {
-    const errorPayload = (payload ?? {}) as { error?: { message?: string; code?: string } };
+    const errorPayload = (payload ?? {}) as { error?: { message?: string; code?: string; fields?: Record<string, string> } };
     const message = errorPayload.error?.message ?? `Request failed with ${response.status}`;
-    throw new ApiRequestError(message, response.status, errorPayload.error?.code ?? null);
+    throw new ApiRequestError(message, response.status, errorPayload.error?.code ?? null, errorPayload.error?.fields ?? null);
   }
 
   if (response.status === 204) {
