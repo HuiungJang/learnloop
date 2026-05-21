@@ -260,6 +260,21 @@ export type PracticeRunRequest = {
   timeoutMs?: number;
 };
 
+export type RunnerLanguageResponse = {
+  language: string;
+  displayName: string;
+  imageRef: string;
+  status: "available" | "installing" | "installed" | "missing" | "failed";
+  installed: boolean;
+  runnable: boolean;
+  desiredEnabled: boolean;
+  selectedByDefault: boolean;
+  estimatedCompressedSizeMb: number;
+  installedAt: string | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+};
+
 export type PracticeSubmissionRequest = {
   textAnswer?: string;
   resultStatus?: string;
@@ -645,6 +660,36 @@ export async function runPracticeAttempt(
     body
   });
   return response.run;
+}
+
+export async function listRunnerLanguages(token: string): Promise<RunnerLanguageResponse[]> {
+  const response = await request<{ languages: RunnerLanguageResponse[] }>("/api/runner/languages", { token });
+  return response.languages;
+}
+
+export async function installRunnerLanguage(token: string, language: string): Promise<RunnerLanguageResponse> {
+  return request<RunnerLanguageResponse>(`/api/runner/languages/${encodeURIComponent(language)}/install`, {
+    token,
+    method: "POST",
+    body: {}
+  });
+}
+
+export async function removeRunnerLanguage(token: string, language: string): Promise<RunnerLanguageResponse> {
+  return request<RunnerLanguageResponse>(`/api/runner/languages/${encodeURIComponent(language)}/remove`, {
+    token,
+    method: "POST",
+    body: {}
+  });
+}
+
+export async function refreshRunnerLanguages(token: string): Promise<RunnerLanguageResponse[]> {
+  const response = await request<{ languages: RunnerLanguageResponse[] }>("/api/runner/languages/refresh", {
+    token,
+    method: "POST",
+    body: {}
+  });
+  return response.languages;
 }
 
 async function request<T>(

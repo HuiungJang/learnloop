@@ -352,6 +352,8 @@ class PracticeService(
             PracticeContract.LANGUAGE_TYPESCRIPT -> "typescript-node-test"
             PracticeContract.LANGUAGE_JAVA -> "java-junit"
             PracticeContract.LANGUAGE_KOTLIN -> "kotlin-junit"
+            PracticeContract.LANGUAGE_SWIFT -> "swift-xctest"
+            PracticeContract.LANGUAGE_RUST -> "rust-cargo-test"
             else -> throw BadRequestException("runner language is not available yet")
         }
 

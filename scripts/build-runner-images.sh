@@ -7,6 +7,8 @@ cd "$ROOT_DIR"
 TYPESCRIPT_IMAGE=${APP_RUNNER_TYPESCRIPT_IMAGE:-learnloop-runner-typescript:latest}
 JAVA_IMAGE=${APP_RUNNER_JAVA_IMAGE:-learnloop-runner-java:latest}
 KOTLIN_IMAGE=${APP_RUNNER_KOTLIN_IMAGE:-learnloop-runner-kotlin:latest}
+SWIFT_IMAGE=${APP_RUNNER_SWIFT_IMAGE:-learnloop-runner-swift:latest}
+RUST_IMAGE=${APP_RUNNER_RUST_IMAGE:-learnloop-runner-rust:latest}
 
 if [ "${APP_RUNNER_ENABLED:-true}" != "true" ]; then
   echo "Runner is disabled; skipped runner image build."
@@ -21,3 +23,9 @@ docker build -t "$JAVA_IMAGE" runner/java
 
 echo "Building $KOTLIN_IMAGE"
 docker build -t "$KOTLIN_IMAGE" runner/kotlin
+
+echo "Building $SWIFT_IMAGE"
+docker build -t "$SWIFT_IMAGE" runner/swift
+
+echo "Building $RUST_IMAGE"
+docker build -t "$RUST_IMAGE" runner/rust

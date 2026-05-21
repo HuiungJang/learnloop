@@ -18,41 +18,47 @@ data class RunnerHarnessFile(
 )
 
 @Component
-class RunnerRegistry {
+class RunnerRegistry(
+    private val catalog: RunnerImageCatalog = RunnerImageCatalog(),
+) {
+    private val descriptorsByLanguage = catalog.languages().associateBy { it.language }
     private val harnesses =
-        listOf(
-            RunnerHarness(
-                id = "typescript-node-test",
-                language = PracticeContract.LANGUAGE_TYPESCRIPT,
-                image = "learnloop-runner-typescript:latest",
-                command = listOf("node", "/opt/learnloop-runner/run-tests.mjs"),
-                maxTimeoutMs = MAX_TIMEOUT_MS,
-                files = harnessFiles("typescript-node-test"),
-            ),
-            RunnerHarness(
-                id = "kotlin-junit",
-                language = PracticeContract.LANGUAGE_KOTLIN,
-                image = "learnloop-runner-kotlin:latest",
-                command = listOf("/opt/learnloop-runner/run-tests.sh"),
-                maxTimeoutMs = MAX_TIMEOUT_MS,
-                files = harnessFiles("kotlin-junit"),
-            ),
-            RunnerHarness(
-                id = "java-junit",
-                language = PracticeContract.LANGUAGE_JAVA,
-                image = "learnloop-runner-java:latest",
-                command = listOf("/opt/learnloop-runner/run-tests.sh"),
-                maxTimeoutMs = MAX_TIMEOUT_MS,
-                files = harnessFiles("java-junit"),
-            ),
-        ).associateBy { "${it.language}:${it.id}" }
+        catalog
+            .languages()
+            .filter { it.language in runnableLanguages }
+            .map { descriptor ->
+                RunnerHarness(
+                    id = descriptor.harnessId,
+                    language = descriptor.language,
+                    image = descriptor.imageRef,
+                    command = commandFor(descriptor.language),
+                    maxTimeoutMs = MAX_TIMEOUT_MS,
+                    files = harnessFiles(descriptor.harnessId),
+                )
+            }.associateBy { "${it.language}:${it.id}" }
 
     fun find(
         language: String,
         harnessId: String,
     ): RunnerHarness? = harnesses["$language:$harnessId"]
 
-    fun requiredImages(): List<String> = harnesses.values.map { it.image }.distinct().sorted()
+    fun requiredImages(): List<String> =
+        harnesses
+            .values
+            .filter { descriptorsByLanguage[it.language]?.selectedByDefault == true }
+            .map { it.image }
+            .distinct()
+            .sorted()
+
+    private fun commandFor(language: String): List<String> =
+        when (language) {
+            PracticeContract.LANGUAGE_TYPESCRIPT -> listOf("node", "/opt/learnloop-runner/run-tests.mjs")
+            PracticeContract.LANGUAGE_KOTLIN,
+            PracticeContract.LANGUAGE_JAVA,
+            PracticeContract.LANGUAGE_SWIFT,
+            PracticeContract.LANGUAGE_RUST -> listOf("/opt/learnloop-runner/run-tests.sh")
+            else -> error("runner command is not registered for language: $language")
+        }
 
     private fun harnessFiles(harnessId: String): List<RunnerHarnessFile> =
         listOf(
@@ -64,5 +70,13 @@ class RunnerRegistry {
 
     private companion object {
         const val MAX_TIMEOUT_MS = 10_000L
+        val runnableLanguages =
+            setOf(
+                PracticeContract.LANGUAGE_TYPESCRIPT,
+                PracticeContract.LANGUAGE_KOTLIN,
+                PracticeContract.LANGUAGE_JAVA,
+                PracticeContract.LANGUAGE_SWIFT,
+                PracticeContract.LANGUAGE_RUST,
+            )
     }
 }
