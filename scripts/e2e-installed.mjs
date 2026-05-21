@@ -191,6 +191,14 @@ try {
   await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
+  await page.getByRole("button", { name: /Runners/i }).click();
+  await page.getByRole("heading", { name: /Install only the languages you use/i }).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Swift/ }).getByText(/optional/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/optional/i).waitFor();
+  await page.getByRole("button", { name: /Refresh/i }).click();
+  await page.getByText(/Runner status refreshed|Checking local runner images/i).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /Overview/i }).click();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
