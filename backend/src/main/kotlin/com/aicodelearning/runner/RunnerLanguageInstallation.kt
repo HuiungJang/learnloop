@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -294,19 +295,24 @@ class ProcessRunnerImageClient(
             } catch (_: IOException) {
                 return RunnerImageOperationResult(success = false, detail = "Docker command is not installed", errorCode = "docker_missing")
             }
+        val outputFuture = CompletableFuture.supplyAsync { process.inputStream.bufferedReader().readText() }
 
         val completed = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)
         if (!completed) {
             process.destroyForcibly()
+            outputFuture.cancel(true)
             return RunnerImageOperationResult(success = false, detail = "Docker command timed out", errorCode = "timeout")
         }
 
-        val output = sanitizeOutput(process.inputStream.bufferedReader().readText())
+        val output = sanitizeOutput(readOutput(outputFuture))
         if (process.exitValue() == 0) {
             return RunnerImageOperationResult(success = true, detail = output.ifBlank { "Docker command completed" })
         }
         return RunnerImageOperationResult(success = false, detail = output.ifBlank { "Docker command failed" }, errorCode = classifyFailure(output))
     }
+
+    private fun readOutput(outputFuture: CompletableFuture<String>): String =
+        runCatching { outputFuture.get(1, TimeUnit.SECONDS) }.getOrDefault("")
 
     private fun classifyFailure(output: String): String =
         when {
