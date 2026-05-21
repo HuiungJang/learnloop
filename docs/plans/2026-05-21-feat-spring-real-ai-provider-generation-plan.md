@@ -263,28 +263,39 @@ Implementation is split into small slices. Each slice should be independently re
 
 Scope:
 
-- [ ] Record current backend provider rows, generation response shape, and local mock behavior.
-- [ ] Record current frontend provider selection and localStorage keys.
-- [ ] Record current frontend gzip JS size as the bundle budget baseline.
+- [x] Record current backend provider rows, generation response shape, and local mock behavior.
+- [x] Record current frontend provider selection and localStorage keys.
+- [x] Record current frontend gzip JS size as the bundle budget baseline.
 
 Verification:
 
-- [ ] `git status --short`
-- [ ] `./gradlew :backend:test --tests "*Provider*" --tests "*Generation*"` or document missing test classes.
-- [ ] `npm --prefix frontend run build`
+- [x] `git status --short`
+- [x] `./gradlew :backend:test --tests "*Provider*" --tests "*Generation*"` or document missing test classes.
+- [x] `npm --prefix frontend run build`
+
+Baseline notes:
+
+- Backend seed provider is `provider-local-mock` with `provider=local`, `model=deterministic-pattern-generator`, and no callable external provider configuration.
+- Current generation success response requires `generationRun`, `patternCard`, and `reviewTask`; failed provider runs need a new safe error-envelope path.
+- There are no backend tests matching `*Provider*` or `*Generation*` yet; the filtered Gradle command reports "No tests found".
+- Full backend baseline passed with `./gradlew :backend:test`.
+- Frontend generation currently selects `providers.find(status === "active")?.id ?? "provider-local-mock"`, so provider choice is implicit.
+- Local AI setup storage uses `learnloop:local-ai:<userId>` and migrates from `ai-code-learning:local-ai:<userId>`.
+- Frontend build requires the bundled workspace Node first in `PATH` because the local Homebrew Node is missing `libllhttp.9.3.dylib`.
+- Frontend JS gzip baseline after `npm --prefix frontend run build`: `3,337,051` bytes across 95 JS assets.
 
 ### Slice 1: Backend Fake Provider Test Helper
 
 Scope:
 
-- [ ] Add a backend test helper based on JDK `HttpServer`.
-- [ ] Capture request count, path, method, headers, body, response status, response body, and elapsed time.
-- [ ] Ensure captured auth headers are available to assertions but never printed by default.
+- [x] Add a backend test helper based on JDK `HttpServer`.
+- [x] Capture request count, path, method, headers, body, response status, response body, and elapsed time.
+- [x] Ensure captured auth headers are available to assertions but never printed by default.
 
 Verification:
 
-- [ ] Helper unit test proves one request is recorded and server shutdown releases the port.
-- [ ] `./gradlew :backend:test --tests "*FakeProvider*"`
+- [x] Helper unit test proves one request is recorded and server shutdown releases the port.
+- [x] `./gradlew :backend:test --tests "*FakeProvider*"`
 
 ### Slice 2: Failing Test: Non-Local Provider Must Call HTTP
 
