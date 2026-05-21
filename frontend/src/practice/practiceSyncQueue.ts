@@ -166,6 +166,8 @@ function isPracticeSyncStatus(status: string): status is PracticeSyncStatus {
 function inferLanguage(path: string | undefined): string {
   if (path?.endsWith(".kt")) return "kotlin";
   if (path?.endsWith(".java")) return "java";
+  if (path?.endsWith(".swift")) return "swift";
+  if (path?.endsWith(".rs")) return "rust";
   return "typescript";
 }
 

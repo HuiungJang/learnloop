@@ -79,6 +79,8 @@ APP_RUNNER_ENABLED=true
 APP_RUNNER_BASE_URL=
 APP_RUNNER_TOKEN=
 APP_RUNNER_REQUIRE_LIMITS=true
+APP_RUNNER_IMAGE_REGISTRY=
+APP_RUNNER_IMAGE_VERSION=latest
 APP_RUNNER_DOCKER_SOCKET=/var/run/docker.sock
 APP_RUNNER_WORKSPACE_HOST_ROOT=$ROOT_DIR/.local-runner-workspaces
 EOF
@@ -89,6 +91,8 @@ ensure_runner_env() {
   ensure_env_value APP_CREDENTIAL_ENCRYPTION_KEY "$(generate_encryption_key)"
   ensure_env_value APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock
   ensure_env_value APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces"
+  ensure_env_value APP_RUNNER_IMAGE_REGISTRY ""
+  ensure_env_value APP_RUNNER_IMAGE_VERSION latest
 }
 
 prepare_runner_workspace() {
@@ -106,7 +110,7 @@ build_runner_images() {
     echo "Runner is disabled; skipped runner image build."
     return
   fi
-  APP_RUNNER_ENABLED="${APP_RUNNER_ENABLED:-true}" ./scripts/build-runner-images.sh
+  RUNNER_LANGUAGES="${APP_RUNNER_BUILD_LANGUAGES:-typescript java kotlin}" APP_RUNNER_ENABLED="${APP_RUNNER_ENABLED:-true}" ./scripts/build-runner-images.sh
 }
 
 require_command docker

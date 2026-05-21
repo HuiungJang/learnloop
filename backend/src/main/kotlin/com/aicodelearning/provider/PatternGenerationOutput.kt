@@ -120,7 +120,7 @@ class PatternOutputParser(
         const val REQUIRED_PROBLEM_COUNT = 3
         val allowedTagTypes = setOf("framework", "library", "api", "algorithm", "design_pattern", "configuration", "testing", "pattern")
         val allowedProblemTypes = setOf("qa", "short_implementation", "debugging")
-        val allowedDifficulties = setOf("beginner", "intermediate", "advanced")
+        val allowedDifficulties = setOf("easy", "medium", "hard")
         val likelySecretRegex = Regex("""(?i)\b(api[_-]?key|token|password|secret)\s*[:=]\s*["']?[^"'\s,;]+""")
     }
 }
@@ -181,7 +181,7 @@ fun patternGenerationJsonSchema(): Map<String, Any> =
                                                         "properties" to
                                                             mapOf(
                                                                 "type" to mapOf("type" to "string", "enum" to listOf("qa", "short_implementation", "debugging")),
-                                                                "difficulty" to mapOf("type" to "string", "enum" to listOf("beginner", "intermediate", "advanced")),
+                                                                "difficulty" to mapOf("type" to "string", "enum" to listOf("easy", "medium", "hard")),
                                                                 "prompt" to mapOf("type" to "string", "maxLength" to 4000),
                                                                 "referenceAnswer" to mapOf("type" to "string", "maxLength" to 4000),
                                                             ),

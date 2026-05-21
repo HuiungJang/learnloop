@@ -38,6 +38,31 @@ class RunnerRequestValidatorTest {
     }
 
     @Test
+    fun `validates Swift and Rust harnesses`() {
+        val swift =
+            validator.validate(
+                runnerRequest(
+                    language = PracticeContract.LANGUAGE_SWIFT,
+                    testHarnessId = "swift-xctest",
+                    files = listOf(RunnerRunFile(path = "Sources/LearnLoopPractice/Solution.swift", content = "public func answer() -> Int { 1 }")),
+                ),
+            )
+        val rust =
+            validator.validate(
+                runnerRequest(
+                    language = PracticeContract.LANGUAGE_RUST,
+                    testHarnessId = "rust-cargo-test",
+                    files = listOf(RunnerRunFile(path = "src/lib.rs", content = "pub fn answer() -> i32 { 1 }")),
+                ),
+            )
+
+        assertEquals("swift-xctest", swift.harness.id)
+        assertEquals("learnloop-runner-swift:latest", swift.harness.image)
+        assertEquals("rust-cargo-test", rust.harness.id)
+        assertEquals("learnloop-runner-rust:latest", rust.harness.image)
+    }
+
+    @Test
     fun `rejects invalid paths and duplicate normalized paths`() {
         assertThrows(BadRequestException::class.java) {
             validator.validate(runnerRequest(files = listOf(RunnerRunFile(path = "../secret.ts", content = "x"))))

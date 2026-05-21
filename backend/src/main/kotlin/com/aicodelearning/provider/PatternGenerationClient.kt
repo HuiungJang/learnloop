@@ -51,9 +51,9 @@ class LocalPatternGenerationClient : PatternGenerationClient {
             tags = tags,
             problems =
                 listOf(
-                    GeneratedProblem("qa", "beginner", "When should a developer use the ${primary.name} approach shown in this pattern?", "Use it when the implementation has similar technical constraints while avoiding product-specific details."),
-                    GeneratedProblem("short_implementation", "intermediate", "Implement a similar pattern in a neutral order-processing domain.", "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic."),
-                    GeneratedProblem("debugging", "intermediate", "What failure mode should be tested before reusing this pattern?", "Test the edge case that would break the boundary, such as timeout, invalid token, or missing dependency behavior."),
+                    GeneratedProblem("qa", "easy", "When should a developer use the ${primary.name} approach shown in this pattern?", "Use it when the implementation has similar technical constraints while avoiding product-specific details."),
+                    GeneratedProblem("short_implementation", "medium", "Implement a similar pattern in a neutral order-processing domain.", "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic."),
+                    GeneratedProblem("debugging", "medium", "What failure mode should be tested before reusing this pattern?", "Test the edge case that would break the boundary, such as timeout, invalid token, or missing dependency behavior."),
                 ),
         )
     }

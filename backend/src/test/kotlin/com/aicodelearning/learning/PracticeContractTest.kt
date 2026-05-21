@@ -14,6 +14,8 @@ class PracticeContractTest {
             PracticeContract.requireSupportedLanguage("typescript")
             PracticeContract.requireSupportedLanguage("kotlin")
             PracticeContract.requireSupportedLanguage("java")
+            PracticeContract.requireSupportedLanguage("swift")
+            PracticeContract.requireSupportedLanguage("rust")
             PracticeContract.requireFileRole("starter")
             PracticeContract.requireFileRole("hidden_test")
             PracticeContract.requireHintRevealPolicy("manual")

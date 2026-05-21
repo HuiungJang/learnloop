@@ -167,6 +167,13 @@ try {
   const providerCreatePayload = JSON.parse(providerCreateBody);
   const apiProviderConfigId = providerCreatePayload.provider.id;
   assert.equal(providerCreatePayload.provider.provider, "codex");
+  await page.getByRole("heading", { name: /Install only the languages you use/i }).waitFor();
+  await page.locator(".runner-language-row", { hasText: /TypeScript/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Kotlin/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Java/ }).getByText(/default/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Swift/ }).getByText(/optional/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/optional/i).waitFor();
+  await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   const storedApiKeySettings = await page.evaluate(() => {
@@ -301,6 +308,14 @@ try {
   await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
+  await page.getByRole("button", { name: /Runners/i }).click();
+  await page.getByRole("heading", { name: /Install only the languages you use/i }).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Swift/ }).getByText(/optional/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/optional/i).waitFor();
+  await page.getByRole("button", { name: /Refresh/i }).click();
+  await page.getByText(/Runner status refreshed|Checking local runner images/i).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: /Overview/i }).click();
+  await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
 
   await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
@@ -631,9 +646,9 @@ function providerPatternOutput(title) {
         implementationGuidance: ["Validate provider output before persistence."],
         commonFailureModes: ["Invalid provider JSON."],
         problems: [
-          { type: "qa", difficulty: "beginner", prompt: "When is this pattern useful?", referenceAnswer: "When provider output must be validated before use." },
-          { type: "short_implementation", difficulty: "intermediate", prompt: "Implement a validated adapter.", referenceAnswer: "Parse into a strict DTO before persistence." },
-          { type: "debugging", difficulty: "intermediate", prompt: "What should fail safely?", referenceAnswer: "Invalid JSON and HTTP failures should create no assets." }
+          { type: "qa", difficulty: "easy", prompt: "When is this pattern useful?", referenceAnswer: "When provider output must be validated before use." },
+          { type: "short_implementation", difficulty: "medium", prompt: "Implement a validated adapter.", referenceAnswer: "Parse into a strict DTO before persistence." },
+          { type: "debugging", difficulty: "medium", prompt: "What should fail safely?", referenceAnswer: "Invalid JSON and HTTP failures should create no assets." }
         ],
         reviewRisks: ["correctness"]
       }

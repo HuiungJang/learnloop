@@ -29,6 +29,8 @@
     "runner:build": "./scripts/build-runner-images.sh",
     "runner:typescript:smoke": "./scripts/runner-typescript-smoke.sh",
     "runner:java:smoke": "./scripts/runner-java-smoke.sh",
-    "runner:kotlin:smoke": "./scripts/runner-kotlin-smoke.sh"
+    "runner:kotlin:smoke": "./scripts/runner-kotlin-smoke.sh",
+    "runner:swift:smoke": "./scripts/runner-swift-smoke.sh",
+    "runner:rust:smoke": "./scripts/runner-rust-smoke.sh"
   }
 }

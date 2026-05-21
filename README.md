@@ -100,13 +100,13 @@ Non-goals for this MVP:
 
 ### Practice Workbench and Sandbox Runs
 
-The practice workbench supports a VS Code-style editor experience for TypeScript, Java, and Kotlin exercises. Learners can browse a practice, edit files, save drafts, submit answers, inspect feedback, and compare answer diffs even when local code execution is unavailable.
+The practice workbench supports a VS Code-style editor experience for TypeScript, Java, Kotlin, Swift, and Rust exercises. Learners can browse a practice, edit files, save drafts, submit answers, inspect feedback, and compare answer diffs even when local code execution is unavailable.
 
-Sandbox execution is optional and fail-closed. The Run action requires the backend runtime to have access to a Docker CLI, a reachable Docker daemon, and local language runner images. If those prerequisites are missing, the app reports `runner_unavailable` while preserving read, edit, local save, draft sync, and submit flows.
+Sandbox execution is optional and fail-closed. The Run action requires the backend runtime to have access to a Docker CLI, a reachable Docker daemon, and a local language runner image. If a runner is missing, the app reports `runner_unavailable` and offers an install action from the practice feedback panel or the Runners page while preserving read, edit, local save, draft sync, and submit flows.
 
 Runner limitations for the current version:
 
-- Supported languages: TypeScript, Java, Kotlin
+- Supported languages: TypeScript, Java, Kotlin, Swift, Rust
 - No network access during code execution
 - No package installation during a run; dependencies must be baked into runner images
 - Fixed harness commands selected by the backend, not by the browser
@@ -119,10 +119,12 @@ Useful runner checks from source:
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
+./scripts/runner-swift-smoke.sh
+./scripts/runner-rust-smoke.sh
 ./scripts/status.sh
 ```
 
-The installed app now enables local sandbox execution by default. It installs Docker CLI support in the backend image, mounts the host Docker socket, builds the TypeScript/Java/Kotlin runner images, and uses `.local-runner-workspaces/` as the shared host/container workspace. This is powerful local-only functionality: users who do not want the backend container to access the host Docker daemon should set `APP_RUNNER_ENABLED=false` before starting the app.
+The source installer builds TypeScript, Java, and Kotlin runners by default. Set `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"` before `./scripts/install.sh` if you want source installation to build every runner locally. The installed app mounts the host Docker socket and uses `.local-runner-workspaces/` as the shared host/container workspace. This is powerful local-only functionality: users who do not want the backend container to access the host Docker daemon should set `APP_RUNNER_ENABLED=false` before starting the app.
 
 ### Attempts and Sync
 
@@ -164,17 +166,24 @@ cd learnloop-0.1.0-*
 ./install.sh
 ```
 
-Release-bundle installation does not build from source. It loads the packaged Docker images, including the language runner images, and starts the local stack.
+Release-bundle installation does not build from source. The standard bundle is online-first for runner images: it loads the application and database images, then the Runners page downloads only the language runners you choose.
 
-The release bundle includes the application, database, and TypeScript/Java/Kotlin runner images. Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and inspecting practice attempts.
+Swift and Rust are intentionally not bundled into the standard package because Swift alone is roughly 1.1GB compressed. For a full offline package, build with:
+
+```sh
+RUNNER_IMAGE_MODE=offline RUNNER_OFFLINE_LANGUAGES="typescript java kotlin swift rust" ./scripts/package-release.sh
+```
+
+Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and inspecting practice attempts.
 
 ## CI/CD
 
 LearnLoop uses GitHub Actions for the main quality and release gates.
 
 - `CI` runs on pull requests and pushes to `main`: changed-file validation, tests, builds, dependency checks, secret scanning, filesystem scanning, and container image scanning.
+- PR CI smoke-tests runner images only when their runner files or shared runner infrastructure changed.
 - `CodeQL` runs on pull requests, pushes to `main`, and a weekly schedule for Kotlin and TypeScript static analysis.
-- `Release` runs on version tags such as `v0.1.0` or manual dispatch: tests, build, security scan, release bundle packaging, and GitHub Release publishing.
+- `Release` runs after a successful `CI` run on `main`, on version tags such as `v0.1.0`, or by manual dispatch. Successful `main` CI runs publish prerelease snapshot releases; version tags publish stable GitHub Releases and app-versioned runner images to GHCR.
 
 ## Development
 
@@ -221,6 +230,8 @@ Build and verify sandbox runner images:
 ./scripts/runner-typescript-smoke.sh
 ./scripts/runner-java-smoke.sh
 ./scripts/runner-kotlin-smoke.sh
+./scripts/runner-swift-smoke.sh
+./scripts/runner-rust-smoke.sh
 ```
 
 To add another runner language later, add a runner image under `runner/`, register a fixed harness in `backend/src/main/kotlin/com/aicodelearning/runner/RunnerRegistry.kt`, extend the practice contract tests, and add a smoke script that proves both passing and failing exercises without network access.

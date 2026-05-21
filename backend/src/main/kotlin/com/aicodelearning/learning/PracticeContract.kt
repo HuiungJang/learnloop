@@ -6,6 +6,8 @@ object PracticeContract {
     const val LANGUAGE_TYPESCRIPT = "typescript"
     const val LANGUAGE_KOTLIN = "kotlin"
     const val LANGUAGE_JAVA = "java"
+    const val LANGUAGE_SWIFT = "swift"
+    const val LANGUAGE_RUST = "rust"
 
     const val FILE_ROLE_STARTER = "starter"
     const val FILE_ROLE_TEST = "test"
@@ -40,7 +42,7 @@ object PracticeContract {
     const val MAX_PROVENANCE_EXCERPT_CHARS = 2_000
     const val MAX_FILE_PATH_CHARS = 240
 
-    val supportedLanguages = setOf(LANGUAGE_TYPESCRIPT, LANGUAGE_KOTLIN, LANGUAGE_JAVA)
+    val supportedLanguages = setOf(LANGUAGE_TYPESCRIPT, LANGUAGE_KOTLIN, LANGUAGE_JAVA, LANGUAGE_SWIFT, LANGUAGE_RUST)
     val fileRoles = setOf(FILE_ROLE_STARTER, FILE_ROLE_TEST, FILE_ROLE_SUPPORT, FILE_ROLE_SOLUTION, FILE_ROLE_HIDDEN_TEST)
     val hintRevealPolicies = setOf(HINT_REVEAL_MANUAL, HINT_REVEAL_AFTER_RUN, HINT_REVEAL_AFTER_SUBMIT, HINT_REVEAL_PATTERN)
     val attemptStatuses = setOf(ATTEMPT_STATUS_DRAFT, ATTEMPT_STATUS_SUBMITTED)

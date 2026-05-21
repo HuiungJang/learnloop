@@ -51,7 +51,7 @@ class PatternRecognitionPromptBuilder {
                       "problems": [
                         {
                           "type": "qa|short_implementation|debugging",
-                          "difficulty": "beginner|intermediate|advanced",
+                          "difficulty": "easy|medium|hard",
                           "prompt": "string",
                           "referenceAnswer": "string"
                         }

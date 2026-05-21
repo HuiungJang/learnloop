@@ -220,13 +220,13 @@ test("generation calls an OpenAI-compatible provider and stores returned pattern
         type: "qa",
         prompt: "When should this retry and timeout pattern be applied?",
         referenceAnswer: "Apply it when a service boundary can fail transiently and callers need bounded waiting plus clear failure behavior.",
-        difficulty: "beginner"
+        difficulty: "easy"
       },
       {
         type: "short_implementation",
         prompt: "Implement a neutral order-service client with bounded retry and timeout behavior.",
         referenceAnswer: "A strong implementation keeps retry limits explicit, avoids infinite waiting, and separates transport errors from domain logic.",
-        difficulty: "intermediate"
+        difficulty: "medium"
       }
     ]
   };

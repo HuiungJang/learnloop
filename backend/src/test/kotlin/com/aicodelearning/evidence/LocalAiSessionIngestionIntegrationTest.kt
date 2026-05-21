@@ -5,6 +5,8 @@ import com.aicodelearning.auth.LoginRequest
 import com.aicodelearning.auth.RunnerExecutorTestConfiguration
 import com.aicodelearning.auth.SessionResponse
 import com.aicodelearning.auth.SessionService
+import com.aicodelearning.learning.PracticeContract
+import com.aicodelearning.learning.ProblemFileRepository
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -49,6 +51,9 @@ class LocalAiSessionIngestionIntegrationTest {
 
     @Autowired
     private lateinit var evidenceItemRepository: EvidenceItemRepository
+
+    @Autowired
+    private lateinit var problemFileRepository: ProblemFileRepository
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -731,6 +736,50 @@ class LocalAiSessionIngestionIntegrationTest {
     }
 
     @Test
+    fun `clear Swift and Rust local session evidence generates runnable practice templates`() {
+        val owner = login()
+        val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
+
+        val swiftCard = generateCardFromCuratedRequest(
+            owner.token,
+            localSessionRequest(repoRoot, "swift-template") +
+                (
+                    "artifacts" to
+                        listOf(
+                            artifact("prompt", content = "Create a Swift normalizer."),
+                            artifact("file_after", path = "Sources/LearnLoopPractice/Solution.swift", content = "public func normalizeOrderId(_ raw: String) -> String { raw }"),
+                            artifact("file_after", path = "Package.swift", content = "import PackageDescription"),
+                            artifact("tool_event", metadata = mapOf("event" to "command_exit", "exitCode" to "0"), content = "stdout raw output"),
+                        )
+                ),
+        )
+        assertGeneratedPracticeFiles(
+            card = swiftCard,
+            language = PracticeContract.LANGUAGE_SWIFT,
+            expectedPaths = listOf("Package.swift", "Sources/LearnLoopPractice/Solution.swift", "Tests/LearnLoopPracticeTests/SolutionTests.swift"),
+        )
+
+        val rustCard = generateCardFromCuratedRequest(
+            owner.token,
+            localSessionRequest(repoRoot, "rust-template") +
+                (
+                    "artifacts" to
+                        listOf(
+                            artifact("prompt", content = "Create a Rust normalizer."),
+                            artifact("file_after", path = "src/lib.rs", content = "pub fn normalize_order_id(raw: &str) -> String { raw.to_owned() }"),
+                            artifact("file_after", path = "Cargo.toml", content = "[package]\nname = \"learnloop_practice\""),
+                            artifact("tool_event", metadata = mapOf("event" to "command_exit", "exitCode" to "0"), content = "stdout raw output"),
+                        )
+                ),
+        )
+        assertGeneratedPracticeFiles(
+            card = rustCard,
+            language = PracticeContract.LANGUAGE_RUST,
+            expectedPaths = listOf("Cargo.toml", "src/lib.rs", "tests/solution_test.rs"),
+        )
+    }
+
+    @Test
     fun `GUI correlated evidence requires confirmation and cannot generate without direct AI output`() {
         val owner = login()
         val repoRoot = Files.createDirectories(tempDir.resolve("repo-${System.nanoTime()}"))
@@ -939,6 +988,43 @@ class LocalAiSessionIngestionIntegrationTest {
     ) {
         val generated = generateFromBundles(token, listOf(bundleId))
         assertEquals(HttpStatus.BAD_REQUEST, generated.statusCode)
+    }
+
+    private fun generateCardFromCuratedRequest(
+        token: String,
+        request: Map<String, Any?>,
+    ): JsonNode {
+        val created = postJson("/api/ingest/local-ai-session", token, request)
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        val bundleId = json(created)["bundle"]["id"].asText()
+        val curated =
+            patchJson(
+                "/api/evidence/$bundleId/attribution",
+                token,
+                mapOf(
+                    "userAttribution" to "use_for_generation",
+                    "attributionConfidence" to 0.9,
+                    "attributionReasons" to listOf("curation_approved"),
+                ),
+            )
+        assertEquals(HttpStatus.OK, curated.statusCode)
+        val generated = generateFromBundles(token, listOf(bundleId))
+        assertEquals(HttpStatus.CREATED, generated.statusCode)
+        return json(generated)["patternCard"]
+    }
+
+    private fun assertGeneratedPracticeFiles(
+        card: JsonNode,
+        language: String,
+        expectedPaths: List<String>,
+    ) {
+        val problem =
+            card["problems"]
+                .first { it["type"].asText() == "short_implementation" }
+        val files = problemFileRepository.findByProblemIdOrderBySortOrderAscPathAsc(problem["id"].asText())
+        assertEquals(expectedPaths, files.map { it.path })
+        assertTrue(files.all { it.language == language })
+        assertEquals(listOf("support", "starter", "test"), files.map { it.fileRole })
     }
 
     private fun localSessionRequest(

@@ -44,14 +44,18 @@ import {
   getPracticeProblem,
   getProgress,
   getRecommendations,
+  installRunnerLanguage,
   listEvidence,
   listLocalRepositories,
+  listRunnerLanguages,
   type HealthResponse,
   isConflictError,
   listProviders,
   type PracticeAttemptFileRequest,
   purgeEvidenceRaw,
   purgeEvidenceRawScope,
+  refreshRunnerLanguages,
+  removeRunnerLanguage,
   runPracticeAttempt,
   runLearningDemo,
   submitPracticeAttempt,
@@ -69,6 +73,7 @@ import {
   type PracticeRunResultResponse,
   type ProficiencyResponse,
   type ProviderResponse,
+  type RunnerLanguageResponse,
   type SessionResponse,
   type SourceBundleSummaryResponse,
   updateEvidenceAttribution,
@@ -89,7 +94,7 @@ import { loadRevealedHintIds, logHintReveal, saveRevealedHintId } from "./practi
 
 type LocalAiProvider = "codex" | "gemini" | "claude";
 type LocalAuthMethod = "api_key" | "oauth";
-type WorkspacePage = "dashboard" | "aiSetup" | "collection" | "evidence" | "trace" | "practice";
+type WorkspacePage = "dashboard" | "aiSetup" | "runners" | "collection" | "evidence" | "trace" | "practice";
 type EditorTheme = "vs" | "vs-dark";
 type HealthState =
   | { status: "pending" }
@@ -247,6 +252,7 @@ const aiProviders: Array<{
 const workspacePages: Array<{ id: WorkspacePage; label: string; icon: LucideIcon }> = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
   { id: "aiSetup", label: "AI setup", icon: KeyRound },
+  { id: "runners", label: "Runners", icon: Play },
   { id: "collection", label: "Collection", icon: FolderGit2 },
   { id: "evidence", label: "Evidence", icon: Database },
   { id: "trace", label: "Trace", icon: GitPullRequest },
@@ -263,6 +269,11 @@ const pageCopy: Record<WorkspacePage, { eyebrow: string; title: string; descript
     eyebrow: "Local AI setup",
     title: "Choose your coding assistant.",
     description: "Connect the assistant used on this machine. Credentials stay local to this browser and companion."
+  },
+  runners: {
+    eyebrow: "Local runner setup",
+    title: "Install only the languages you use.",
+    description: "TypeScript, Kotlin, and Java are default runner targets. Swift and Rust can be installed on demand."
   },
   collection: {
     eyebrow: "Local collection",
@@ -291,6 +302,7 @@ const LEGACY_LOCAL_AI_STORAGE_PREFIX = "ai-code-learning:local-ai:";
 const SESSION_STORAGE_KEY = "learnloop:session";
 const LOCAL_OWNER_USER_ID = "u-local-owner";
 const EDITOR_THEME_STORAGE_KEY = "learnloop:editor-theme";
+const RUNNER_ONBOARDING_STORAGE_PREFIX = "learnloop:runner-onboarding:";
 const LOCAL_AI_COMPANION_URL = import.meta.env.VITE_LOCAL_AI_COMPANION_URL ?? "http://127.0.0.1:4317";
 const PracticeEditorShell = lazy(() =>
   import("./practice/PracticeEditorShell").then((module) => ({ default: module.PracticeEditorShell }))
@@ -305,6 +317,10 @@ function localAiStorageKey(userId: string) {
 
 function legacyLocalAiStorageKey(userId: string) {
   return `${LEGACY_LOCAL_AI_STORAGE_PREFIX}${userId}`;
+}
+
+function runnerOnboardingStorageKey(userId: string) {
+  return `${RUNNER_ONBOARDING_STORAGE_PREFIX}${userId}`;
 }
 
 function readLocalAiSettings(userId: string): LocalAiSettings | null {
@@ -387,6 +403,38 @@ function adapterStatusClass(adapter: LocalAdapterStatus): string {
   if (adapter.status === "running") return "status-warning";
   if (adapter.status === "idle") return "status-neutral";
   return "status-danger";
+}
+
+function runnerStatusClass(status: RunnerLanguageResponse["status"]): string {
+  if (status === "installed") return "status-success";
+  if (status === "installing" || status === "missing") return "status-warning";
+  if (status === "failed") return "status-danger";
+  return "status-neutral";
+}
+
+function runnerStatusLabel(language: RunnerLanguageResponse): string {
+  if (language.status === "installed") return "Installed";
+  if (language.status === "installing") return "Installing";
+  if (language.status === "missing") return "Missing";
+  if (language.status === "failed") return "Failed";
+  return language.desiredEnabled ? "Selected" : "Available";
+}
+
+function formatRunnerSize(sizeMb: number): string {
+  if (sizeMb >= 1000) return `${(sizeMb / 1000).toFixed(1)}GB`;
+  return `${sizeMb}MB`;
+}
+
+function replaceRunnerLanguage(
+  languages: RunnerLanguageResponse[],
+  updated: RunnerLanguageResponse,
+): RunnerLanguageResponse[] {
+  const next = languages.map((language) => (language.language === updated.language ? updated : language));
+  return next.some((language) => language.language === updated.language) ? next : [...next, updated];
+}
+
+function primaryPracticeLanguage(problem: PracticeProblemResponse): string {
+  return problem.files.find((file) => file.role === "starter")?.language ?? problem.files[0]?.language ?? "typescript";
 }
 
 function bundleCurationLabel(bundle: SourceBundleSummaryResponse): string {
@@ -713,6 +761,9 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
+  const [runnerLanguages, setRunnerLanguages] = useState<RunnerLanguageResponse[]>([]);
+  const [runnerLoading, setRunnerLoading] = useState(false);
+  const [runnerMessage, setRunnerMessage] = useState("");
   const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
   const [localWatcherStatus, setLocalWatcherStatus] = useState<LocalWatcherStatus | null>(null);
   const [localAdapterStatuses, setLocalAdapterStatuses] = useState<LocalAdapterStatus[]>([]);
@@ -806,17 +857,25 @@ export function App() {
       setLocalRepositories([]);
       setLocalWatcherStatus(null);
       setLocalAdapterStatuses([]);
+      setRunnerLanguages([]);
+      setRunnerMessage("");
       setRetentionSettings(null);
       setRetentionMessage("");
       setLocalWatcherError("");
     } else {
       void refreshLocalRepositories(session);
+      void loadRunnerLanguages(session);
     }
   }, [session]);
 
   useEffect(() => {
     if (session === null || activePage !== "collection") return;
     void refreshLocalWatcherStatus();
+  }, [activePage, session]);
+
+  useEffect(() => {
+    if (session === null || activePage !== "runners") return;
+    void loadRunnerLanguages(session, true);
   }, [activePage, session]);
 
   useEffect(() => {
@@ -980,6 +1039,7 @@ export function App() {
 
   function renderActivePage() {
     if (activePage === "aiSetup") return renderAiSetupPage();
+    if (activePage === "runners") return renderRunnerPage();
     if (activePage === "collection") return renderCollectionPage();
     if (activePage === "evidence") return renderEvidencePage();
     if (activePage === "trace") return renderTracePage();
@@ -1182,6 +1242,59 @@ export function App() {
             {onboardingSaving ? "Saving" : "Save local setup"}
           </button>
         </form>
+      </section>
+    );
+  }
+
+  function renderRunnerPage() {
+    return (
+      <section className="page-stack">
+        <div className="panel panel-wide">
+          <div className="panel-title">
+            <Play aria-hidden="true" size={20} />
+            <h2>Runner Languages</h2>
+          </div>
+          <div className="action-row">
+            <button className="secondary-button" disabled={runnerLoading || session === null} onClick={() => session !== null && void loadRunnerLanguages(session, true)} type="button">
+              <RefreshCw aria-hidden="true" size={16} />
+              {runnerLoading ? "Checking" : "Refresh"}
+            </button>
+            <span className="pagination-status">{runnerLanguages.filter((language) => language.installed).length} installed</span>
+          </div>
+          {runnerMessage.length > 0 ? <p className="action-message">{runnerMessage}</p> : null}
+          <div className="review-table runner-language-list">
+            {runnerLanguages.map((language) => (
+              <div className="review-row runner-language-row" key={language.language}>
+                <div>
+                  <span>{language.displayName}</span>
+                  <small>
+                    {language.imageRef} · {formatRunnerSize(language.estimatedCompressedSizeMb)}
+                    {language.selectedByDefault ? " · default" : " · optional"}
+                  </small>
+                  {language.lastError !== null ? <small className="form-error">{language.lastError}</small> : null}
+                </div>
+                <span className={`status-badge ${runnerStatusClass(language.status)}`}>{runnerStatusLabel(language)}</span>
+                <div className="mini-action-row">
+                  <button
+                    disabled={runnerLoading || language.status === "installing"}
+                    onClick={() => void installRunner(language.language)}
+                    type="button"
+                  >
+                    Install
+                  </button>
+                  <button
+                    disabled={runnerLoading || language.status === "installing"}
+                    onClick={() => void removeRunner(language.language)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+            {runnerLanguages.length === 0 ? <p className="muted-copy">Runner language status is not loaded.</p> : null}
+          </div>
+        </div>
       </section>
     );
   }
@@ -1534,6 +1647,8 @@ export function App() {
               <option value="TypeScript">TypeScript</option>
               <option value="Kotlin">Kotlin</option>
               <option value="Java">Java</option>
+              <option value="Swift">Swift</option>
+              <option value="Rust">Rust</option>
             </select>
           </label>
           <label>
@@ -1926,6 +2041,53 @@ export function App() {
     const preferredProvider = nextProviders.find((provider) => provider.id === preferredProviderId && provider.status === "active");
     if (preferredProvider !== undefined) {
       setSelectedGenerationProviderId(preferredProvider.id);
+    }
+  }
+
+  async function loadRunnerLanguages(
+    currentSession: SessionResponse,
+    refresh = false,
+  ) {
+    setRunnerLoading(true);
+    setRunnerMessage(refresh ? "Checking local runner images" : "");
+    try {
+      const languages = refresh ? await refreshRunnerLanguages(currentSession.token) : await listRunnerLanguages(currentSession.token);
+      setRunnerLanguages(languages);
+      setRunnerMessage(refresh ? "Runner status refreshed" : "");
+    } catch (error) {
+      setRunnerMessage(error instanceof Error ? error.message : "Runner status failed to load");
+    } finally {
+      setRunnerLoading(false);
+    }
+  }
+
+  async function installRunner(language: string) {
+    if (session === null) return;
+    setRunnerLoading(true);
+    setRunnerMessage(`Installing ${language} runner`);
+    try {
+      const updated = await installRunnerLanguage(session.token, language);
+      setRunnerLanguages((current) => replaceRunnerLanguage(current, updated));
+      setRunnerMessage(`${updated.displayName} runner ${updated.status}`);
+    } catch (error) {
+      setRunnerMessage(error instanceof Error ? error.message : "Runner install failed");
+    } finally {
+      setRunnerLoading(false);
+    }
+  }
+
+  async function removeRunner(language: string) {
+    if (session === null) return;
+    setRunnerLoading(true);
+    setRunnerMessage(`Removing ${language} runner`);
+    try {
+      const updated = await removeRunnerLanguage(session.token, language);
+      setRunnerLanguages((current) => replaceRunnerLanguage(current, updated));
+      setRunnerMessage(`${updated.displayName} runner ${updated.status}`);
+    } catch (error) {
+      setRunnerMessage(error instanceof Error ? error.message : "Runner remove failed");
+    } finally {
+      setRunnerLoading(false);
     }
   }
 
@@ -2608,6 +2770,8 @@ export function App() {
   function renderFeedbackPanel(problem: PracticeProblemResponse) {
     const run = problem.latestRun;
     const nextRecommendations = recommendationCards.filter((card) => card.id !== problem.patternCardId).slice(0, 3);
+    const runnerLanguageId = primaryPracticeLanguage(problem);
+    const runnerLanguage = runnerLanguages.find((language) => language.language === runnerLanguageId) ?? null;
     const status =
       practiceSaveStatus.state === "submitted"
         ? "submitted"
@@ -2661,6 +2825,25 @@ export function App() {
           <small>{run?.failureReason ?? "Feedback explanation will appear after a run."}</small>
           {run?.stdoutExcerpt ? <pre className="feedback-output">stdout: {run.stdoutExcerpt}</pre> : null}
           {run?.stderrExcerpt ? <pre className="feedback-output">stderr: {run.stderrExcerpt}</pre> : null}
+          {status === "runner_unavailable" ? (
+            <div className="runner-install-callout">
+              <small>{runnerLanguage?.displayName ?? runnerLanguageId} runner is not installed locally.</small>
+              <div className="mini-action-row">
+                <button
+                  disabled={runnerLoading}
+                  onClick={() => void installRunner(runnerLanguageId)}
+                  type="button"
+                >
+                  <Play aria-hidden="true" size={14} />
+                  {runnerLoading ? "Installing" : "Install runner"}
+                </button>
+                <button onClick={() => setActivePage("runners")} type="button">
+                  <RefreshCw aria-hidden="true" size={14} />
+                  Runners
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="feedback-section">
           <span>Pattern feedback</span>
@@ -2716,12 +2899,15 @@ export function App() {
       const run = await runPracticeAttempt(session.token, activePractice.id, {
         clientAttemptId: draft.clientAttemptId,
         assetRevision: draft.assetRevision,
-        language: activePractice.files[0]?.language ?? "typescript",
+        language: primaryPracticeLanguage(activePractice),
         timeoutMs: 5_000,
         files: draft.files.map((file) => ({ path: file.path, content: file.content }))
       });
       setActivePractice((current) => (current?.id === activePractice.id ? { ...current, latestRun: run } : current));
       setPracticeSaveStatus({ state: "idle", message: runStatusMessage(run) });
+      if (run.status === "runner_unavailable") {
+        void loadRunnerLanguages(session, true);
+      }
     } catch {
       setPracticeSaveStatus({ state: "failed", message: "Run failed" });
     }
@@ -2742,7 +2928,7 @@ export function App() {
       const response = await submitPracticeAttempt(session.token, activePractice.id, {
         clientAttemptId: draft.clientAttemptId,
         assetRevision: draft.assetRevision,
-        language: activePractice.files[0]?.language ?? "typescript",
+        language: primaryPracticeLanguage(activePractice),
         files: draft.files.map((file) => ({ path: file.path, content: file.content })),
         resultStatus: "submitted"
       });
@@ -2848,6 +3034,7 @@ export function App() {
     event.preventDefault();
     if (session === null || membership === null) return;
 
+    const wasFirstLocalSetup = localAiSettings === null && window.localStorage.getItem(runnerOnboardingStorageKey(session.user.id)) !== "done";
     const apiKey = localApiKey.trim();
     const model = localProviderModel.trim();
     const baseUrl = localProviderBaseUrl.trim();
@@ -2898,7 +3085,12 @@ export function App() {
       window.localStorage.removeItem(legacyLocalAiStorageKey(session.user.id));
       setLocalAiSettings(nextSettings);
       setLocalApiKey("");
-      goToDashboard();
+      if (wasFirstLocalSetup) {
+        window.localStorage.setItem(runnerOnboardingStorageKey(session.user.id), "done");
+        setActivePage("runners");
+      } else {
+        goToDashboard();
+      }
     } catch (error) {
       setLocalApiKey("");
       setOnboardingError(error instanceof Error ? error.message : "Local setup failed");

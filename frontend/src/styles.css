@@ -1529,6 +1529,31 @@ h1 {
   font-weight: 600;
 }
 
+.runner-language-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.runner-language-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.runner-language-row small {
+  overflow-wrap: anywhere;
+}
+
+.runner-install-callout {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(184, 136, 0, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 244, 202, 0.72);
+}
+
 .onboarding-panel {
   display: grid;
   align-content: start;

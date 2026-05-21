@@ -40,6 +40,7 @@ class GenerationService(
     private val patternTagRepository: PatternTagRepository,
     private val patternTagLinkRepository: PatternTagLinkRepository,
     private val problemRepository: ProblemRepository,
+    private val problemFileRepository: ProblemFileRepository,
     private val reviewTaskRepository: ReviewTaskRepository,
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
@@ -224,18 +225,23 @@ class GenerationService(
                     ?: patternTagRepository.save(PatternTagEntity(id = prefixedId("tag"), tagType = tag.type, name = tag.name, normalizedName = normalized))
             patternTagLinkRepository.save(PatternTagLinkEntity(patternCardId = card.id, tagId = entity.id))
         }
+        val practiceLanguage = detectPracticeLanguage(sources)
         generated.problems.forEach {
-            problemRepository.save(
-                ProblemEntity(
-                    id = prefixedId("problem"),
-                    patternCardId = card.id,
-                    problemType = it.type,
-                    prompt = it.prompt,
-                    referenceAnswer = it.referenceAnswer,
-                    difficulty = it.difficulty,
-                    createdAt = now,
-                ),
-            )
+            val problem =
+                problemRepository.save(
+                    ProblemEntity(
+                        id = prefixedId("problem"),
+                        patternCardId = card.id,
+                        problemType = it.type,
+                        prompt = it.prompt,
+                        referenceAnswer = it.referenceAnswer,
+                        difficulty = it.difficulty,
+                        createdAt = now,
+                    ),
+                )
+            if (it.type == "short_implementation") {
+                problemFileRepository.saveAll(PracticeLanguageTemplateFactory.filesFor(problem.id, practiceLanguage, now))
+            }
         }
         val task =
             reviewTaskRepository.save(
@@ -498,29 +504,11 @@ class GenerationService(
         return ConversionTraceListResponse(traces)
     }
 
-    private fun inferPattern(text: String): InferredPattern {
-        val normalized = text.lowercase()
-        val tags =
-            buildList {
-                if ("react" in normalized || "queryclient" in normalized) add(InferredTag("framework", "React"))
-                if ("spring" in normalized || "@service" in normalized) add(InferredTag("framework", "Spring"))
-                if ("retry" in normalized || "timeout" in normalized) add(InferredTag("pattern", "Retry/Timeout"))
-                if ("oauth" in normalized || "token" in normalized || "authorization" in normalized) add(InferredTag("api", "Auth API"))
-                if (isEmpty()) add(InferredTag("pattern", "Implementation Pattern"))
-            }
-        val primary = tags.first()
-        return InferredPattern(
-            title = "${primary.name} Practice Pattern",
-            summary = "A reusable ${primary.name.lowercase()} pattern extracted from AI-assisted implementation evidence.",
-            tags = tags,
-            problems =
-                listOf(
-                    InferredProblem("qa", "When should a developer use the ${primary.name} approach shown in this pattern?", "Use it when the implementation has similar technical constraints while avoiding product-specific details.", "beginner"),
-                    InferredProblem("short_implementation", "Implement a similar pattern in a neutral order-processing domain.", "A strong answer keeps the API boundary explicit, handles errors, and keeps domain names generic.", "intermediate"),
-                    InferredProblem("debugging", "What failure mode should be tested before reusing this pattern?", "Test the edge case that would break the boundary, such as timeout, invalid token, or missing dependency behavior.", "intermediate"),
-                ),
-            )
-    }
+    private fun detectPracticeLanguage(sources: GenerationSources): String? =
+        PracticeLanguageTemplateFactory.detectPrimaryLanguage(
+            paths = sources.evidenceItems.mapNotNull { it.repoRelativePath },
+            contents = sources.evidenceItems.mapNotNull { it.contentText },
+        )
 
     private fun parseStringList(json: String): List<String> =
         try {
@@ -606,25 +594,6 @@ data class ConversionTraceExerciseResponse(
     val publicationStatus: String,
     val reviewTaskId: String?,
     val reviewStatus: String?,
-)
-
-private data class InferredPattern(
-    val title: String,
-    val summary: String,
-    val tags: List<InferredTag>,
-    val problems: List<InferredProblem>,
-)
-
-private data class InferredTag(
-    val type: String,
-    val name: String,
-)
-
-private data class InferredProblem(
-    val type: String,
-    val prompt: String,
-    val referenceAnswer: String,
-    val difficulty: String,
 )
 
 private data class GenerationSources(

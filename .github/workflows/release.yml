@@ -4,10 +4,18 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
   contents: write
+  packages: write
   security-events: write
 
 concurrency:
@@ -15,12 +23,81 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    outputs:
+      source_ref: ${{ steps.release.outputs.source_ref }}
+      target_sha: ${{ steps.release.outputs.target_sha }}
+      release_version: ${{ steps.release.outputs.release_version }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_name: ${{ steps.release.outputs.release_name }}
+      publish_release: ${{ steps.release.outputs.publish_release }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      make_latest: ${{ steps.release.outputs.make_latest }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Resolve release metadata
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          package_version="$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")"
+          target_sha="$(git rev-parse HEAD)"
+
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            release_version="$package_version-main.$WORKFLOW_RUN_NUMBER"
+            tag_name="main-v$package_version-$WORKFLOW_RUN_NUMBER"
+            release_name="LearnLoop $release_version"
+            source_ref="$WORKFLOW_HEAD_SHA"
+            publish_release=true
+            prerelease=true
+            make_latest=false
+          elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            release_version="${GITHUB_REF_NAME#v}"
+            tag_name="$GITHUB_REF_NAME"
+            release_name="LearnLoop $release_version"
+            source_ref="$GITHUB_REF"
+            publish_release=true
+            prerelease=false
+            make_latest=true
+          else
+            release_version="$package_version"
+            tag_name="manual-v$package_version-$GITHUB_RUN_NUMBER"
+            release_name="LearnLoop $release_version manual artifact"
+            source_ref="$GITHUB_SHA"
+            publish_release=false
+            prerelease=true
+            make_latest=false
+          fi
+
+          {
+            echo "source_ref=$source_ref"
+            echo "target_sha=$target_sha"
+            echo "release_version=$release_version"
+            echo "tag_name=$tag_name"
+            echo "release_name=$release_name"
+            echo "publish_release=$publish_release"
+            echo "prerelease=$prerelease"
+            echo "make_latest=$make_latest"
+          } >> "$GITHUB_OUTPUT"
+
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: prepare
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -53,10 +130,14 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: test
+    needs:
+      - prepare
+      - test
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -94,14 +175,129 @@ jobs:
           EOF
           docker compose --env-file .ci.env -f docker-compose.install.yml build backend web
 
-  security:
-    name: Security Scan
+  runner-images:
+    name: Build and publish runner images
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - prepare
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
+
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push runner image
+        uses: docker/build-push-action@v6
+        with:
+          context: runner/${{ matrix.language }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}
+            ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:latest
+
+  runner-pull-smoke:
+    name: GHCR runner pull smoke
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - runner-images
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
+    steps:
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull published runner image
+        run: docker pull "${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}"
+
+  runner-image-security:
+    name: Runner image security scan
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - runner-images
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - typescript
+          - java
+          - kotlin
+          - swift
+          - rust
+    steps:
+      - name: Resolve GHCR image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan runner image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -115,9 +311,14 @@ jobs:
         run: ./scripts/npm.sh --prefix frontend ci
 
       - name: Scan for committed secrets
+        if: github.event_name != 'workflow_run'
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Confirm CI secret scan
+        if: github.event_name == 'workflow_run'
+        run: echo "The triggering CI run already completed the committed secret scan."
 
       - name: Audit frontend dependencies
         run: ./scripts/npm.sh --prefix frontend audit --audit-level=high
@@ -162,10 +363,16 @@ jobs:
   package:
     name: Package
     runs-on: ubuntu-latest
-    needs: security
+    needs:
+      - prepare
+      - security
+      - runner-pull-smoke
+      - runner-image-security
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -173,6 +380,8 @@ jobs:
           node-version: "22"
 
       - name: Build release bundle
+        env:
+          VERSION: ${{ needs.prepare.outputs.release_version }}
         run: ./scripts/package-release.sh
 
       - name: Upload release bundle artifact
@@ -185,7 +394,9 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: package
+    needs:
+      - prepare
+      - package
     environment:
       name: release
     steps:
@@ -196,9 +407,15 @@ jobs:
           path: dist/release
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: needs.prepare.outputs.publish_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: ${{ needs.prepare.outputs.release_name }}
+          target_commitish: ${{ needs.prepare.outputs.target_sha }}
+          prerelease: ${{ needs.prepare.outputs.prerelease }}
+          make_latest: ${{ needs.prepare.outputs.make_latest }}
+          generate_release_notes: true
           files: dist/release/*
 
       - name: Report manual artifact location

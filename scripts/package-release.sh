@@ -43,20 +43,81 @@ write_checksum() {
   fi
 }
 
+lowercase() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+default_runner_registry() {
+  if [ "${APP_RUNNER_IMAGE_REGISTRY:-}" != "" ]; then
+    printf '%s\n' "${APP_RUNNER_IMAGE_REGISTRY%/}"
+    return
+  fi
+
+  if [ "${GITHUB_REPOSITORY:-}" != "" ]; then
+    printf 'ghcr.io/%s\n' "$(lowercase "$GITHUB_REPOSITORY")"
+    return
+  fi
+
+  remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+  case "$remote_url" in
+    https://github.com/*/*.git | https://github.com/*/*)
+      repository=${remote_url#https://github.com/}
+      repository=${repository%.git}
+      printf 'ghcr.io/%s\n' "$(lowercase "$repository")"
+      ;;
+    git@github.com:*/*.git | git@github.com:*/*)
+      repository=${remote_url#git@github.com:}
+      repository=${repository%.git}
+      printf 'ghcr.io/%s\n' "$(lowercase "$repository")"
+      ;;
+    *)
+      printf '%s\n' ""
+      ;;
+  esac
+}
+
+runner_image_ref() {
+  language="$1"
+  case "$language" in
+    typescript) override=${APP_RUNNER_TYPESCRIPT_IMAGE:-} ;;
+    java) override=${APP_RUNNER_JAVA_IMAGE:-} ;;
+    kotlin) override=${APP_RUNNER_KOTLIN_IMAGE:-} ;;
+    swift) override=${APP_RUNNER_SWIFT_IMAGE:-} ;;
+    rust) override=${APP_RUNNER_RUST_IMAGE:-} ;;
+    *)
+      echo "Unsupported runner language: $language" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$override" != "" ]; then
+    printf '%s\n' "$override"
+  elif [ "$RUNNER_IMAGE_REGISTRY" != "" ]; then
+    printf '%s/learnloop-runner-%s:%s\n' "$RUNNER_IMAGE_REGISTRY" "$language" "$RUNNER_IMAGE_VERSION"
+  else
+    printf 'learnloop-runner-%s:%s\n' "$language" "$RUNNER_IMAGE_VERSION"
+  fi
+}
+
 VERSION=${VERSION:-$("$NODE_BIN" -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('package.json', 'utf8')).version)")}
 OS_NAME=${OS_NAME:-$(detect_os)}
 ARCH_NAME=${ARCH_NAME:-$(detect_arch)}
 OUTPUT_DIR=${OUTPUT_DIR:-dist/release}
 INCLUDE_POSTGRES_IMAGE=${INCLUDE_POSTGRES_IMAGE:-true}
-INCLUDE_RUNNER_IMAGES=${INCLUDE_RUNNER_IMAGES:-true}
+RUNNER_IMAGE_MODE=${RUNNER_IMAGE_MODE:-online}
+if [ "${INCLUDE_RUNNER_IMAGES:-}" = "true" ]; then
+  RUNNER_IMAGE_MODE=offline
+elif [ "${INCLUDE_RUNNER_IMAGES:-}" = "false" ]; then
+  RUNNER_IMAGE_MODE=online
+fi
+RUNNER_OFFLINE_LANGUAGES=${RUNNER_OFFLINE_LANGUAGES:-typescript java kotlin}
+RUNNER_IMAGE_VERSION=${APP_RUNNER_IMAGE_VERSION:-$VERSION}
+RUNNER_IMAGE_REGISTRY=$(default_runner_registry)
 
 PACKAGE_NAME="learnloop-$VERSION-$OS_NAME-$ARCH_NAME"
 BACKEND_IMAGE="learnloop-backend:$VERSION"
 WEB_IMAGE="learnloop-web:$VERSION"
 POSTGRES_IMAGE="postgres:16-alpine"
-RUNNER_TYPESCRIPT_IMAGE="learnloop-runner-typescript:latest"
-RUNNER_JAVA_IMAGE="learnloop-runner-java:latest"
-RUNNER_KOTLIN_IMAGE="learnloop-runner-kotlin:latest"
 
 require_command docker
 require_command tar
@@ -83,8 +144,20 @@ docker compose --env-file "$BUILD_ENV" -f docker-compose.install.yml build backe
 docker tag learnloop-backend:latest "$BACKEND_IMAGE"
 docker tag learnloop-web:latest "$WEB_IMAGE"
 
-if [ "$INCLUDE_RUNNER_IMAGES" = "true" ]; then
-  APP_RUNNER_ENABLED=true ./scripts/build-runner-images.sh
+case "$RUNNER_IMAGE_MODE" in
+  online | offline) ;;
+  *)
+    echo "RUNNER_IMAGE_MODE must be online or offline" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$RUNNER_IMAGE_MODE" = "offline" ]; then
+  RUNNER_LANGUAGES="$RUNNER_OFFLINE_LANGUAGES" \
+    APP_RUNNER_IMAGE_REGISTRY="$RUNNER_IMAGE_REGISTRY" \
+    APP_RUNNER_IMAGE_VERSION="$RUNNER_IMAGE_VERSION" \
+    APP_RUNNER_ENABLED=true \
+    ./scripts/build-runner-images.sh
 fi
 
 if [ "$INCLUDE_POSTGRES_IMAGE" = "true" ]; then
@@ -117,6 +190,11 @@ cp .env.example "$STAGING_DIR/.env.example"
 cp LICENSE "$STAGING_DIR/LICENSE"
 cp NOTICE "$STAGING_DIR/NOTICE"
 printf '%s\n' "$VERSION" > "$STAGING_DIR/.release-version"
+cat > "$STAGING_DIR/.release-runner.env" <<EOF
+RELEASE_RUNNER_IMAGE_MODE=$RUNNER_IMAGE_MODE
+RELEASE_RUNNER_IMAGE_REGISTRY=$RUNNER_IMAGE_REGISTRY
+RELEASE_RUNNER_IMAGE_VERSION=$RUNNER_IMAGE_VERSION
+EOF
 
 chmod +x "$STAGING_DIR/install.sh" "$STAGING_DIR/start.sh" "$STAGING_DIR/status.sh" "$STAGING_DIR/stop.sh" "$STAGING_DIR/local-ai-companion.sh" "$STAGING_DIR/local-ai-shim.sh" "$STAGING_DIR/local-ai-shim.mjs"
 
@@ -131,10 +209,13 @@ docker save "$WEB_IMAGE" -o "$STAGING_DIR/images/web.tar"
 if [ "$INCLUDE_POSTGRES_IMAGE" = "true" ]; then
   docker save "$POSTGRES_IMAGE" -o "$STAGING_DIR/images/postgres.tar"
 fi
-if [ "$INCLUDE_RUNNER_IMAGES" = "true" ]; then
-  docker save "$RUNNER_TYPESCRIPT_IMAGE" -o "$STAGING_DIR/images/runner-typescript.tar"
-  docker save "$RUNNER_JAVA_IMAGE" -o "$STAGING_DIR/images/runner-java.tar"
-  docker save "$RUNNER_KOTLIN_IMAGE" -o "$STAGING_DIR/images/runner-kotlin.tar"
+if [ "$RUNNER_IMAGE_MODE" = "offline" ]; then
+  : > "$STAGING_DIR/runner-images.manifest"
+  for language in $RUNNER_OFFLINE_LANGUAGES; do
+    image_ref=$(runner_image_ref "$language")
+    printf '%s %s\n' "$language" "$image_ref" >> "$STAGING_DIR/runner-images.manifest"
+    docker save "$image_ref" -o "$STAGING_DIR/images/runner-$language.tar"
+  done
 fi
 
 (
