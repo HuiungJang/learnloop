@@ -69,6 +69,12 @@ The bundled app supports the LearnLoop practice workbench for TypeScript, Java, 
 
 Sandbox execution is enabled by default when local Docker is available. The standard bundle is online-first for language runners: open the Runners page or use the install action from practice feedback to pull only the runners you want. Offline/full bundles may include `runner-images.manifest` and `images/runner-*.tar`; `./install.sh` imports any included runner images automatically.
 
+Runner install mode is controlled by `APP_RUNNER_IMAGE_SOURCE`:
+
+- `registry`: pull public runner images from `APP_RUNNER_IMAGE_REGISTRY`.
+- `bundled`: use runner images imported from the offline bundle and do not attempt remote pulls when an image is missing.
+- `local`: source-checkout mode that builds `runner/<language>` locally; release bundles normally do not use this mode.
+
 Runner execution mounts the host Docker socket into the backend container and uses `.local-runner-workspaces/` as the shared workspace for nested runner containers. This gives the backend container access to the host Docker daemon; set `APP_RUNNER_ENABLED=false` before starting the app if you want to disable code execution.
 
 Runner limits in this version:
@@ -89,6 +95,7 @@ Edit `.env` before running `./start.sh` to change the browser port or project na
 AI_CODE_PROJECT_NAME=learnloop
 AI_CODE_WEB_PORT=8080
 APP_RUNNER_ENABLED=true
+APP_RUNNER_IMAGE_SOURCE=registry
 APP_RUNNER_IMAGE_REGISTRY=ghcr.io/huiungjang/learnloop
 APP_RUNNER_IMAGE_VERSION=0.1.0
 ```

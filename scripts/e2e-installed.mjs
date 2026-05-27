@@ -356,6 +356,8 @@ try {
   await page.getByRole("heading", { name: /Install only the languages you use/i }).waitFor();
   await page.locator(".runner-language-row", { hasText: /Swift/ }).getByText(/optional/i).waitFor();
   await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/optional/i).waitFor();
+  await page.locator(".runner-language-row", { hasText: /Rust/ }).getByText(/local image|registry image|bundled image/i).waitFor();
+  assert.equal(await page.getByText(/pull access denied for learnloop-runner-rust/i).count(), 0);
   await page.getByRole("button", { name: /Refresh/i }).click();
   await page.getByText(/Runner status refreshed|Checking local runner images/i).waitFor({ timeout: 20_000 });
   await page.getByRole("button", { name: /Overview/i }).click();

@@ -273,6 +273,7 @@ export type RunnerLanguageResponse = {
   language: string;
   displayName: string;
   imageRef: string;
+  imageSource: "local" | "registry" | "bundled";
   status: "available" | "installing" | "installed" | "missing" | "failed";
   installed: boolean;
   runnable: boolean;
@@ -282,6 +283,8 @@ export type RunnerLanguageResponse = {
   installedAt: string | null;
   lastCheckedAt: string | null;
   lastError: string | null;
+  installStage: "checking_image" | "building_local_image" | "pulling_image" | "verifying_image" | null;
+  lastErrorCode: string | null;
 };
 
 export type PracticeSubmissionRequest = {

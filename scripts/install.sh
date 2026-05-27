@@ -79,6 +79,8 @@ APP_RUNNER_ENABLED=true
 APP_RUNNER_BASE_URL=
 APP_RUNNER_TOKEN=
 APP_RUNNER_REQUIRE_LIMITS=true
+APP_RUNNER_BUILD_CONTEXT_ROOT=/app/runner
+APP_RUNNER_IMAGE_SOURCE=local
 APP_RUNNER_IMAGE_REGISTRY=
 APP_RUNNER_IMAGE_VERSION=latest
 APP_RUNNER_DOCKER_SOCKET=/var/run/docker.sock
@@ -91,6 +93,8 @@ ensure_runner_env() {
   ensure_env_value APP_CREDENTIAL_ENCRYPTION_KEY "$(generate_encryption_key)"
   ensure_env_value APP_RUNNER_DOCKER_SOCKET /var/run/docker.sock
   ensure_env_value APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces"
+  ensure_env_value APP_RUNNER_BUILD_CONTEXT_ROOT /app/runner
+  ensure_env_value APP_RUNNER_IMAGE_SOURCE local
   ensure_env_value APP_RUNNER_IMAGE_REGISTRY ""
   ensure_env_value APP_RUNNER_IMAGE_VERSION latest
 }

@@ -241,15 +241,11 @@ jobs:
         shell: bash
         run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull published runner image
+      - name: Pull published runner image anonymously
         run: docker pull "${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:${{ needs.prepare.outputs.release_version }}"
+
+      - name: Pull latest runner image anonymously
+        run: docker pull "${{ steps.image.outputs.prefix }}/learnloop-runner-${{ matrix.language }}:latest"
 
   runner-image-security:
     name: Runner image security scan

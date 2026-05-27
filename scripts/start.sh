@@ -23,6 +23,12 @@ if ! grep -q "^APP_CREDENTIAL_ENCRYPTION_KEY=" .env; then
   fi
   printf '%s=%s\n' APP_CREDENTIAL_ENCRYPTION_KEY "$credential_key" >> .env
 fi
+if ! grep -q "^APP_RUNNER_BUILD_CONTEXT_ROOT=" .env; then
+  printf '%s=%s\n' APP_RUNNER_BUILD_CONTEXT_ROOT /app/runner >> .env
+fi
+if ! grep -q "^APP_RUNNER_IMAGE_SOURCE=" .env; then
+  printf '%s=%s\n' APP_RUNNER_IMAGE_SOURCE local >> .env
+fi
 if ! grep -q "^APP_RUNNER_IMAGE_REGISTRY=" .env; then
   printf '%s=\n' APP_RUNNER_IMAGE_REGISTRY >> .env
 fi

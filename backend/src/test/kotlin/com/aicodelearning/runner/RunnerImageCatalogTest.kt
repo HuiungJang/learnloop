@@ -22,6 +22,10 @@ class RunnerImageCatalogTest {
         )
         assertFalse(languages.single { it.language == PracticeContract.LANGUAGE_SWIFT }.selectedByDefault)
         assertFalse(languages.single { it.language == PracticeContract.LANGUAGE_RUST }.selectedByDefault)
+        assertEquals(
+            listOf(RunnerImageSources.LOCAL, RunnerImageSources.LOCAL, RunnerImageSources.LOCAL, RunnerImageSources.LOCAL, RunnerImageSources.LOCAL),
+            languages.map { it.imageSource },
+        )
     }
 
     @Test
@@ -39,10 +43,46 @@ class RunnerImageCatalogTest {
             "ghcr.io/huiungjang/learnloop-runner-swift:1.2.3",
             catalog.requireLanguage("swift").imageRef,
         )
+        assertEquals(RunnerImageSources.REGISTRY, catalog.requireLanguage("swift").imageSource)
         assertEquals(
             "localhost/learnloop-runner-rust:test",
             catalog.requireLanguage("rust").imageRef,
         )
+        assertEquals(RunnerImageSources.REGISTRY, catalog.requireLanguage("rust").imageSource)
+    }
+
+    @Test
+    fun `explicit image source overrides registry derivation`() {
+        val catalog =
+            RunnerImageCatalog(
+                mapOf(
+                    "APP_RUNNER_IMAGE_SOURCE" to RunnerImageSources.BUNDLED,
+                    "APP_RUNNER_IMAGE_REGISTRY" to "ghcr.io/huiungjang/learnloop",
+                ),
+            )
+
+        assertEquals(RunnerImageSources.BUNDLED, catalog.requireLanguage("rust").imageSource)
+    }
+
+    @Test
+    fun `bare per-language override remains local`() {
+        val catalog =
+            RunnerImageCatalog(
+                mapOf(
+                    "APP_RUNNER_IMAGE_REGISTRY" to "ghcr.io/huiungjang/learnloop",
+                    "APP_RUNNER_RUST_IMAGE" to "learnloop-runner-rust:dev",
+                ),
+            )
+
+        assertEquals("learnloop-runner-rust:dev", catalog.requireLanguage("rust").imageRef)
+        assertEquals(RunnerImageSources.LOCAL, catalog.requireLanguage("rust").imageSource)
+    }
+
+    @Test
+    fun `rejects unsupported image source`() {
+        assertThrows(com.aicodelearning.platform.BadRequestException::class.java) {
+            RunnerImageCatalog(mapOf("APP_RUNNER_IMAGE_SOURCE" to "dockerhub")).languages()
+        }
     }
 
     @Test
@@ -50,5 +90,10 @@ class RunnerImageCatalogTest {
         assertThrows(com.aicodelearning.platform.BadRequestException::class.java) {
             RunnerImageCatalog(emptyMap()).requireLanguage("ruby")
         }
+    }
+
+    @Test
+    fun `resolves runner build context path by language`() {
+        assertEquals("/app/runner/rust", RunnerBuildContextResolver("/app/runner").pathFor("rust"))
     }
 }

@@ -9,15 +9,34 @@ data class RunnerLanguageDescriptor(
     val displayName: String,
     val harnessId: String,
     val imageRef: String,
+    val imageSource: String,
     val selectedByDefault: Boolean,
     val estimatedCompressedSizeMb: Int,
 )
+
+object RunnerImageSources {
+    const val LOCAL = "local"
+    const val REGISTRY = "registry"
+    const val BUNDLED = "bundled"
+
+    val all = setOf(LOCAL, REGISTRY, BUNDLED)
+}
 
 @Component
 class RunnerImageCatalog(
     private val environment: Map<String, String> = System.getenv(),
 ) {
     private val version = environment["APP_RUNNER_IMAGE_VERSION"]?.takeIf { it.isNotBlank() } ?: "latest"
+    private val explicitImageSource =
+        environment["APP_RUNNER_IMAGE_SOURCE"]
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?.also {
+                if (it !in RunnerImageSources.all) {
+                    throw BadRequestException("runner image source is not supported")
+                }
+            }
     private val registryPrefix =
         environment["APP_RUNNER_IMAGE_REGISTRY"]
             ?.trim()
@@ -89,13 +108,34 @@ class RunnerImageCatalog(
         overrideKey: String,
         selectedByDefault: Boolean,
         estimatedCompressedSizeMb: Int,
-    ): RunnerLanguageDescriptor =
-        RunnerLanguageDescriptor(
+    ): RunnerLanguageDescriptor {
+        val overrideImage = environment[overrideKey]?.takeIf { it.isNotBlank() }
+        val imageRef = overrideImage ?: defaultImage
+        return RunnerLanguageDescriptor(
             language = language,
             displayName = displayName,
             harnessId = harnessId,
-            imageRef = environment[overrideKey]?.takeIf { it.isNotBlank() } ?: defaultImage,
+            imageRef = imageRef,
+            imageSource = sourceFor(imageRef, overrideImage != null),
             selectedByDefault = selectedByDefault,
             estimatedCompressedSizeMb = estimatedCompressedSizeMb,
         )
+    }
+
+    private fun sourceFor(
+        imageRef: String,
+        fromOverride: Boolean,
+    ): String =
+        explicitImageSource
+            ?: if ((!fromOverride && registryPrefix.isNotBlank()) || looksLikeRegistryImage(imageRef)) {
+                RunnerImageSources.REGISTRY
+            } else {
+                RunnerImageSources.LOCAL
+            }
+
+    private fun looksLikeRegistryImage(imageRef: String): Boolean {
+        val firstComponent = imageRef.substringBefore('/')
+        return imageRef.contains('/') &&
+            (firstComponent.contains('.') || firstComponent.contains(':') || firstComponent == "localhost")
+    }
 }

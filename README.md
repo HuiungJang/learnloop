@@ -113,6 +113,12 @@ The practice workbench supports a VS Code-style editor experience for TypeScript
 
 Sandbox execution is optional and fail-closed. The Run action requires the backend runtime to have access to a Docker CLI, a reachable Docker daemon, and a local language runner image. If a runner is missing, the app reports `runner_unavailable` and offers an install action from the practice feedback panel or the Runners page while preserving read, edit, local save, draft sync, and submit flows.
 
+Runner installation is source-aware:
+
+- `APP_RUNNER_IMAGE_SOURCE=local`: source checkouts use local image names such as `learnloop-runner-rust:latest`. Install first checks for the image and builds `runner/<language>` locally when it is missing.
+- `APP_RUNNER_IMAGE_SOURCE=registry`: online release bundles pull public runner images from `APP_RUNNER_IMAGE_REGISTRY`.
+- `APP_RUNNER_IMAGE_SOURCE=bundled`: offline/full release bundles expect runner image tar files to be imported during installation and do not attempt remote pulls when an image is missing.
+
 Runner limitations for the current version:
 
 - Supported languages: TypeScript, Java, Kotlin, Swift, Rust
@@ -133,7 +139,7 @@ Useful runner checks from source:
 ./scripts/status.sh
 ```
 
-The source installer builds TypeScript, Java, and Kotlin runners by default. Set `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"` before `./scripts/install.sh` if you want source installation to build every runner locally. The installed app mounts the host Docker socket and uses `.local-runner-workspaces/` as the shared host/container workspace. This is powerful local-only functionality: users who do not want the backend container to access the host Docker daemon should set `APP_RUNNER_ENABLED=false` before starting the app.
+The source installer builds TypeScript, Java, and Kotlin runners by default. Optional Swift and Rust runners can be installed later from the Runners page; in local source mode the app builds the missing image from `runner/swift` or `runner/rust`. Swift can take a long time to build because the image is large. Set `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"` before `./scripts/install.sh` if you want source installation to build every runner up front. The installed app mounts the host Docker socket and uses `.local-runner-workspaces/` as the shared host/container workspace. This is powerful local-only functionality: users who do not want the backend container to access the host Docker daemon should set `APP_RUNNER_ENABLED=false` before starting the app.
 
 ### Attempts and Sync
 
@@ -184,6 +190,8 @@ RUNNER_IMAGE_MODE=offline RUNNER_OFFLINE_LANGUAGES="typescript java kotlin swift
 ```
 
 Runner execution still requires local Docker daemon access through the mounted Docker socket. When runner prerequisites are not available or `APP_RUNNER_ENABLED=false`, the release app still supports browsing, editing, saving, submitting, and inspecting practice attempts.
+
+Online release bundles require public GHCR runner packages. Release CI verifies unauthenticated `docker pull` for published runner images so private package visibility is caught before shipping.
 
 ## CI/CD
 

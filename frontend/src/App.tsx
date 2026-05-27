@@ -431,6 +431,20 @@ function runnerStatusLabel(language: RunnerLanguageResponse): string {
   return language.desiredEnabled ? "Selected" : "Available";
 }
 
+function runnerInstallStageLabel(stage: RunnerLanguageResponse["installStage"]): string {
+  if (stage === "checking_image") return "Checking image";
+  if (stage === "building_local_image") return "Building local image";
+  if (stage === "pulling_image") return "Pulling image";
+  if (stage === "verifying_image") return "Verifying image";
+  return "";
+}
+
+function runnerImageSourceLabel(source: RunnerLanguageResponse["imageSource"]): string {
+  if (source === "local") return "local image";
+  if (source === "registry") return "registry image";
+  return "bundled image";
+}
+
 function formatRunnerSize(sizeMb: number): string {
   if (sizeMb >= 1000) return `${(sizeMb / 1000).toFixed(1)}GB`;
   return `${sizeMb}MB`;
@@ -868,6 +882,7 @@ export function App() {
   const [localAiSettings, setLocalAiSettings] = useState<LocalAiSettings | null>(null);
   const [runnerLanguages, setRunnerLanguages] = useState<RunnerLanguageResponse[]>([]);
   const [runnerLoading, setRunnerLoading] = useState(false);
+  const [runnerPendingLanguages, setRunnerPendingLanguages] = useState<Set<string>>(() => new Set());
   const [runnerMessage, setRunnerMessage] = useState("");
   const [localRepositories, setLocalRepositories] = useState<LocalRepositoryConsent[]>([]);
   const [localWatcherStatus, setLocalWatcherStatus] = useState<LocalWatcherStatus | null>(null);
@@ -970,6 +985,7 @@ export function App() {
       setLocalWatcherStatus(null);
       setLocalAdapterStatuses([]);
       setRunnerLanguages([]);
+      setRunnerPendingLanguages(new Set());
       setRunnerMessage("");
       setRetentionSettings(null);
       setRetentionMessage("");
@@ -989,6 +1005,15 @@ export function App() {
     if (session === null || activePage !== "runners") return;
     void loadRunnerLanguages(session, true);
   }, [activePage, session]);
+
+  useEffect(() => {
+    if (session === null || activePage !== "runners") return;
+    if (!runnerLanguages.some((language) => language.status === "installing")) return;
+    const intervalId = window.setInterval(() => {
+      void pollRunnerLanguages(session);
+    }, 2000);
+    return () => window.clearInterval(intervalId);
+  }, [activePage, runnerLanguages, session]);
 
   useEffect(() => {
     if (!restoredSessionRef.current || session === null) return;
@@ -1402,35 +1427,40 @@ export function App() {
           </div>
           {runnerMessage.length > 0 ? <p className="action-message">{runnerMessage}</p> : null}
           <div className="review-table runner-language-list">
-            {runnerLanguages.map((language) => (
-              <div className="review-row runner-language-row" key={language.language}>
-                <div>
-                  <span>{language.displayName}</span>
-                  <small>
-                    {language.imageRef} · {formatRunnerSize(language.estimatedCompressedSizeMb)}
-                    {language.selectedByDefault ? " · default" : " · optional"}
-                  </small>
-                  {language.lastError !== null ? <small className="form-error">{language.lastError}</small> : null}
+            {runnerLanguages.map((language) => {
+              const stageLabel = runnerInstallStageLabel(language.installStage);
+              const rowPending = runnerPendingLanguages.has(language.language) || language.status === "installing";
+              return (
+                <div className="review-row runner-language-row" key={language.language}>
+                  <div>
+                    <span>{language.displayName}</span>
+                    <small>
+                      {language.imageRef} · {formatRunnerSize(language.estimatedCompressedSizeMb)}
+                      {language.selectedByDefault ? " · default" : " · optional"} · {runnerImageSourceLabel(language.imageSource)}
+                    </small>
+                    {stageLabel.length > 0 ? <small>{stageLabel}</small> : null}
+                    {language.lastError !== null ? <small className="form-error">{language.lastError}</small> : null}
+                  </div>
+                  <span className={`status-badge ${runnerStatusClass(language.status)}`}>{runnerStatusLabel(language)}</span>
+                  <div className="mini-action-row">
+                    <button
+                      disabled={runnerLoading || rowPending}
+                      onClick={() => void installRunner(language.language)}
+                      type="button"
+                    >
+                      Install
+                    </button>
+                    <button
+                      disabled={runnerLoading || rowPending}
+                      onClick={() => void removeRunner(language.language)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <span className={`status-badge ${runnerStatusClass(language.status)}`}>{runnerStatusLabel(language)}</span>
-                <div className="mini-action-row">
-                  <button
-                    disabled={runnerLoading || language.status === "installing"}
-                    onClick={() => void installRunner(language.language)}
-                    type="button"
-                  >
-                    Install
-                  </button>
-                  <button
-                    disabled={runnerLoading || language.status === "installing"}
-                    onClick={() => void removeRunner(language.language)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {runnerLanguages.length === 0 ? <p className="muted-copy">Runner language status is not loaded.</p> : null}
           </div>
         </div>
@@ -2200,9 +2230,18 @@ export function App() {
     }
   }
 
+  async function pollRunnerLanguages(currentSession: SessionResponse) {
+    try {
+      const languages = await listRunnerLanguages(currentSession.token);
+      setRunnerLanguages(languages);
+    } catch {
+      // The explicit Refresh action surfaces errors; polling should not interrupt the page.
+    }
+  }
+
   async function installRunner(language: string) {
     if (session === null) return;
-    setRunnerLoading(true);
+    setRunnerPendingLanguages((current) => new Set(current).add(language));
     setRunnerMessage(`Installing ${language} runner`);
     try {
       const updated = await installRunnerLanguage(session.token, language);
@@ -2211,13 +2250,17 @@ export function App() {
     } catch (error) {
       setRunnerMessage(error instanceof Error ? error.message : "Runner install failed");
     } finally {
-      setRunnerLoading(false);
+      setRunnerPendingLanguages((current) => {
+        const next = new Set(current);
+        next.delete(language);
+        return next;
+      });
     }
   }
 
   async function removeRunner(language: string) {
     if (session === null) return;
-    setRunnerLoading(true);
+    setRunnerPendingLanguages((current) => new Set(current).add(language));
     setRunnerMessage(`Removing ${language} runner`);
     try {
       const updated = await removeRunnerLanguage(session.token, language);
@@ -2226,7 +2269,11 @@ export function App() {
     } catch (error) {
       setRunnerMessage(error instanceof Error ? error.message : "Runner remove failed");
     } finally {
-      setRunnerLoading(false);
+      setRunnerPendingLanguages((current) => {
+        const next = new Set(current);
+        next.delete(language);
+        return next;
+      });
     }
   }
 
@@ -2969,12 +3016,12 @@ export function App() {
               <small>{runnerLanguage?.displayName ?? runnerLanguageId} runner is not installed locally.</small>
               <div className="mini-action-row">
                 <button
-                  disabled={runnerLoading}
+                  disabled={runnerPendingLanguages.has(runnerLanguageId) || runnerLanguage?.status === "installing"}
                   onClick={() => void installRunner(runnerLanguageId)}
                   type="button"
                 >
                   <Play aria-hidden="true" size={14} />
-                  {runnerLoading ? "Installing" : "Install runner"}
+                  {runnerPendingLanguages.has(runnerLanguageId) || runnerLanguage?.status === "installing" ? "Installing" : "Install runner"}
                 </button>
                 <button onClick={() => setActivePage("runners")} type="button">
                   <RefreshCw aria-hidden="true" size={14} />
