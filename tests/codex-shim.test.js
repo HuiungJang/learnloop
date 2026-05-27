@@ -722,6 +722,77 @@ test("local companion launcher keeps the companion alive after launcher exits", 
   });
 });
 
+test("local companion provider status reports existing Codex login", async () => {
+  await withCompanion(
+    async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/providers/status?provider=codex`, {
+        headers: { Origin: "http://localhost:8080" }
+      });
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.status, "connected");
+      assert.equal(payload.provider, "codex");
+      assert.equal(payload.credentialLabel, "Codex CLI OAuth");
+    },
+    { LEARNLOOP_CODEX_STATUS_COMMAND: "/bin/echo logged in" }
+  );
+});
+
+test("local companion provider status reports missing Codex CLI", async () => {
+  await withCompanion(
+    async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/providers/status?provider=codex`, {
+        headers: { Origin: "http://localhost:8080" }
+      });
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.status, "missing");
+      assert.equal(payload.provider, "codex");
+      assert.match(payload.message, /not installed|PATH/i);
+      assert.equal(JSON.stringify(payload).includes("local-token"), false);
+    },
+    { LEARNLOOP_CODEX_STATUS_COMMAND: "/definitely/missing/learnloop-codex-status" }
+  );
+});
+
+test("local companion provider status preserves connected providers without status commands", async () => {
+  await withCompanion(
+    async ({ baseUrl, token }) => {
+      const startResponse = await fetch(`${baseUrl}/oauth/start`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-learnloop-local-token": token,
+          Origin: "http://localhost:8080"
+        },
+        body: JSON.stringify({ provider: "gemini" })
+      });
+      assert.equal(startResponse.status, 202);
+
+      let statusPayload = await startResponse.json();
+      for (let attempt = 0; attempt < 20 && statusPayload.status !== "connected"; attempt += 1) {
+        await sleep(25);
+        const statusResponse = await fetch(`${baseUrl}/oauth/status?provider=gemini`, {
+          headers: { Origin: "http://localhost:8080" }
+        });
+        assert.equal(statusResponse.status, 200);
+        statusPayload = await statusResponse.json();
+      }
+      assert.equal(statusPayload.status, "connected");
+
+      const providerResponse = await fetch(`${baseUrl}/providers/status?provider=gemini`, {
+        headers: { Origin: "http://localhost:8080" }
+      });
+      assert.equal(providerResponse.status, 200);
+      const providerPayload = await providerResponse.json();
+      assert.equal(providerPayload.status, "connected");
+      assert.equal(providerPayload.provider, "gemini");
+      assert.equal(providerPayload.credentialLabel, "Google OAuth");
+    },
+    { LEARNLOOP_GEMINI_LOGIN_COMMAND: "/usr/bin/true" }
+  );
+});
+
 test("local companion rejects unsafe host, origin, token, size, control, and bind cases", async () => {
   await withCompanion(async ({ baseUrl, port, token }) => {
     const goodHost = `127.0.0.1:${port}`;
@@ -736,6 +807,18 @@ test("local companion rejects unsafe host, origin, token, size, control, and bin
       headers: { Origin: "http://evil.example" }
     });
     assert.equal(badOrigin.status, 403);
+
+    const badProviderOrigin = await httpRequest(port, "/providers/status?provider=codex", {
+      host: goodHost,
+      headers: { Origin: "http://evil.example" }
+    });
+    assert.equal(badProviderOrigin.status, 403);
+
+    const acceptedProviderStatus = await httpRequest(port, "/providers/status?provider=codex", {
+      host: goodHost,
+      headers: { Origin: "http://localhost:8080" }
+    });
+    assert.equal(acceptedProviderStatus.status, 200);
 
     const missingToken = await httpRequest(port, "/shim/events", {
       method: "POST",
@@ -1217,7 +1300,7 @@ function spawnAndSignal(filePath, args, options = {}) {
   });
 }
 
-async function withCompanion(fn) {
+async function withCompanion(fn, envOverrides = {}) {
   await withTempDir(async (dir) => {
     const port = await findOpenPort();
     const configDir = path.join(dir, ".learnloop");
@@ -1228,7 +1311,8 @@ async function withCompanion(fn) {
         LEARNLOOP_LOCAL_AI_PORT: String(port),
         LEARNLOOP_LOCAL_AI_CONFIG_DIR: configDir,
         LEARNLOOP_CODEX_STATUS_COMMAND: "/usr/bin/false",
-        LEARNLOOP_CODEX_LOGIN_COMMAND: "/usr/bin/true"
+        LEARNLOOP_CODEX_LOGIN_COMMAND: "/usr/bin/true",
+        ...envOverrides
       },
       stdio: ["ignore", "ignore", "pipe"]
     });
@@ -1262,6 +1346,10 @@ function companionStartupFailure(env) {
     child.on("error", reject);
     child.once("close", (code) => resolve({ code, stderr }));
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function findOpenPort() {

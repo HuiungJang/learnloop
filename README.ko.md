@@ -70,6 +70,15 @@ Codex shim 관리자는 LearnLoop가 관리하는 shim 디렉터리에만 설치
 
 local AI companion은 loopback에서만 listen합니다. 변경을 일으키는 companion endpoint는 repository 밖에 owner 전용 권한으로 저장되는 random local API token을 요구합니다. 브라우저 OAuth는 설치 앱 origin에만 허용되는 짧은 수명의 OAuth start token을 사용합니다.
 
+Codex와 Gemini OAuth에는 local AI companion이 필요합니다. AI Setup에서 `Companion offline` 또는 `Local AI companion is not running`이 보이면 repository root에서 상태를 확인하고 다시 시작합니다.
+
+```sh
+./scripts/status.sh
+./scripts/local-ai-companion.sh start
+```
+
+`./scripts/status.sh`는 앱 준비 상태와 local AI 준비 상태를 분리해서 보여줍니다. 앱이 준비된 상태여도 local AI companion이 degraded일 수 있으며, 이 경우 OAuth와 자동 로컬 수집을 사용하려면 companion을 다시 시작해야 합니다. OAuth token은 로컬 도구와 companion 흐름 안에만 남고 LearnLoop backend로 전송되지 않습니다.
+
 브라우저 포트를 바꾸려면 `.env`의 `AI_CODE_WEB_PORT`를 수정한 뒤 다시 시작합니다.
 
 ```sh

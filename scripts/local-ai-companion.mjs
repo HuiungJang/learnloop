@@ -106,6 +106,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/providers/status") {
+      assertRateLimit(req, url.pathname);
+      const provider = readProvider(url.searchParams.get("provider"));
+      await refreshProviderStatus(provider);
+      sendJson(res, 200, stateFor(provider));
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/oauth/start") {
       assertRateLimit(req, url.pathname);
       assertOAuthStartToken(req);
@@ -479,6 +487,36 @@ async function readExistingConnection(provider, config) {
     credentialLabel: config.label,
     message: `${config.label} connected.`
   };
+}
+
+async function refreshProviderStatus(provider) {
+  const current = providerState.get(provider);
+  if (current?.child && current.child.exitCode === null) return;
+
+  const config = providers[provider];
+  if (!config.statusCommand) {
+    if (current?.status === "connected" || current?.status === "running" || current?.status === "starting") return;
+    providerState.set(provider, {
+      status: "idle",
+      provider,
+      credentialLabel: config.label,
+      message: ""
+    });
+    return;
+  }
+
+  const existingConnection = await readExistingConnection(provider, config);
+  if (existingConnection !== null) {
+    providerState.set(provider, existingConnection);
+    return;
+  }
+
+  providerState.set(provider, {
+    status: "idle",
+    provider,
+    credentialLabel: config.label,
+    message: ""
+  });
 }
 
 function runCommand(command, args, timeoutMs) {

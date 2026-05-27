@@ -100,6 +100,15 @@ Set `APP_RUNNER_ENABLED=false` to hide runner readiness warnings in environments
 
 The local AI setup screen can start Codex or Gemini OAuth through `./local-ai-companion.sh`. The companion listens only on loopback, runs the selected local login command, and never sends OAuth tokens to the LearnLoop server. Mutating companion endpoints require a random local API token stored outside repository directories with owner-only permissions; browser OAuth uses a short-lived OAuth-start token scoped to the installed app origin. If Node.js is not available on the host, install Node.js or set `NODE_BIN` before starting the companion.
 
+If AI Setup shows `Companion offline` or `Local AI companion is not running`, check the bundle status and restart the companion from the bundle directory:
+
+```sh
+./status.sh
+./local-ai-companion.sh start
+```
+
+`./status.sh` reports app readiness separately from local AI companion readiness. The app can remain usable while local AI is degraded; OAuth and automatic local collection need the companion to be running.
+
 ## Codex CLI Shim
 
 Install the first automatic collection path with:

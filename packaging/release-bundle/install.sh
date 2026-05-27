@@ -172,7 +172,7 @@ prepare_runner_workspace
 validate_env_file
 load_images
 compose up -d
-./local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./local-ai-companion.sh."
+./local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./local-ai-companion.sh start."
 
 ./status.sh --wait
 

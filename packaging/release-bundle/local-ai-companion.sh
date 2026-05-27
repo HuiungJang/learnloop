@@ -29,7 +29,8 @@ host_url() {
 BASE_URL="http://$(host_url):$PORT"
 
 is_running() {
-  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+  pid=$(pid_value || true)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
 listener_pid() {
@@ -44,6 +45,23 @@ healthcheck() {
 
 status_payload() {
   curl -fsS "$BASE_URL/status" 2>/dev/null || true
+}
+
+pid_value() {
+  if [ ! -f "$PID_FILE" ]; then
+    return 1
+  fi
+  pid=$(cat "$PID_FILE" 2>/dev/null || true)
+  case "$pid" in
+    '' | *[!0-9]*) return 1 ;;
+    *) printf '%s\n' "$pid" ;;
+  esac
+}
+
+clear_stale_pid() {
+  if [ -f "$PID_FILE" ] && ! is_running; then
+    rm -f "$PID_FILE"
+  fi
 }
 
 start_process() {
@@ -69,7 +87,7 @@ start() {
     echo "LearnLoop local AI companion is already running on $BASE_URL"
     return
   fi
-  rm -f "$PID_FILE"
+  clear_stale_pid
   start_process
 
   i=0
@@ -93,8 +111,9 @@ start() {
 
 stop() {
   if is_running; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
-    wait_for_stop "$(cat "$PID_FILE")"
+    pid=$(pid_value)
+    kill "$pid" 2>/dev/null || true
+    wait_for_stop "$pid"
     rm -f "$PID_FILE"
     echo "LearnLoop local AI companion stopped."
   else
@@ -132,13 +151,22 @@ case "${1:-start}" in
     ;;
   status)
     if healthcheck; then
+      if ! is_running; then
+        current_pid=$(listener_pid || true)
+        if [ -n "$current_pid" ]; then
+          printf '%s\n' "$current_pid" > "$PID_FILE"
+        else
+          rm -f "$PID_FILE"
+        fi
+      fi
       echo "LearnLoop local AI companion is running on $BASE_URL"
       payload=$(status_payload)
       if [ -n "$payload" ]; then
         echo "$payload"
       fi
     else
-      echo "LearnLoop local AI companion is not running."
+      clear_stale_pid
+      echo "LearnLoop local AI companion is not running. Start it with ./local-ai-companion.sh start."
       exit 1
     fi
     ;;

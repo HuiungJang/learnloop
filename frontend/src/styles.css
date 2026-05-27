@@ -1788,6 +1788,19 @@ h1 {
   gap: 10px;
 }
 
+.oauth-companion-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.oauth-refresh-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
 .oauth-status {
   display: inline-flex;
   align-items: center;
@@ -1805,10 +1818,57 @@ h1 {
   background: var(--success-fill);
 }
 
+.oauth-companion-status-online {
+  color: var(--success-text);
+  background: var(--success-fill);
+}
+
+.oauth-companion-status-checking {
+  color: var(--muted);
+  background: var(--surface-tint);
+}
+
 .oauth-status-failed,
-.oauth-status-unavailable {
+.oauth-status-unavailable,
+.oauth-status-blocked,
+.oauth-status-provider_missing,
+.oauth-companion-status-offline,
+.oauth-companion-status-blocked,
+.oauth-companion-status-unhealthy {
   color: var(--error-text);
   background: var(--error-fill);
+}
+
+.oauth-recovery-callout {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: rgba(28, 28, 28, 0.82);
+  background: var(--surface-tint);
+}
+
+.oauth-recovery-callout strong {
+  color: var(--charcoal);
+  font-weight: 600;
+}
+
+.oauth-recovery-callout p,
+.oauth-recovery-callout small {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.oauth-recovery-callout code {
+  display: block;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--charcoal);
+  background: rgba(28, 28, 28, 0.03);
+  overflow-wrap: anywhere;
 }
 
 .oauth-message {

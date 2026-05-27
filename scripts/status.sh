@@ -47,9 +47,16 @@ print_runner_status() {
 }
 
 print_companion_status() {
-  companion_status=$(./scripts/local-ai-companion.sh status 2>/dev/null || true)
+  if companion_status=$(./scripts/local-ai-companion.sh status 2>/dev/null); then
+    echo "Local AI companion: running"
+  else
+    case "$companion_status" in
+      *"not running"*) echo "Local AI companion: degraded - not running" ;;
+      *) echo "Local AI companion: degraded - unhealthy" ;;
+    esac
+  fi
   if [ -n "$companion_status" ]; then
-    echo "$companion_status"
+    printf '%s\n' "$companion_status" | sed 's/^/  /'
   fi
 }
 

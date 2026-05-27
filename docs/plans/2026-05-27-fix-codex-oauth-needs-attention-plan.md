@@ -165,479 +165,712 @@ Harden scripts:
 
 ## Implementation Phases
 
-Each phase below should be small enough to implement, test, and commit independently. Do not combine
-frontend, companion runtime, shell script, E2E, and documentation changes in one commit unless the
-change is purely mechanical.
+Execution rule: each phase must change one small boundary, run its listed verification immediately,
+and leave the repo in a state that can be committed. If a phase fails verification, fix that phase
+before starting the next one.
 
-### Phase 1: Baseline Companion-Down Reproduction
+### Phase 0: Confirm Work Base
 
-- Stop the companion with `./scripts/local-ai-companion.sh stop`.
-- Confirm no listener exists on `4317`.
-- Open AI Setup and capture the current `Needs attention` behavior.
-- Confirm `codex login status` separately.
+Change:
 
-Verify:
-
-- `./scripts/local-ai-companion.sh status` reports not running.
-- `lsof -nP -iTCP:4317 -sTCP:LISTEN || true` returns no listener.
-- `codex login status` succeeds or produces a documented local-machine-specific result.
-
-### Phase 2: Baseline Status Script Output
-
-- Run `./scripts/status.sh` with companion stopped.
-- Record whether the app is healthy and how companion health is displayed.
-- Do not change code in this phase.
+- Confirm the branch starts from latest `main`.
+- Record current dirty files before edits.
 
 Verify:
 
-- The baseline notes identify whether app health and companion health are distinguishable.
+- `git branch --show-current`
+- `git status --short`
 
-### Phase 3: Add Frontend Companion State Type
+### Phase 1: Reproduce Stopped Companion
 
-- Add `LocalCompanionStatus` in `frontend/src/App.tsx`.
-- Include only fields needed by the UI: `state`, `message`, `checkedUrl`, `command`, and
-  `checkedAt`.
-- Keep the type local to `App.tsx`.
+Change:
+
+- Stop the local companion.
+
+Verify:
+
+- `./scripts/local-ai-companion.sh stop`
+- `./scripts/local-ai-companion.sh status` exits non-zero and reports not running.
+
+### Phase 2: Verify Port Is Closed
+
+Change:
+
+- Confirm no companion listener is active.
+
+Verify:
+
+- `lsof -nP -iTCP:4317 -sTCP:LISTEN || true` prints no listener.
+
+### Phase 3: Separate Codex Account State
+
+Change:
+
+- Check Codex CLI authentication independently from LearnLoop.
+
+Verify:
+
+- `codex login status`
+- Result is recorded as logged in, logged out, or command missing.
+
+### Phase 4: Capture Current UI Failure
+
+Change:
+
+- Open AI Setup with companion stopped.
+- Click Codex OAuth connect once.
+
+Verify:
+
+- UI currently shows the generic failure state.
+- Browser console/network confirms the failed request is local companion access, not backend OAuth.
+
+### Phase 5: Capture Current Status Output
+
+Change:
+
+- Run app status with companion stopped.
+
+Verify:
+
+- `./scripts/status.sh || true`
+- Notes identify whether app readiness and companion readiness are distinguishable.
+
+### Phase 6: Add Frontend Companion State Shape
+
+Change:
+
+- Add the smallest `LocalCompanionStatus` type in `frontend/src/App.tsx`.
+- Include only `state`, `message`, `checkedUrl`, `command`, and `checkedAt`.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 4: Add Companion URL and Command Helpers
+### Phase 7: Add Companion URL Helper
 
-- Add helper functions for the companion base URL and recovery command.
-- Reuse `LOCAL_AI_COMPANION_URL`.
-- Keep command text environment-aware enough for repo UI: `./scripts/local-ai-companion.sh start`.
+Change:
+
+- Add a helper that returns the local companion health URL.
+- Reuse the existing companion base URL constant.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 5: Add Non-Mutating Companion Health Reader
+### Phase 8: Add Recovery Command Helper
+
+Change:
+
+- Add a helper that returns `./scripts/local-ai-companion.sh start` for repo builds.
+- Do not execute the command from the browser.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 9: Add Health Reader Offline Mapping
+
+Change:
 
 - Add `readLocalCompanionHealth()`.
-- Check `/health` or `/status`.
-- Do not call `/auth/token` in this reader.
-- Map `TypeError` to `offline`.
-- Map non-OK responses to `blocked` or `unhealthy`.
+- Map browser network errors to `offline`.
+- Do not call `/auth/token`.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 6: Add Companion Health State Hook
+### Phase 10: Add Health Reader HTTP Mapping
 
-- Add React state for companion health and loading.
-- Add `refreshLocalCompanionHealth()` with stale-response protection if needed.
+Change:
+
+- Map HTTP `403` to `blocked`.
+- Map other non-OK responses to `unhealthy`.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 11: Add Health State Without UI
+
+Change:
+
+- Add React state for companion health.
+- Add a refresh function with stale-response protection.
 - Do not render new UI yet.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 7: Trigger Health Check on OAuth Entry
+### Phase 12: Trigger Health Check On OAuth Page Entry
 
-- Run health check when `activePage === "aiSetup"` and auth method is `oauth`.
-- Rerun when the selected OAuth provider changes.
-- Do not add polling intervals.
+Change:
 
-Verify:
-
-- `./scripts/frontend-typecheck.sh`
-- Browser/network inspection or E2E route proves only one health check per entry/change.
-
-### Phase 8: Render Companion Health Text
-
-- Show a compact text row in the OAuth setup stack.
-- Display `Checking`, `Companion online`, `Companion offline`, or `Companion blocked`.
-- Keep existing buttons and OAuth behavior unchanged.
+- Run one health check when AI Setup enters OAuth mode.
+- Do not add polling.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
-- Manual UI check in AI Setup.
+- Browser route/request log shows one health request on entry.
 
-### Phase 9: Add Manual Refresh Action
+### Phase 13: Trigger Health Check On Provider Change
 
-- Add `Refresh companion status` button beside the health text.
-- Disable it while a health check is running.
-- Do not couple it to OAuth start.
+Change:
+
+- Re-run the health check when the selected OAuth provider changes.
+- Keep this separate from the page-entry trigger.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
-- E2E or manual click updates status text.
+- Browser route/request log shows one health request per provider change.
 
-### Phase 10: Replace Offline OAuth Status Label
+### Phase 14: Render Read-Only Health Row
 
-- Change OAuth label mapping so `unavailable` renders as `Companion offline`.
-- Keep `failed` as `Connection failed`.
-- Do not add new status enum values yet.
+Change:
+
+- Render a compact companion health row.
+- Show only checking, online, offline, blocked, or unhealthy.
+- Leave connect behavior unchanged.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+- Manual AI Setup check confirms the row appears.
+
+### Phase 15: Add Refresh Button
+
+Change:
+
+- Add `Refresh companion status`.
+- Disable it while a check is running.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+- Manual click updates the health row.
+
+### Phase 16: Replace Generic Offline Label
+
+Change:
+
+- Change OAuth status text so companion network failure shows `Companion offline`.
+- Keep generic `Connection failed` for non-companion failures.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 - Companion-down UI no longer shows only `Needs attention`.
 
-### Phase 11: Add Offline Recovery Callout
+### Phase 17: Add Offline Recovery Callout
 
-- When companion is offline, show:
-  - checked URL
-  - recovery command
-  - refresh action or reference to the refresh button
-- Do not include tokens, environment variables, or raw command output.
+Change:
+
+- Show checked URL and recovery command when state is `offline`.
+- Do not show tokens, environment variables, or raw command output.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
-- Manual UI check confirms text fits on desktop and mobile width.
+- Manual UI check confirms the callout text fits.
 
-### Phase 12: Guard OAuth Start While Offline
+### Phase 18: Add Blocked/Unhealthy Recovery Callout
 
-- If companion health is offline, `Connect Codex` should not call `/auth/token`.
-- Set the OAuth connection message to the same recovery guidance.
-- Leave healthy companion behavior unchanged.
+Change:
 
-Verify:
-
-- E2E route or request tracking confirms no `/auth/token` request when offline.
-- `./scripts/frontend-typecheck.sh`
-
-### Phase 13: Guard OAuth Start While Blocked
-
-- If companion health is blocked/unhealthy, avoid `/auth/token`.
-- Show a cause-specific message.
-- Keep a refresh action available.
+- Show cause-specific callout text for `blocked` and `unhealthy`.
+- Keep the same refresh action.
 
 Verify:
 
-- E2E route can return a 403/500 health response and UI reports blocked/unhealthy.
+- `./scripts/frontend-typecheck.sh`
+- Mocked `403` and `500` health responses render distinct messages.
+
+### Phase 19: Guard Connect While Offline
+
+Change:
+
+- Prevent `Connect Codex` from calling `/auth/token` while health is `offline`.
+- Set the visible message to the recovery guidance.
+
+Verify:
+
+- E2E route/request counter shows `/auth/token` was not requested.
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 14: Add Companion Provider Status Route
+### Phase 20: Guard Connect While Blocked Or Unhealthy
 
-- Add a non-mutating route in `scripts/local-ai-companion.mjs`, for example
-  `GET /providers/status?provider=codex`.
-- Return existing `stateFor(provider)` after running the safe status check where supported.
-- Do not start OAuth from this route.
+Change:
+
+- Prevent `/auth/token` when health is `blocked` or `unhealthy`.
+- Keep healthy behavior untouched.
+
+Verify:
+
+- Mocked `403` and `500` health responses do not call `/auth/token`.
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 21: Add Provider Status Response Type
+
+Change:
+
+- Add the smallest frontend response type for companion provider readiness.
+- Do not fetch it yet.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 22: Add Provider Status Reader
+
+Change:
+
+- Add a frontend helper for `/providers/status?provider=...`.
+- Map `connected`, `missing`, `failed`, and `idle`.
+- Do not save local AI setup.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 23: Trigger Provider Status When Health Is Online
+
+Change:
+
+- Call provider status only after companion health is `online`.
+- Avoid duplicate in-flight requests.
+
+Verify:
+
+- `./scripts/frontend-typecheck.sh`
+- E2E route/request counter shows expected provider-status calls.
+
+### Phase 24: Show Already-Connected Provider
+
+Change:
+
+- If provider readiness is `connected`, show `Connected`.
+- Use the provider credential label from the companion.
+
+Verify:
+
+- Mocked provider-status response shows connected UI.
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 25: Show Missing Provider
+
+Change:
+
+- If provider readiness is `missing`, show `Codex CLI missing` or provider-specific missing text.
+- Disable or guard Connect until refresh reports a non-missing state.
+
+Verify:
+
+- Mocked missing response renders missing state.
+- `./scripts/frontend-typecheck.sh`
+
+### Phase 26: Preserve Healthy OAuth Start
+
+Change:
+
+- Ensure healthy OAuth still calls `/auth/token` then `/oauth/start`.
+- Do not change the local-only save flow.
+
+Verify:
+
+- Existing healthy OAuth E2E path still reaches `Connected`.
+- OAuth label is not sent to backend request bodies.
+
+### Phase 27: Add Companion Provider Route Skeleton
+
+Change:
+
+- Add `GET /providers/status` in `scripts/local-ai-companion.mjs`.
+- Validate that `provider` is present and supported.
+- Return JSON only.
 
 Verify:
 
 - `node --check scripts/local-ai-companion.mjs`
-- Focused Node test for the new route returns JSON.
+- Focused Node test returns a JSON response for a supported provider.
 
-### Phase 15: Extract Safe Provider Status Check
+### Phase 28: Enforce Provider Route Origin Rules
 
-- Reuse `readExistingConnection(provider, config)` for Codex provider status.
-- Preserve timeout behavior.
-- Preserve missing-command handling.
-- Do not change `/oauth/start` behavior.
+Change:
 
-Verify:
-
-- Node test: fake status command returning logged-in output yields `connected`.
-- `./scripts/test.sh --test-name-pattern` if available, otherwise `./scripts/test.sh`.
-
-### Phase 16: Test Codex Missing Provider Status
-
-- Add a Node test with `LEARNLOOP_CODEX_STATUS_COMMAND` pointing to a missing command.
-- Assert response status is `missing`.
-- Assert message is bounded and does not include secrets.
+- Reuse existing allowed-origin checks for the new route.
+- Keep mutating token requirements unchanged.
 
 Verify:
 
-- `./scripts/test.sh`
+- Node test: unsafe origin gets `403`.
+- Node test: allowed local app origin succeeds.
 
-### Phase 17: Test Codex Already Connected Provider Status
+### Phase 29: Wire Codex Existing-Login Check
 
-- Add a Node test with a fake status command output matching `logged in`.
-- Assert response status is `connected`.
-- Assert `credentialLabel` is `Codex CLI OAuth`.
+Change:
 
-Verify:
-
-- `./scripts/test.sh`
-
-### Phase 18: Test Provider Status Origin Controls
-
-- Assert unsafe origins still fail.
-- Assert allowed local app origin succeeds.
-- Keep token requirements unchanged for mutating endpoints.
+- Reuse `readExistingConnection(provider, config)` for Codex.
+- Do not start OAuth from the status route.
 
 Verify:
 
-- `./scripts/test.sh`
+- Node test with fake logged-in command returns `connected`.
 
-### Phase 19: Frontend Provider Readiness Reader
+### Phase 30: Wire Codex Missing-Command Check
 
-- Add a frontend helper to call the provider status route after companion health is online.
-- Map `connected`, `missing`, `failed`, and `idle` to UI state.
-- Do not save local AI settings in this phase.
+Change:
 
-Verify:
-
-- `./scripts/frontend-typecheck.sh`
-
-### Phase 20: Trigger Provider Readiness on Online Companion
-
-- When companion health becomes online and OAuth provider is Codex/Gemini, read provider readiness.
-- Avoid repeated calls while a previous check is in flight.
+- Preserve missing-command handling for Codex status.
+- Bound the user-visible message.
 
 Verify:
 
-- `./scripts/frontend-typecheck.sh`
-- E2E route confirms expected provider-status request count.
+- Node test with missing command returns `missing`.
+- Response does not include secrets or full shell output.
 
-### Phase 21: Show Already Connected State
+### Phase 31: Preserve OAuth Start Route Behavior
 
-- If Codex readiness is `connected`, set OAuth label to `Codex CLI OAuth`.
-- Show `Connected` without requiring a new login prompt.
-- Keep Save local setup behavior unchanged.
+Change:
 
-Verify:
-
-- E2E route returns `connected`; UI shows `Connected`.
-- `./scripts/frontend-typecheck.sh`
-
-### Phase 22: Show Codex CLI Missing State
-
-- If Codex readiness is `missing`, show `Codex CLI missing`.
-- Disable or guard Connect until the user fixes PATH and refreshes.
-- Keep Gemini unaffected.
+- Confirm the new status route did not change `/oauth/start`.
 
 Verify:
 
-- E2E route returns `missing`; UI shows missing state.
-- `./scripts/frontend-typecheck.sh`
+- Existing OAuth start tests still pass through `./scripts/test.sh`.
 
-### Phase 23: Preserve Healthy OAuth Start Flow
+### Phase 32: Add Local PID Reader
 
-- Re-run the existing mocked healthy OAuth path.
-- Ensure `/auth/token` then `/oauth/start` still happens when companion is online.
-- Ensure local OAuth label remains browser-local only.
+Change:
 
-Verify:
-
-- `APP_URL=... ./scripts/e2e-installed.sh`
-
-### Phase 24: Add Local Script Safe PID Reader
-
-- Update `scripts/local-ai-companion.sh` with a small `pid_value()` helper.
-- Treat missing, empty, and non-running PID as stale.
-- Do not change start/status output yet.
+- Add `pid_value()` to `scripts/local-ai-companion.sh`.
+- Treat missing and empty PID files as no PID.
 
 Verify:
 
 - `sh -n scripts/local-ai-companion.sh`
 
-### Phase 25: Local Script Status Repairs Stale PID
+### Phase 33: Local Status Removes Stale PID
+
+Change:
 
 - Make `status` remove stale `.local-ai-companion.pid`.
-- Keep listener detection and healthcheck as source of truth.
-- Print recovery guidance when not running.
-
-Verify:
-
-- Create a dead PID file and run `./scripts/local-ai-companion.sh status`.
-- Confirm the stale PID file is removed.
-
-### Phase 26: Local Script Start Repairs Stale PID
-
-- Make `start` remove stale PID before launch.
-- Preserve listener adoption when another healthy companion is already running.
+- Keep actual healthcheck/listener as source of truth.
 
 Verify:
 
 - Create a dead PID file.
-- Run `./scripts/local-ai-companion.sh start`.
-- Run `./scripts/local-ai-companion.sh status`.
-- Stop companion after the check.
+- `./scripts/local-ai-companion.sh status || true`
+- PID file is removed.
 
-### Phase 27: Local Script Node Availability Check
+### Phase 34: Local Start Removes Stale PID
 
-- Add a Node availability check to `scripts/local-ai-companion.sh`, matching release behavior.
-- If Node is missing, print a clear message and return non-zero.
+Change:
+
+- Make `start` clear stale PID before launch.
+- Preserve adoption of an already healthy listener.
+
+Verify:
+
+- Create a dead PID file.
+- `./scripts/local-ai-companion.sh start`
+- `./scripts/local-ai-companion.sh status`
+- `./scripts/local-ai-companion.sh stop`
+
+### Phase 35: Local Stop Uses Safe PID
+
+Change:
+
+- Make `stop` use `pid_value()` rather than reading the file multiple times.
+
+Verify:
+
+- `./scripts/local-ai-companion.sh start`
+- `./scripts/local-ai-companion.sh stop`
+- `./scripts/local-ai-companion.sh status || true`
+
+### Phase 36: Local Start Checks Node
+
+Change:
+
+- Add a Node availability check to local start.
+- Print a clear non-zero failure if Node is unavailable.
 
 Verify:
 
 - `sh -n scripts/local-ai-companion.sh`
-- Test with `NODE_BIN=/path/that/does/not/exist ./scripts/local-ai-companion.sh start`.
+- `NODE_BIN=/path/that/does/not/exist ./scripts/local-ai-companion.sh start || true`
 
-### Phase 28: Release Script Safe PID Reader
+### Phase 37: Release PID Reader
 
-- Mirror the PID helper in `packaging/release-bundle/local-ai-companion.sh`.
+Change:
+
+- Mirror `pid_value()` in `packaging/release-bundle/local-ai-companion.sh`.
 - Keep release paths unchanged.
 
 Verify:
 
 - `sh -n packaging/release-bundle/local-ai-companion.sh`
 
-### Phase 29: Release Script Status Repairs Stale PID
+### Phase 38: Release Status Removes Stale PID
 
-- Mirror stale PID status behavior in the release script.
-- Print release command names without `./scripts/`.
+Change:
 
-Verify:
-
-- `sh -n packaging/release-bundle/local-ai-companion.sh`
-- Script-level test or manual release-staging check.
-
-### Phase 30: Release Script Start Repairs Stale PID
-
-- Mirror stale PID start behavior in the release script.
-- Preserve existing Node availability check.
+- Mirror local stale-PID status behavior in the release script.
+- Use release command text, not `./scripts/...`.
 
 Verify:
 
 - `sh -n packaging/release-bundle/local-ai-companion.sh`
+- Manual release-staging stale PID check.
 
-### Phase 31: Local Status Script Companion Output
+### Phase 39: Release Start Removes Stale PID
 
-- Update `scripts/status.sh` to print companion status as:
-  - `Local AI companion: running`
-  - `Local AI companion: degraded - not running`
-  - `Local AI companion: degraded - unhealthy`
-- Keep `--wait` success based on app health.
+Change:
+
+- Mirror local stale-PID start behavior.
+- Preserve release Node availability behavior.
+
+Verify:
+
+- `sh -n packaging/release-bundle/local-ai-companion.sh`
+
+### Phase 40: Release Stop Uses Safe PID
+
+Change:
+
+- Mirror safe PID handling in release `stop`.
+
+Verify:
+
+- `sh -n packaging/release-bundle/local-ai-companion.sh`
+
+### Phase 41: Local Status Reports Companion Running
+
+Change:
+
+- Update `scripts/status.sh` to print `Local AI companion: running` when healthy.
 
 Verify:
 
 - `sh -n scripts/status.sh`
-- Run with companion stopped and confirm degraded output.
+- Start companion, then run `./scripts/status.sh`.
 
-### Phase 32: Release Status Script Companion Output
+### Phase 42: Local Status Reports Companion Degraded
 
-- Mirror companion status output in `packaging/release-bundle/status.sh`.
-- Keep release command paths correct.
+Change:
+
+- Update `scripts/status.sh` to print `Local AI companion: degraded - not running` when stopped.
+- Keep app health as the `--wait` success condition.
+
+Verify:
+
+- Stop companion, then run `./scripts/status.sh || true`.
+
+### Phase 43: Release Status Reports Companion Running
+
+Change:
+
+- Mirror running companion status in `packaging/release-bundle/status.sh`.
 
 Verify:
 
 - `sh -n packaging/release-bundle/status.sh`
 
-### Phase 33: Local Start Warning Copy
+### Phase 44: Release Status Reports Companion Degraded
 
-- Update `scripts/start.sh` warning copy to match AI Setup recovery guidance.
-- Keep companion failure non-fatal.
+Change:
+
+- Mirror degraded companion status in release status script.
+
+Verify:
+
+- `sh -n packaging/release-bundle/status.sh`
+
+### Phase 45: Local Start Warning Copy
+
+Change:
+
+- Update `scripts/start.sh` companion failure warning to show the exact recovery command.
+- Keep the failure non-fatal.
 
 Verify:
 
 - `sh -n scripts/start.sh`
 
-### Phase 34: Local Install Warning Copy
+### Phase 46: Local Install Warning Copy
 
-- Update `scripts/install.sh` warning copy to match AI Setup recovery guidance.
-- Keep companion failure non-fatal.
+Change:
+
+- Update `scripts/install.sh` companion failure warning to show the exact recovery command.
+- Keep the failure non-fatal.
 
 Verify:
 
 - `sh -n scripts/install.sh`
 
-### Phase 35: Release Start Warning Copy
+### Phase 47: Release Start Warning Copy
 
-- Update `packaging/release-bundle/start.sh` warning copy.
-- Keep companion failure non-fatal.
+Change:
+
+- Update `packaging/release-bundle/start.sh` companion failure warning.
 
 Verify:
 
 - `sh -n packaging/release-bundle/start.sh`
 
-### Phase 36: Release Install Warning Copy
+### Phase 48: Release Install Warning Copy
 
-- Update `packaging/release-bundle/install.sh` warning copy.
-- Keep companion failure non-fatal.
+Change:
+
+- Update `packaging/release-bundle/install.sh` companion failure warning.
 
 Verify:
 
 - `sh -n packaging/release-bundle/install.sh`
 
-### Phase 37: Add Focused Companion-Down E2E
+### Phase 49: Add E2E Companion Offline Mock
 
-- Extend `scripts/e2e-installed.mjs` or add a focused script path that simulates companion offline.
-- Assert AI Setup shows companion offline guidance.
-- Assert `/auth/token` is not called while offline.
+Change:
+
+- Extend `scripts/e2e-installed.mjs` with a mode where companion health requests fail.
+- Keep this separate from healthy OAuth mock behavior.
 
 Verify:
 
-- Installed-app E2E passes in a local install test environment.
+- E2E route log shows health request failure is simulated locally.
 
-### Phase 38: Preserve Healthy Companion E2E
+### Phase 50: E2E Offline UI Assertion
 
-- Keep the existing mocked companion route for healthy OAuth.
-- Assert `Connected` still appears and OAuth label is saved locally.
-- Assert OAuth label is absent from observed server request bodies.
+Change:
+
+- Assert AI Setup shows companion offline guidance and recovery command.
 
 Verify:
 
 - `APP_URL=... ./scripts/e2e-installed.sh`
 
-### Phase 39: Add Documentation for Recovery
+### Phase 51: E2E Offline No-Token Assertion
 
-- Update `README.md`.
-- Include:
-  - companion is required for OAuth and local collection
-  - status command
-  - start/restart command
-  - degraded state meaning
+Change:
+
+- Track `/auth/token` calls while companion is offline.
+- Assert the count stays zero.
 
 Verify:
 
-- Read the README section and confirm it does not imply server-side OAuth token storage.
+- `APP_URL=... ./scripts/e2e-installed.sh`
 
-### Phase 40: Add Korean Documentation
+### Phase 52: E2E Healthy Provider Status Mock
 
-- Mirror the recovery guidance in `README.ko.md`.
-- Use the same operational meaning as English docs.
+Change:
+
+- Add healthy `/health` and `/providers/status` mock responses.
 
 Verify:
 
-- Korean docs match English behavior.
+- E2E route log shows provider-status call after online health.
 
-### Phase 41: Add Release Bundle Documentation
+### Phase 53: E2E Healthy OAuth Assertion
+
+Change:
+
+- Assert healthy OAuth still reaches `Connected`.
+
+Verify:
+
+- `APP_URL=... ./scripts/e2e-installed.sh`
+
+### Phase 54: E2E Local-Only Credential Assertion
+
+Change:
+
+- Assert OAuth label and API key are absent from observed backend request bodies.
+
+Verify:
+
+- E2E output reports no credential leakage.
+
+### Phase 55: English README Recovery Docs
+
+Change:
+
+- Update `README.md` with companion requirement, status command, start command, and degraded meaning.
+
+Verify:
+
+- README text does not imply server-side OAuth token storage.
+
+### Phase 56: Korean README Recovery Docs
+
+Change:
+
+- Mirror the same recovery guidance in `README.ko.md`.
+
+Verify:
+
+- Korean wording matches English behavior and uses local-only credential language.
+
+### Phase 57: Release Bundle README Recovery Docs
+
+Change:
 
 - Update `packaging/release-bundle/README.md`.
-- Use release-local commands such as `./local-ai-companion.sh start`.
-- Avoid repo-only `./scripts/...` paths.
+- Use `./local-ai-companion.sh start`, not repo-only script paths.
 
 Verify:
 
-- Release docs use correct paths.
+- Release README contains only release-bundle command paths.
 
-### Phase 42: Package Content Check
+### Phase 58: Release Package Content Check
 
-- Run release packaging or inspect staging logic if packaging is too expensive.
-- Confirm updated release scripts and README are included.
+Change:
+
+- Build or stage the release package.
 
 Verify:
 
 - `RUNNER_IMAGE_MODE=online OUTPUT_DIR=dist/e2e-release VERSION=0.1.0-e2e ./scripts/package-release.sh`
-- Inspect tar contents for updated scripts/docs.
+- Tar/package contents include updated companion scripts and README.
 
-### Phase 43: Full Frontend Verification
+### Phase 59: Full Frontend Gate
 
-- Run frontend typecheck after all frontend and E2E changes.
+Change:
+
+- No code change; run after all frontend/E2E edits.
 
 Verify:
 
 - `./scripts/frontend-typecheck.sh`
 
-### Phase 44: Full Node/Companion Verification
+### Phase 60: Full Node Companion Gate
 
-- Run the Node test suite after companion and script changes.
+Change:
+
+- No code change; run after companion runtime/tests are complete.
 
 Verify:
 
 - `./scripts/test.sh`
 
-### Phase 45: Backend Regression Verification
+### Phase 61: Backend Regression Gate
 
-- Run backend tests even though backend code should not change.
+Change:
+
+- No backend behavior should change; run regression tests anyway.
 
 Verify:
 
 - `./gradlew :backend:test`
 
-### Phase 46: Shell Syntax Verification
+### Phase 62: Shell Syntax Gate
 
-- Check every changed shell script.
+Change:
+
+- No code change; check every changed shell script.
 
 Verify:
 
@@ -650,43 +883,58 @@ Verify:
 - `sh -n packaging/release-bundle/start.sh`
 - `sh -n packaging/release-bundle/install.sh`
 
-### Phase 47: Installed-App E2E Verification
+### Phase 63: Clean Installed-App E2E Gate
+
+Change:
 
 - Start a clean installed-app environment.
 - Run the full installed-app E2E flow.
-- Include companion-down and healthy companion paths.
 
 Verify:
 
 - `APP_URL=... ./scripts/e2e-installed.sh`
-- E2E output reports no API key or OAuth label leakage to server requests.
+- E2E covers both companion-down and healthy OAuth paths.
 
-### Phase 48: Security Review Pass
+### Phase 64: Security Review Gate
 
-- Review the diff for:
-  - no browser-started local process
-  - no OAuth token sent to backend
-  - bounded companion messages
-  - origin and loopback restrictions preserved
-  - no raw command output in UI
+Change:
+
+- Review the final diff for local OAuth security regressions.
 
 Verify:
 
-- Security review notes list no remaining reportable findings, or fixes are committed before final.
+- Browser never starts a local process.
+- OAuth tokens and local API tokens are not sent to backend APIs.
+- Companion remains loopback-only and origin restricted.
+- UI does not render raw command output or token values.
 
-### Phase 49: Launchd Helper Follow-Up Plan Stub
+### Phase 65: Plan Checklist Update
 
-- Add a short follow-up section or separate TODO note for launchd/native helper.
-- It must not change installer behavior in this fix.
-- It must define that helper work needs its own security review.
+Change:
+
+- Check off acceptance criteria and quality gates that actually passed.
+- Leave failed or skipped gates unchecked with a short note.
 
 Verify:
 
-- Plan/docs mention helper as follow-up only.
+- Acceptance criteria match real verification results.
 
-### Phase 50: Launchd Helper Discovery Checklist
+### Phase 66: Launchd Helper Follow-Up Stub
 
-- For the follow-up, list the minimum decisions needed:
+Change:
+
+- Add or keep a follow-up note for launchd/native helper.
+- Do not change installer behavior in this fix.
+
+Verify:
+
+- Docs clearly mark helper work as future UX improvement only.
+
+### Phase 67: Launchd Helper Discovery Checklist
+
+Change:
+
+- Keep a checklist of decisions required before helper implementation:
   - launchd vs native signed helper
   - install/uninstall ownership
   - log location and retention
@@ -695,44 +943,44 @@ Verify:
 
 Verify:
 
-- Checklist exists in this plan or a linked follow-up doc.
+- The checklist exists in this plan or a linked follow-up doc.
 
 ## Acceptance Criteria
 
 ### Functional Requirements
 
-- [ ] AI Setup shows companion offline/degraded state before or immediately after selecting OAuth.
-- [ ] `Connect Codex` no longer leaves the user with only `Needs attention`.
-- [ ] Offline companion state shows the checked URL and the command to run.
-- [ ] Companion online plus already-authenticated Codex CLI resolves to connected.
-- [ ] Missing `codex` binary is reported as Codex CLI missing.
-- [ ] The app remains usable when companion startup fails.
-- [ ] Status scripts report companion degradation separately from app health.
-- [ ] Stale `.local-ai-companion.pid` is ignored, removed, or repaired by start/status.
+- [x] AI Setup shows companion offline/degraded state before or immediately after selecting OAuth.
+- [x] `Connect Codex` no longer leaves the user with only `Needs attention`.
+- [x] Offline companion state shows the checked URL and the command to run.
+- [x] Companion online plus already-authenticated Codex CLI resolves to connected.
+- [x] Missing `codex` binary is reported as Codex CLI missing.
+- [x] The app remains usable when companion startup fails.
+- [x] Status scripts report companion degradation separately from app health.
+- [x] Stale `.local-ai-companion.pid` is ignored, removed, or repaired by start/status.
 
 ### Non-Functional Requirements
 
-- [ ] Browser never starts arbitrary local processes.
-- [ ] Companion endpoints remain loopback-only and origin restricted.
-- [ ] OAuth tokens and local API tokens are not sent to the LearnLoop backend.
-- [ ] Failure messages do not include secrets, raw token values, or full command output.
-- [ ] Health/preflight checks do not poll aggressively.
-- [ ] Local and release scripts remain behaviorally consistent.
+- [x] Browser never starts arbitrary local processes.
+- [x] Companion endpoints remain loopback-only and origin restricted.
+- [x] OAuth tokens and local API tokens are not sent to the LearnLoop backend.
+- [x] Failure messages do not include secrets, raw token values, or full command output.
+- [x] Health/preflight checks do not poll aggressively.
+- [x] Local and release scripts remain behaviorally consistent.
 
 ### Quality Gates
 
-- [ ] `./scripts/frontend-typecheck.sh`
-- [ ] `./scripts/test.sh`
-- [ ] `./gradlew :backend:test`
-- [ ] `sh -n scripts/local-ai-companion.sh`
-- [ ] `sh -n scripts/status.sh`
-- [ ] `sh -n scripts/start.sh`
-- [ ] `sh -n scripts/install.sh`
-- [ ] `sh -n packaging/release-bundle/local-ai-companion.sh`
-- [ ] `sh -n packaging/release-bundle/status.sh`
-- [ ] `sh -n packaging/release-bundle/start.sh`
-- [ ] `sh -n packaging/release-bundle/install.sh`
-- [ ] Installed-app E2E covers both companion-down and healthy OAuth paths.
+- [x] `./scripts/frontend-typecheck.sh`
+- [x] `./scripts/test.sh`
+- [x] `./gradlew :backend:test`
+- [x] `sh -n scripts/local-ai-companion.sh`
+- [x] `sh -n scripts/status.sh`
+- [x] `sh -n scripts/start.sh`
+- [x] `sh -n scripts/install.sh`
+- [x] `sh -n packaging/release-bundle/local-ai-companion.sh`
+- [x] `sh -n packaging/release-bundle/status.sh`
+- [x] `sh -n packaging/release-bundle/start.sh`
+- [x] `sh -n packaging/release-bundle/install.sh`
+- [x] Installed-app E2E covers both companion-down and healthy OAuth paths.
 
 ## Success Metrics
 
