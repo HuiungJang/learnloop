@@ -13,6 +13,7 @@ data class RunnerProperties(
     val dockerCommand: String = "docker",
     val commandTimeout: Duration = Duration.ofSeconds(2),
     val installCommandTimeout: Duration = Duration.ofMinutes(10),
+    val buildContextRoot: String = "/app/runner",
     val requireLimits: Boolean = true,
     val workspaceContainerRoot: String = "",
     val workspaceHostRoot: String = "",

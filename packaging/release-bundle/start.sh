@@ -20,6 +20,9 @@ fi
 if ! grep -q "^APP_RUNNER_WORKSPACE_HOST_ROOT=" .env; then
   printf '%s=%s\n' APP_RUNNER_WORKSPACE_HOST_ROOT "$ROOT_DIR/.local-runner-workspaces" >> .env
 fi
+if ! grep -q "^APP_RUNNER_BUILD_CONTEXT_ROOT=" .env; then
+  printf '%s=%s\n' APP_RUNNER_BUILD_CONTEXT_ROOT /app/runner >> .env
+fi
 
 AI_CODE_RELEASE_VERSION=$(tr -d '\r\n' < .release-version)
 export AI_CODE_RELEASE_VERSION
@@ -31,6 +34,15 @@ if [ -f ".release-runner.env" ]; then
 fi
 if ! grep -q "^APP_RUNNER_IMAGE_REGISTRY=" .env; then
   printf '%s=%s\n' APP_RUNNER_IMAGE_REGISTRY "${RELEASE_RUNNER_IMAGE_REGISTRY:-}" >> .env
+fi
+if ! grep -q "^APP_RUNNER_IMAGE_SOURCE=" .env; then
+  if [ "${RELEASE_RUNNER_IMAGE_SOURCE:-}" != "" ]; then
+    printf '%s=%s\n' APP_RUNNER_IMAGE_SOURCE "$RELEASE_RUNNER_IMAGE_SOURCE" >> .env
+  elif [ "${RELEASE_RUNNER_IMAGE_MODE:-online}" = "offline" ]; then
+    printf '%s=%s\n' APP_RUNNER_IMAGE_SOURCE bundled >> .env
+  else
+    printf '%s=%s\n' APP_RUNNER_IMAGE_SOURCE registry >> .env
+  fi
 fi
 if ! grep -q "^APP_RUNNER_IMAGE_VERSION=" .env; then
   printf '%s=%s\n' APP_RUNNER_IMAGE_VERSION "${RELEASE_RUNNER_IMAGE_VERSION:-$AI_CODE_RELEASE_VERSION}" >> .env

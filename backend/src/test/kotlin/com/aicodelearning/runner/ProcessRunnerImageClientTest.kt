@@ -50,6 +50,41 @@ class ProcessRunnerImageClientTest {
         assertEquals("timeout", result.errorCode)
     }
 
+    @Test
+    fun `build uses docker build with image tag and context args`() {
+        val argsFile = tempDir.resolve("args.txt")
+        val context = tempDir.resolve("runner").also { Files.createDirectories(it) }
+        Files.writeString(context.resolve("Dockerfile"), "FROM scratch\n")
+        val docker = executable(
+            """
+            #!/usr/bin/env sh
+            printf '%s\n' "${'$'}*" > "${argsFile.toAbsolutePath()}"
+            """.trimIndent(),
+        )
+        val client = ProcessRunnerImageClient(RunnerProperties(dockerCommand = docker.toString(), commandTimeout = Duration.ofSeconds(5)))
+
+        val result = client.build("learnloop-runner-rust:latest", context.toString())
+
+        assertTrue(result.success)
+        assertEquals("build -t learnloop-runner-rust:latest ${context}", Files.readString(argsFile).trim())
+    }
+
+    @Test
+    fun `build fails before docker when context is missing`() {
+        val docker = executable(
+            """
+            #!/usr/bin/env sh
+            exit 0
+            """.trimIndent(),
+        )
+        val client = ProcessRunnerImageClient(RunnerProperties(dockerCommand = docker.toString(), commandTimeout = Duration.ofSeconds(5)))
+
+        val result = client.build("learnloop-runner-rust:latest", tempDir.resolve("missing").toString())
+
+        assertFalse(result.success)
+        assertEquals(RunnerImageErrorCodes.LOCAL_BUILD_CONTEXT_MISSING, result.errorCode)
+    }
+
     private fun executable(content: String): Path {
         val path = tempDir.resolve("docker")
         Files.writeString(path, content)

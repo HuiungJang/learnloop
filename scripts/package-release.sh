@@ -114,6 +114,19 @@ RUNNER_OFFLINE_LANGUAGES=${RUNNER_OFFLINE_LANGUAGES:-typescript java kotlin}
 RUNNER_IMAGE_VERSION=${APP_RUNNER_IMAGE_VERSION:-$VERSION}
 RUNNER_IMAGE_REGISTRY=$(default_runner_registry)
 
+case "$RUNNER_IMAGE_MODE" in
+  online | offline) ;;
+  *)
+    echo "RUNNER_IMAGE_MODE must be online or offline" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$RUNNER_IMAGE_MODE" = "online" ] && [ "$RUNNER_IMAGE_REGISTRY" = "" ]; then
+  echo "RUNNER_IMAGE_MODE=online requires APP_RUNNER_IMAGE_REGISTRY or a GitHub remote that resolves to GHCR." >&2
+  exit 1
+fi
+
 PACKAGE_NAME="learnloop-$VERSION-$OS_NAME-$ARCH_NAME"
 BACKEND_IMAGE="learnloop-backend:$VERSION"
 WEB_IMAGE="learnloop-web:$VERSION"
@@ -143,14 +156,6 @@ echo "Building release images for $PACKAGE_NAME"
 docker compose --env-file "$BUILD_ENV" -f docker-compose.install.yml build backend web
 docker tag learnloop-backend:latest "$BACKEND_IMAGE"
 docker tag learnloop-web:latest "$WEB_IMAGE"
-
-case "$RUNNER_IMAGE_MODE" in
-  online | offline) ;;
-  *)
-    echo "RUNNER_IMAGE_MODE must be online or offline" >&2
-    exit 1
-    ;;
-esac
 
 if [ "$RUNNER_IMAGE_MODE" = "offline" ]; then
   RUNNER_LANGUAGES="$RUNNER_OFFLINE_LANGUAGES" \
@@ -192,6 +197,7 @@ cp NOTICE "$STAGING_DIR/NOTICE"
 printf '%s\n' "$VERSION" > "$STAGING_DIR/.release-version"
 cat > "$STAGING_DIR/.release-runner.env" <<EOF
 RELEASE_RUNNER_IMAGE_MODE=$RUNNER_IMAGE_MODE
+RELEASE_RUNNER_IMAGE_SOURCE=$(if [ "$RUNNER_IMAGE_MODE" = "offline" ]; then printf bundled; else printf registry; fi)
 RELEASE_RUNNER_IMAGE_REGISTRY=$RUNNER_IMAGE_REGISTRY
 RELEASE_RUNNER_IMAGE_VERSION=$RUNNER_IMAGE_VERSION
 EOF

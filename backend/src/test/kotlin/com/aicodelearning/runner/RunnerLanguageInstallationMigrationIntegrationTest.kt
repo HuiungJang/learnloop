@@ -33,21 +33,27 @@ class RunnerLanguageInstallationMigrationIntegrationTest {
         val rows =
             jdbcTemplate.query(
                 """
-                SELECT language, desired_enabled, status
+                SELECT language, desired_enabled, status, install_stage, last_error_code
                 FROM runner_language_installations
                 ORDER BY language
                 """.trimIndent(),
             ) { rs, _ ->
-                Triple(rs.getString("language"), rs.getBoolean("desired_enabled"), rs.getString("status"))
+                listOf(
+                    rs.getString("language"),
+                    rs.getBoolean("desired_enabled"),
+                    rs.getString("status"),
+                    rs.getString("install_stage"),
+                    rs.getString("last_error_code"),
+                )
             }
 
         assertEquals(
             listOf(
-                Triple("java", true, "missing"),
-                Triple("kotlin", true, "missing"),
-                Triple("rust", false, "available"),
-                Triple("swift", false, "available"),
-                Triple("typescript", true, "missing"),
+                listOf("java", true, "missing", null, null),
+                listOf("kotlin", true, "missing", null, null),
+                listOf("rust", false, "available", null, null),
+                listOf("swift", false, "available", null, null),
+                listOf("typescript", true, "missing", null, null),
             ),
             rows,
         )

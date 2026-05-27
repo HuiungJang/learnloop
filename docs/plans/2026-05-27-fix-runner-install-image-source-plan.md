@@ -68,393 +68,393 @@ Each phase below is intentionally small enough to implement, run focused verific
 
 ### Phase 0: Lock in the regression with a failing test
 
-- [ ] Add or update a `RunnerLanguageServiceTest` that models a local bare image ref: `learnloop-runner-rust:latest`.
-- [ ] Configure fake inspect to return success.
-- [ ] Assert install marks Rust installed.
-- [ ] Assert fake image client did not receive `pull`.
-- [ ] Keep the test failing before implementation.
+- [x] Add or update a `RunnerLanguageServiceTest` that models a local bare image ref: `learnloop-runner-rust:latest`.
+- [x] Configure fake inspect to return success.
+- [x] Assert install marks Rust installed.
+- [x] Assert fake image client did not receive `pull`.
+- [x] Keep the test failing before implementation.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` fails only on the new regression assertion before the fix.
+- [x] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` fails only on the new regression assertion before the fix.
 
 ### Phase 1: Add image source constants only
 
-- [ ] Add `RunnerImageSources` constants or a small enum with `local`, `registry`, `bundled`.
-- [ ] Add `imageSource` to `RunnerLanguageDescriptor`.
-- [ ] Default every descriptor to `local` temporarily.
-- [ ] Do not change install behavior yet.
+- [x] Add `RunnerImageSources` constants or a small enum with `local`, `registry`, `bundled`.
+- [x] Add `imageSource` to `RunnerLanguageDescriptor`.
+- [x] Default every descriptor to `local` temporarily.
+- [x] Do not change install behavior yet.
 
 Verification:
 
-- [ ] `RunnerImageCatalogTest` asserts every default descriptor has `imageSource = local`.
-- [ ] `./gradlew :backend:test --tests "*RunnerImageCatalogTest"` passes.
+- [x] `RunnerImageCatalogTest` asserts every default descriptor has `imageSource = local`.
+- [x] `./gradlew :backend:test --tests "*RunnerImageCatalogTest"` passes.
 
 ### Phase 2: Parse image source from environment
 
-- [ ] Add catalog parsing for `APP_RUNNER_IMAGE_SOURCE`.
-- [ ] Accept only `local`, `registry`, `bundled`.
-- [ ] Derive `registry` when source is blank and `APP_RUNNER_IMAGE_REGISTRY` is nonblank.
-- [ ] Derive `local` when source and registry are both blank.
-- [ ] Keep invalid values rejected through `BadRequestException` or startup-safe fallback with a test-backed decision.
+- [x] Add catalog parsing for `APP_RUNNER_IMAGE_SOURCE`.
+- [x] Accept only `local`, `registry`, `bundled`.
+- [x] Derive `registry` when source is blank and `APP_RUNNER_IMAGE_REGISTRY` is nonblank.
+- [x] Derive `local` when source and registry are both blank.
+- [x] Keep invalid values rejected through `BadRequestException` or startup-safe fallback with a test-backed decision.
 
 Verification:
 
-- [ ] Catalog test: blank source + blank registry -> `local`.
-- [ ] Catalog test: blank source + GHCR registry -> `registry`.
-- [ ] Catalog test: explicit `bundled` -> `bundled`.
-- [ ] Catalog test: invalid source is rejected or normalized exactly as implemented.
+- [x] Catalog test: blank source + blank registry -> `local`.
+- [x] Catalog test: blank source + GHCR registry -> `registry`.
+- [x] Catalog test: explicit `bundled` -> `bundled`.
+- [x] Catalog test: invalid source is rejected or normalized exactly as implemented.
 
 ### Phase 3: Expose image source in API response
 
-- [ ] Add `imageSource` to `RunnerLanguageResponse`.
-- [ ] Populate it in `toResponse`.
-- [ ] Add `imageSource` to frontend `RunnerLanguageResponse`.
-- [ ] Do not render it in UI yet.
+- [x] Add `imageSource` to `RunnerLanguageResponse`.
+- [x] Populate it in `toResponse`.
+- [x] Add `imageSource` to frontend `RunnerLanguageResponse`.
+- [x] Do not render it in UI yet.
 
 Verification:
 
-- [ ] Backend service test asserts Rust response includes `local`.
-- [ ] `npm --prefix frontend run typecheck` passes.
+- [x] Backend service test asserts Rust response includes `local`.
+- [x] `npm --prefix frontend run typecheck` passes.
 
 ### Phase 4: Add install progress fields to schema
 
-- [ ] Add migration `V22__runner_install_progress.sql`.
-- [ ] Add nullable `install_stage`.
-- [ ] Add nullable `last_error_code`.
-- [ ] Do not alter existing status semantics in this phase.
+- [x] Add migration `V22__runner_install_progress.sql`.
+- [x] Add nullable `install_stage`.
+- [x] Add nullable `last_error_code`.
+- [x] Do not alter existing status semantics in this phase.
 
 Verification:
 
-- [ ] Migration integration test verifies existing rows can migrate.
-- [ ] `./gradlew :backend:test --tests "*RunnerLanguageInstallationMigrationIntegrationTest"` passes.
+- [x] Migration integration test verifies existing rows can migrate.
+- [x] `./gradlew :backend:test --tests "*RunnerLanguageInstallationMigrationIntegrationTest"` passes.
 
 ### Phase 5: Wire progress fields through backend DTOs
 
-- [ ] Add `installStage` and `lastErrorCode` to `RunnerLanguageInstallationEntity`.
-- [ ] Add the same fields to `RunnerLanguageResponse`.
-- [ ] Populate response fields from entity.
-- [ ] Keep frontend type update in the same phase.
+- [x] Add `installStage` and `lastErrorCode` to `RunnerLanguageInstallationEntity`.
+- [x] Add the same fields to `RunnerLanguageResponse`.
+- [x] Populate response fields from entity.
+- [x] Keep frontend type update in the same phase.
 
 Verification:
 
-- [ ] Service test asserts fresh catalog rows return null stage/error code.
-- [ ] `npm --prefix frontend run typecheck` passes.
+- [x] Service test asserts fresh catalog rows return null stage/error code.
+- [x] `npm --prefix frontend run typecheck` passes.
 
 ### Phase 6: Add Docker build primitive without using it
 
-- [ ] Add `build(imageRef, contextPath)` to `RunnerImageClient`.
-- [ ] Update fake image clients in tests with a recorded `built` list.
-- [ ] Implement `ProcessRunnerImageClient.build()` with `ProcessBuilder(listOf(docker, "build", "-t", imageRef, contextPath))`.
-- [ ] Reuse existing timeout, sanitization, and output truncation.
+- [x] Add `build(imageRef, contextPath)` to `RunnerImageClient`.
+- [x] Update fake image clients in tests with a recorded `built` list.
+- [x] Implement `ProcessRunnerImageClient.build()` with `ProcessBuilder(listOf(docker, "build", "-t", imageRef, contextPath))`.
+- [x] Reuse existing timeout, sanitization, and output truncation.
 
 Verification:
 
-- [ ] `ProcessRunnerImageClientTest` asserts build receives separate args.
-- [ ] Existing runner image client tests pass.
+- [x] `ProcessRunnerImageClientTest` asserts build receives separate args.
+- [x] Existing runner image client tests pass.
 
 ### Phase 7: Classify local build context failures
 
-- [ ] Before running `docker build`, detect missing context path.
-- [ ] Return `errorCode = local_build_context_missing`.
-- [ ] Return a short detail that does not mention stack traces or raw shell output.
-- [ ] Add a test using a missing temp path.
+- [x] Before running `docker build`, detect missing context path.
+- [x] Return `errorCode = local_build_context_missing`.
+- [x] Return a short detail that does not mention stack traces or raw shell output.
+- [x] Add a test using a missing temp path.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*ProcessRunnerImageClientTest"` passes.
+- [x] `./gradlew :backend:test --tests "*ProcessRunnerImageClientTest"` passes.
 
 ### Phase 8: Add build context root property
 
-- [ ] Add `buildContextRoot` to `RunnerProperties`.
-- [ ] Default it to `/app/runner`.
-- [ ] Add a helper that resolves a language context path from root + language.
-- [ ] Keep the helper unit-testable without Docker.
+- [x] Add `buildContextRoot` to `RunnerProperties`.
+- [x] Default it to `/app/runner`.
+- [x] Add a helper that resolves a language context path from root + language.
+- [x] Keep the helper unit-testable without Docker.
 
 Verification:
 
-- [ ] Unit test verifies Rust context resolves to `/app/runner/rust`.
-- [ ] `./gradlew :backend:test --tests "*Runner*"` passes.
+- [x] Unit test verifies Rust context resolves to `/app/runner/rust`.
+- [x] `./gradlew :backend:test --tests "*Runner*"` passes.
 
 ### Phase 9: Copy runner build contexts into backend image
 
-- [ ] Update `backend/Dockerfile` to copy `runner/` into the runtime image.
-- [ ] Ensure only Dockerfiles and runner scripts are copied, not host build artifacts.
-- [ ] Keep backend user unchanged.
+- [x] Update `backend/Dockerfile` to copy `runner/` into the runtime image.
+- [x] Ensure only Dockerfiles and runner scripts are copied, not host build artifacts.
+- [x] Keep backend user unchanged.
 
 Verification:
 
-- [ ] `docker compose --env-file .env -f docker-compose.install.yml build backend` passes.
-- [ ] `docker compose --env-file .env -f docker-compose.install.yml -f docker-compose.runner.yml up -d backend` passes.
-- [ ] `docker compose --env-file .env -f docker-compose.install.yml exec -T backend test -f /app/runner/rust/Dockerfile` passes.
+- [x] `docker compose --env-file .env -f docker-compose.install.yml build backend` passes.
+- [x] `docker compose --env-file .env -f docker-compose.install.yml -f docker-compose.runner.yml up -d backend` passes.
+- [x] `docker compose --env-file .env -f docker-compose.install.yml exec -T backend test -f /app/runner/rust/Dockerfile` passes.
 
 ### Phase 10: Change install to inspect first
 
-- [ ] In `RunnerLanguageService.install`, call `inspect` before any acquire operation.
-- [ ] If inspect succeeds, mark installed immediately.
-- [ ] Clear `lastError`, `lastErrorCode`, and `installStage` on success.
-- [ ] Leave missing-image behavior otherwise unchanged for now.
+- [x] In `RunnerLanguageService.install`, call `inspect` before any acquire operation.
+- [x] If inspect succeeds, mark installed immediately.
+- [x] Clear `lastError`, `lastErrorCode`, and `installStage` on success.
+- [x] Leave missing-image behavior otherwise unchanged for now.
 
 Verification:
 
-- [ ] Phase 0 regression test now passes.
-- [ ] Test asserts local existing image does not call pull or build.
+- [x] Phase 0 regression test now passes.
+- [x] Test asserts local existing image does not call pull or build.
 
 ### Phase 11: Implement local-source missing image build
 
-- [ ] When inspect fails and descriptor source is `local`, set `installStage = building_local_image`.
-- [ ] Call `imageClient.build(imageRef, contextPath)`.
-- [ ] Verify with a second inspect after successful build.
-- [ ] Mark installed only after verify inspect succeeds.
+- [x] When inspect fails and descriptor source is `local`, set `installStage = building_local_image`.
+- [x] Call `imageClient.build(imageRef, contextPath)`.
+- [x] Verify with a second inspect after successful build.
+- [x] Mark installed only after verify inspect succeeds.
 
 Verification:
 
-- [ ] Unit test: local missing image calls build once.
-- [ ] Unit test: local build success but verify inspect failure marks failed.
-- [ ] Unit test: bare local image still never calls pull.
+- [x] Unit test: local missing image calls build once.
+- [x] Unit test: local build success but verify inspect failure marks failed.
+- [x] Unit test: bare local image still never calls pull.
 
 ### Phase 12: Implement registry-source missing image pull
 
-- [ ] When inspect fails and descriptor source is `registry`, set `installStage = pulling_image`.
-- [ ] Call `imageClient.pull(imageRef)`.
-- [ ] Verify with inspect after successful pull.
-- [ ] Keep registry failure isolated from local source behavior.
+- [x] When inspect fails and descriptor source is `registry`, set `installStage = pulling_image`.
+- [x] Call `imageClient.pull(imageRef)`.
+- [x] Verify with inspect after successful pull.
+- [x] Keep registry failure isolated from local source behavior.
 
 Verification:
 
-- [ ] Unit test: registry missing image calls pull once.
-- [ ] Unit test: registry source does not call build.
-- [ ] Unit test: pull success but verify failure marks failed.
+- [x] Unit test: registry missing image calls pull once.
+- [x] Unit test: registry source does not call build.
+- [x] Unit test: pull success but verify failure marks failed.
 
 ### Phase 13: Implement bundled-source missing image handling
 
-- [ ] When inspect fails and descriptor source is `bundled`, do not pull or build.
-- [ ] Set status `failed`.
-- [ ] Set `lastErrorCode = bundled_image_missing`.
-- [ ] Set `lastError` to a remediation message telling the user to reinstall/import the bundle image.
+- [x] When inspect fails and descriptor source is `bundled`, do not pull or build.
+- [x] Set status `failed`.
+- [x] Set `lastErrorCode = bundled_image_missing`.
+- [x] Set `lastError` to a remediation message telling the user to reinstall/import the bundle image.
 
 Verification:
 
-- [ ] Unit test: bundled missing image calls neither pull nor build.
-- [ ] Unit test: response contains `bundled_image_missing`.
+- [x] Unit test: bundled missing image calls neither pull nor build.
+- [x] Unit test: response contains `bundled_image_missing`.
 
 ### Phase 14: Map Docker errors to product messages
 
-- [ ] Add a small mapper from image operation `errorCode` to user-facing message.
-- [ ] Cover `registry_auth_failed`, `docker_daemon_unreachable`, `disk_full`, `timeout`, `local_build_context_missing`.
-- [ ] Store raw sanitized detail only if still needed internally; response `lastError` should be product-facing.
+- [x] Add a small mapper from image operation `errorCode` to user-facing message.
+- [x] Cover `registry_auth_failed`, `docker_daemon_unreachable`, `disk_full`, `timeout`, `local_build_context_missing`.
+- [x] Store raw sanitized detail only if still needed internally; response `lastError` should be product-facing.
 
 Verification:
 
-- [ ] Unit test: Docker Hub `pull access denied` maps to a registry access message.
-- [ ] Unit test: response does not include `pull access denied for learnloop-runner-rust`.
+- [x] Unit test: Docker Hub `pull access denied` maps to a registry access message.
+- [x] Unit test: response does not include `pull access denied for learnloop-runner-rust`.
 
 ### Phase 15: Add synchronous install stage tests
 
-- [ ] Add tests for stage sequence in the current synchronous implementation.
-- [ ] Assert `checking_image` is set before inspect if observable through fake store.
-- [ ] Assert `building_local_image`, `pulling_image`, and `verifying_image` are persisted in the right branches.
+- [x] Add tests for stage sequence in the current synchronous implementation.
+- [x] Assert `checking_image` is set before inspect if observable through fake store.
+- [x] Assert `building_local_image`, `pulling_image`, and `verifying_image` are persisted in the right branches.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` passes.
+- [x] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` passes.
 
 ### Phase 16: Extract install worker without async
 
-- [ ] Move the acquire logic into a dedicated internal method or collaborator.
-- [ ] Keep public install behavior synchronous for this phase.
-- [ ] Keep all tests from phases 10-15 passing.
-- [ ] This phase should be a pure refactor.
+- [x] Move the acquire logic into a dedicated internal method or collaborator.
+- [x] Keep public install behavior synchronous for this phase.
+- [x] Keep all tests from phases 10-15 passing.
+- [x] This phase should be a pure refactor.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` passes without assertion changes.
+- [x] `./gradlew :backend:test --tests "*RunnerLanguageServiceTest"` passes without assertion changes.
 
 ### Phase 17: Make install endpoint return after scheduling
 
-- [ ] Introduce an injectable executor for runner install work.
-- [ ] On request, mark row `installing` + `checking_image`.
-- [ ] Schedule the extracted worker.
-- [ ] Return current response immediately.
-- [ ] In tests, use a same-thread executor to keep deterministic assertions.
+- [x] Introduce an injectable executor for runner install work.
+- [x] On request, mark row `installing` + `checking_image`.
+- [x] Schedule the extracted worker.
+- [x] Return current response immediately.
+- [x] In tests, use a same-thread executor to keep deterministic assertions.
 
 Verification:
 
-- [ ] Controller/service test: install returns `installing` before worker completion when using a paused fake executor.
-- [ ] Existing service tests pass with same-thread executor.
+- [x] Controller/service test: install returns `installing` before worker completion when using a paused fake executor.
+- [x] Existing service tests pass with same-thread executor.
 
 ### Phase 18: Prevent duplicate in-flight installs
 
-- [ ] Track one in-flight operation per language.
-- [ ] If the same language is already installing, return current row.
-- [ ] Remove in-flight marker in a finally block.
-- [ ] Keep per-language behavior independent.
+- [x] Track one in-flight operation per language.
+- [x] If the same language is already installing, return current row.
+- [x] Remove in-flight marker in a finally block.
+- [x] Keep per-language behavior independent.
 
 Verification:
 
-- [ ] Unit test: second Rust install does not schedule a second worker.
-- [ ] Unit test: Rust install does not block Swift install.
+- [x] Unit test: second Rust install does not schedule a second worker.
+- [x] Unit test: Rust install does not block Swift install.
 
 ### Phase 19: Recover stale installing state on refresh
 
-- [ ] On refresh, inspect images as today.
-- [ ] If a row is `installing` but no in-flight work exists, map installed image to `installed`.
-- [ ] If no image exists, map selected default to `missing` and optional to `available` or `failed` with a clear stale message.
-- [ ] Clear stale `installStage`.
+- [x] On refresh, inspect images as today.
+- [x] If a row is `installing` but no in-flight work exists, map installed image to `installed`.
+- [x] If no image exists, map selected default to `missing` and optional to `available` or `failed` with a clear stale message.
+- [x] Clear stale `installStage`.
 
 Verification:
 
-- [ ] Unit test: stale installing + existing image -> installed.
-- [ ] Unit test: stale installing + missing optional image -> available or failed exactly as implemented.
+- [x] Unit test: stale installing + existing image -> installed.
+- [x] Unit test: stale installing + missing optional image -> available or failed exactly as implemented.
 
 ### Phase 20: Render source and stage in Runners UI
 
-- [ ] Add frontend label mapping for `installStage`.
-- [ ] Show stage text under the row while status is `installing`.
-- [ ] Optionally show image source as subdued metadata if useful for troubleshooting.
-- [ ] Keep row layout consistent with current Runners page.
+- [x] Add frontend label mapping for `installStage`.
+- [x] Show stage text under the row while status is `installing`.
+- [x] Optionally show image source as subdued metadata if useful for troubleshooting.
+- [x] Keep row layout consistent with current Runners page.
 
 Verification:
 
-- [ ] `npm --prefix frontend run typecheck` passes.
-- [ ] Browser check shows stage text in an installing state.
+- [x] `npm --prefix frontend run typecheck` passes.
+- [x] Browser check shows stage text in an installing state.
 
 ### Phase 21: Poll while installs are active
 
-- [ ] Add a `useEffect` that polls runner languages while any row is `installing`.
-- [ ] Stop polling when no rows are installing or the user leaves Runners page.
-- [ ] Use a modest interval such as 2 seconds.
-- [ ] Avoid starting multiple overlapping polls.
+- [x] Add a `useEffect` that polls runner languages while any row is `installing`.
+- [x] Stop polling when no rows are installing or the user leaves Runners page.
+- [x] Use a modest interval such as 2 seconds.
+- [x] Avoid starting multiple overlapping polls.
 
 Verification:
 
-- [ ] Frontend typecheck passes.
-- [ ] Manual browser check: installing row updates without pressing Refresh.
+- [x] Frontend typecheck passes.
+- [x] Manual browser check: installing row updates without pressing Refresh.
 
 ### Phase 22: Scope UI loading state per language
 
-- [ ] Replace global `runnerLoading` install blocking with a per-language pending set.
-- [ ] Keep Refresh global loading separate.
-- [ ] Disable Install/Remove only for the active row and during refresh where necessary.
+- [x] Replace global `runnerLoading` install blocking with a per-language pending set.
+- [x] Keep Refresh global loading separate.
+- [x] Disable Install/Remove only for the active row and during refresh where necessary.
 
 Verification:
 
-- [ ] Typecheck passes.
-- [ ] Manual UI check: installing Rust does not disable unrelated Swift controls unless refresh is running.
+- [x] Typecheck passes.
+- [x] Manual UI check: installing Rust does not disable unrelated Swift controls unless refresh is running.
 
 ### Phase 23: Add local script env defaults
 
-- [ ] Update `scripts/install.sh` generated `.env` with `APP_RUNNER_IMAGE_SOURCE=local`.
-- [ ] Update `scripts/start.sh` to append `APP_RUNNER_IMAGE_SOURCE=local` if absent and registry is blank.
-- [ ] Update `.env.example`.
+- [x] Update `scripts/install.sh` generated `.env` with `APP_RUNNER_IMAGE_SOURCE=local`.
+- [x] Update `scripts/start.sh` to append `APP_RUNNER_IMAGE_SOURCE=local` if absent and registry is blank.
+- [x] Update `.env.example`.
 
 Verification:
 
-- [ ] `sh -n scripts/install.sh scripts/start.sh`.
-- [ ] Running `./scripts/start.sh` on an existing env does not duplicate keys.
+- [x] `sh -n scripts/install.sh scripts/start.sh`.
+- [x] Running `./scripts/start.sh` on an existing env does not duplicate keys.
 
 ### Phase 24: Add release package source env
 
-- [ ] Update `scripts/package-release.sh` to write release runner mode into `.release-runner.env`.
-- [ ] Update `packaging/release-bundle/start.sh` to set `APP_RUNNER_IMAGE_SOURCE=registry` for online mode.
-- [ ] Set `APP_RUNNER_IMAGE_SOURCE=bundled` for offline mode.
-- [ ] Update release bundle Compose env passthrough if needed.
+- [x] Update `scripts/package-release.sh` to write release runner mode into `.release-runner.env`.
+- [x] Update `packaging/release-bundle/start.sh` to set `APP_RUNNER_IMAGE_SOURCE=registry` for online mode.
+- [x] Set `APP_RUNNER_IMAGE_SOURCE=bundled` for offline mode.
+- [x] Update release bundle Compose env passthrough if needed.
 
 Verification:
 
-- [ ] `sh -n scripts/package-release.sh packaging/release-bundle/start.sh`.
-- [ ] Inspect generated staging `.release-runner.env` in a local package build if practical.
+- [x] `sh -n scripts/package-release.sh packaging/release-bundle/start.sh`.
+- [x] Inspect generated staging `.release-runner.env` in a local package build if practical.
 
 ### Phase 25: Guard online package registry configuration
 
-- [ ] In `scripts/package-release.sh`, fail online mode if registry is empty.
-- [ ] Print a clear message describing `APP_RUNNER_IMAGE_REGISTRY`.
-- [ ] Do not affect offline mode.
+- [x] In `scripts/package-release.sh`, fail online mode if registry is empty.
+- [x] Print a clear message describing `APP_RUNNER_IMAGE_REGISTRY`.
+- [x] Do not affect offline mode.
 
 Verification:
 
-- [ ] Script-level test or manual command with `RUNNER_IMAGE_MODE=online APP_RUNNER_IMAGE_REGISTRY=` fails before build.
-- [ ] Offline mode still reaches image build/save path.
+- [x] Script-level test or manual command with `RUNNER_IMAGE_MODE=online APP_RUNNER_IMAGE_REGISTRY=` fails before build.
+- [x] Offline mode still reaches image build/save path.
 
 ### Phase 26: Add unauthenticated GHCR pull check in release CI
 
-- [ ] In `.github/workflows/release.yml`, logout or use a clean Docker config before pull smoke.
-- [ ] Pull published runner image without credentials.
-- [ ] Check release tag image for every language.
-- [ ] Check `latest` at least once, or all languages if matrix cost is acceptable.
+- [x] In `.github/workflows/release.yml`, logout or use a clean Docker config before pull smoke.
+- [x] Pull published runner image without credentials.
+- [x] Check release tag image for every language.
+- [x] Check `latest` at least once, or all languages if matrix cost is acceptable.
 
 Verification:
 
-- [ ] YAML syntax remains valid.
-- [ ] The job would fail if package visibility is private.
+- [x] YAML syntax remains valid.
+- [x] The job would fail if package visibility is private.
 
 ### Phase 27: Update docs for the three install modes
 
-- [ ] Update `README.md`.
-- [ ] Update `README.ko.md`.
-- [ ] Update `packaging/release-bundle/README.md`.
-- [ ] Include the exact behavior of `local`, `registry`, and `bundled`.
-- [ ] Mention Swift/Rust local build can take a long time.
+- [x] Update `README.md`.
+- [x] Update `README.ko.md`.
+- [x] Update `packaging/release-bundle/README.md`.
+- [x] Include the exact behavior of `local`, `registry`, and `bundled`.
+- [x] Mention Swift/Rust local build can take a long time.
 
 Verification:
 
-- [ ] Documentation references `APP_RUNNER_IMAGE_SOURCE`.
-- [ ] No doc says Install always pulls from registry.
+- [x] Documentation references `APP_RUNNER_IMAGE_SOURCE`.
+- [x] No doc says Install always pulls from registry.
 
 ### Phase 28: Add installed E2E coverage for Runners page
 
-- [ ] Extend `scripts/e2e-installed.mjs` to visit Runners.
-- [ ] Assert optional Rust row renders without raw Docker pull error.
-- [ ] If a test-only API/fake is needed, prefer backend unit coverage instead of making E2E slow.
-- [ ] Keep E2E runtime reasonable.
+- [x] Extend `scripts/e2e-installed.mjs` to visit Runners.
+- [x] Assert optional Rust row renders without raw Docker pull error.
+- [x] If a test-only API/fake is needed, prefer backend unit coverage instead of making E2E slow.
+- [x] Keep E2E runtime reasonable.
 
 Verification:
 
-- [ ] `node --check scripts/e2e-installed.mjs`.
-- [ ] `./scripts/e2e-installed.sh` passes.
+- [x] `node --check scripts/e2e-installed.mjs`.
+- [x] `./scripts/e2e-installed.sh` passes.
 
 ### Phase 29: Manual regression check
 
-- [ ] Ensure Docker is running.
-- [ ] Remove Rust image: `docker rmi learnloop-runner-rust:latest` if present.
-- [ ] Start app from source checkout.
-- [ ] Click Runners -> Rust -> Install.
-- [ ] Confirm UI shows local build stage, not Docker Hub denial.
-- [ ] Refresh and confirm Rust is installed.
+- [x] Ensure Docker is running.
+- [x] Remove Rust image: `docker rmi learnloop-runner-rust:latest` if present.
+- [x] Start app from source checkout.
+- [x] Click Runners -> Rust -> Install.
+- [x] Confirm UI shows local build stage, not Docker Hub denial.
+- [x] Refresh and confirm Rust is installed.
 
 Verification:
 
-- [ ] `docker image inspect learnloop-runner-rust:latest` succeeds after install.
-- [ ] UI row status is `Installed`.
+- [x] `docker image inspect learnloop-runner-rust:latest` succeeds after install.
+- [x] UI row status is `Installed`.
 
 ### Phase 30: Full final verification
 
-- [ ] Run focused backend runner tests.
-- [ ] Run full backend tests.
-- [ ] Run frontend typecheck and build.
-- [ ] Run installed E2E.
-- [ ] Run shell syntax checks for changed scripts.
+- [x] Run focused backend runner tests.
+- [x] Run full backend tests.
+- [x] Run frontend typecheck and build.
+- [x] Run installed E2E.
+- [x] Run shell syntax checks for changed scripts.
 
 Verification:
 
-- [ ] `./gradlew :backend:test --tests "*Runner*"`
-- [ ] `./gradlew :backend:test`
-- [ ] `npm --prefix frontend run typecheck`
-- [ ] `npm --prefix frontend run build`
-- [ ] `node --check scripts/e2e-installed.mjs`
-- [ ] `./scripts/e2e-installed.sh`
-- [ ] `sh -n scripts/install.sh scripts/start.sh scripts/package-release.sh packaging/release-bundle/start.sh`
+- [x] `./gradlew :backend:test --tests "*Runner*"`
+- [x] `./gradlew :backend:test`
+- [x] `npm --prefix frontend run typecheck`
+- [x] `npm --prefix frontend run build`
+- [x] `node --check scripts/e2e-installed.mjs`
+- [x] `./scripts/e2e-installed.sh`
+- [x] `sh -n scripts/install.sh scripts/start.sh scripts/package-release.sh packaging/release-bundle/start.sh`
 
 ## Acceptance Criteria
 
-- [ ] Clicking Install for `learnloop-runner-rust:latest` does not execute `docker pull learnloop-runner-rust:latest`.
-- [ ] If the local Rust image already exists, Install marks it installed without network access.
-- [ ] If source checkout local Rust image is missing, Install builds `runner/rust` locally and verifies the image.
-- [ ] Online release uses GHCR image refs and CI verifies anonymous pull.
-- [ ] Offline release never attempts remote pull for bundled runner images.
-- [ ] UI shows stage-based progress for long build/pull operations.
-- [ ] UI no longer displays raw Docker Hub denial messages for local image names.
-- [ ] Existing default TypeScript/Java/Kotlin runner behavior remains compatible.
+- [x] Clicking Install for `learnloop-runner-rust:latest` does not execute `docker pull learnloop-runner-rust:latest`.
+- [x] If the local Rust image already exists, Install marks it installed without network access.
+- [x] If source checkout local Rust image is missing, Install builds `runner/rust` locally and verifies the image.
+- [x] Online release uses GHCR image refs and CI verifies anonymous pull.
+- [x] Offline release never attempts remote pull for bundled runner images.
+- [x] UI shows stage-based progress for long build/pull operations.
+- [x] UI no longer displays raw Docker Hub denial messages for local image names.
+- [x] Existing default TypeScript/Java/Kotlin runner behavior remains compatible.
 
 ## Risks and Mitigations
 

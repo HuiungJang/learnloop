@@ -104,6 +104,12 @@ MVP는 개인 로컬 앱입니다.
 
 샌드박스 실행은 선택 기능이며 실패 시 안전하게 비활성화됩니다. Run 동작은 backend runtime이 Docker CLI, 접근 가능한 Docker daemon, 로컬 언어별 runner image를 사용할 수 있을 때만 동작합니다. Runner가 없으면 앱은 `runner_unavailable`을 표시하고 실습 피드백 패널 또는 Runners 페이지에서 설치 동작을 제공합니다. 읽기, 편집, 로컬 저장, draft sync, 제출 흐름은 계속 유지됩니다.
 
+Runner 설치는 image source에 따라 다르게 동작합니다.
+
+- `APP_RUNNER_IMAGE_SOURCE=local`: 소스 checkout은 `learnloop-runner-rust:latest` 같은 로컬 image 이름을 사용합니다. Install은 먼저 image 존재 여부를 확인하고, 없으면 `runner/<language>`를 로컬 Docker build로 생성합니다.
+- `APP_RUNNER_IMAGE_SOURCE=registry`: 온라인 릴리즈 번들은 `APP_RUNNER_IMAGE_REGISTRY`의 공개 runner image를 pull합니다.
+- `APP_RUNNER_IMAGE_SOURCE=bundled`: offline/full 릴리즈 번들은 설치 단계에서 import된 runner image를 기대하며, image가 없을 때 원격 pull을 시도하지 않습니다.
+
 현재 runner 제한:
 
 - 지원 언어: TypeScript, Java, Kotlin, Swift, Rust
@@ -124,7 +130,7 @@ MVP는 개인 로컬 앱입니다.
 ./scripts/status.sh
 ```
 
-소스 설치 스크립트는 기본으로 TypeScript, Java, Kotlin runner만 빌드합니다. 모든 runner를 로컬에서 빌드하려면 `./scripts/install.sh` 전에 `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"`를 설정하세요. 설치형 앱은 host Docker socket을 mount하고 `.local-runner-workspaces/`를 host/container 공유 workspace로 사용합니다. 이 기능은 강력한 로컬 실행 권한을 사용하므로 backend container가 host Docker daemon에 접근하지 않게 하려면 시작 전에 `APP_RUNNER_ENABLED=false`로 설정하세요.
+소스 설치 스크립트는 기본으로 TypeScript, Java, Kotlin runner만 빌드합니다. 선택 runner인 Swift와 Rust는 나중에 Runners 페이지에서 설치할 수 있고, local source 모드에서는 `runner/swift` 또는 `runner/rust`를 로컬 Docker build로 생성합니다. Swift image는 크기 때문에 build 시간이 오래 걸릴 수 있습니다. 모든 runner를 로컬에서 미리 빌드하려면 `./scripts/install.sh` 전에 `APP_RUNNER_BUILD_LANGUAGES="typescript java kotlin swift rust"`를 설정하세요. 설치형 앱은 host Docker socket을 mount하고 `.local-runner-workspaces/`를 host/container 공유 workspace로 사용합니다. 이 기능은 강력한 로컬 실행 권한을 사용하므로 backend container가 host Docker daemon에 접근하지 않게 하려면 시작 전에 `APP_RUNNER_ENABLED=false`로 설정하세요.
 
 ### 풀이기록과 동기화
 
@@ -175,6 +181,8 @@ RUNNER_IMAGE_MODE=offline RUNNER_OFFLINE_LANGUAGES="typescript java kotlin swift
 ```
 
 Runner 실행은 여전히 mounted Docker socket을 통한 로컬 Docker daemon 접근이 필요합니다. Runner 조건이 준비되지 않았거나 `APP_RUNNER_ENABLED=false`인 경우에도 릴리즈 앱은 실습 탐색, 편집, 저장, 제출, 풀이기록 검토를 지원합니다.
+
+온라인 릴리즈 번들은 공개 GHCR runner package가 필요합니다. 릴리즈 CI는 인증 없는 `docker pull`을 검증해서 package visibility 문제가 배포 전에 드러나도록 합니다.
 
 ## CI/CD
 

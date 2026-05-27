@@ -16,6 +16,7 @@ RUN apk add --no-cache curl docker-cli && addgroup -S app && adduser -S app -G a
 WORKDIR /app
 
 COPY --from=build /workspace/backend/build/libs/*.jar /app/app.jar
+COPY runner /app/runner
 
 USER app
 
