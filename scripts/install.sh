@@ -128,7 +128,7 @@ prepare_runner_workspace
 compose build
 build_runner_images
 compose up -d
-./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh."
+./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh start."
 
 ./scripts/status.sh --wait
 

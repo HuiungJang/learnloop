@@ -130,13 +130,24 @@ type LocalAiSettings = {
   configuredAt: string;
 };
 type LocalOAuthConnection = {
-  status: "idle" | "starting" | "running" | "connected" | "failed" | "unavailable";
+  status: "idle" | "starting" | "running" | "connected" | "failed" | "unavailable" | "blocked" | "provider_missing";
   message: string;
+};
+type LocalCompanionStatus = {
+  state: "idle" | "checking" | "online" | "offline" | "blocked" | "unhealthy";
+  message: string;
+  checkedUrl: string;
+  command: string;
+  checkedAt: string | null;
 };
 type CompanionOAuthResponse = {
   status: "idle" | "starting" | "running" | "connected" | "failed" | "missing";
   provider?: LocalAiProvider;
   credentialLabel?: string;
+  message?: string;
+};
+type CompanionStatusResponse = {
+  status?: string;
   message?: string;
 };
 type CompanionTokenResponse = {
@@ -681,11 +692,62 @@ function oauthCommand(provider: LocalAiProvider) {
   return provider === "codex" ? "codex login" : "gcloud auth application-default login";
 }
 
-function oauthStatusLabel(status: LocalOAuthConnection["status"]) {
+function localCompanionRecoveryCommand() {
+  return "./scripts/local-ai-companion.sh start";
+}
+
+function localCompanionHealthUrl() {
+  return `${LOCAL_AI_COMPANION_URL}/health`;
+}
+
+function defaultLocalCompanionStatus(): LocalCompanionStatus {
+  return {
+    state: "idle",
+    message: "Local companion status has not been checked.",
+    checkedUrl: localCompanionHealthUrl(),
+    command: localCompanionRecoveryCommand(),
+    checkedAt: null
+  };
+}
+
+function oauthStatusLabel(status: LocalOAuthConnection["status"], provider: LocalAiProvider) {
   if (status === "connected") return "Connected";
   if (status === "starting" || status === "running") return "Connecting";
-  if (status === "failed" || status === "unavailable") return "Needs attention";
+  if (status === "unavailable") return "Companion offline";
+  if (status === "blocked") return "Companion blocked";
+  if (status === "provider_missing") return provider === "codex" ? "Codex CLI missing" : "Provider missing";
+  if (status === "failed") return "Connection failed";
   return "Not connected";
+}
+
+function localCompanionStatusLabel(status: LocalCompanionStatus) {
+  if (status.state === "checking") return "Checking companion";
+  if (status.state === "online") return "Companion online";
+  if (status.state === "offline") return "Companion offline";
+  if (status.state === "blocked") return "Companion blocked";
+  if (status.state === "unhealthy") return "Companion unhealthy";
+  return "Companion not checked";
+}
+
+function localCompanionRecoveryMessage(status: LocalCompanionStatus) {
+  if (status.state === "offline") {
+    return `Local OAuth companion is not reachable at ${status.checkedUrl}. Run ${status.command} and refresh.`;
+  }
+  if (status.state === "blocked") {
+    return `Local OAuth companion rejected this browser origin at ${status.checkedUrl}. Restart it with the app port and refresh.`;
+  }
+  if (status.state === "unhealthy") {
+    return status.message || `Local OAuth companion is unhealthy at ${status.checkedUrl}. Restart it and refresh.`;
+  }
+  return status.message;
+}
+
+function oauthStatusForCompanion(status: LocalCompanionStatus): LocalOAuthConnection["status"] {
+  return status.state === "blocked" || status.state === "unhealthy" ? "blocked" : "unavailable";
+}
+
+function isCompanionIssue(status: LocalCompanionStatus) {
+  return status.state === "offline" || status.state === "blocked" || status.state === "unhealthy";
 }
 
 function delay(ms: number) {
@@ -700,6 +762,49 @@ async function readCompanionResponse(response: Response): Promise<CompanionOAuth
     credentialLabel: payload.credentialLabel,
     message: payload.message
   };
+}
+
+async function readLocalCompanionHealth(): Promise<LocalCompanionStatus> {
+  const checkedUrl = localCompanionHealthUrl();
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const response = await fetch(checkedUrl, { cache: "no-store" });
+    const payload = (await response.json().catch(() => ({}))) as CompanionStatusResponse;
+    if (response.ok) {
+      return {
+        state: "online",
+        message: "Local OAuth companion is running.",
+        checkedUrl,
+        command: localCompanionRecoveryCommand(),
+        checkedAt
+      };
+    }
+    return {
+      state: response.status === 403 ? "blocked" : "unhealthy",
+      message: payload.message || `Local OAuth companion returned HTTP ${response.status}.`,
+      checkedUrl,
+      command: localCompanionRecoveryCommand(),
+      checkedAt
+    };
+  } catch {
+    return {
+      state: "offline",
+      message: "Local OAuth companion is not reachable.",
+      checkedUrl,
+      command: localCompanionRecoveryCommand(),
+      checkedAt
+    };
+  }
+}
+
+async function readLocalProviderStatus(provider: LocalAiProvider): Promise<CompanionOAuthResponse> {
+  const response = await fetch(`${LOCAL_AI_COMPANION_URL}/providers/status?provider=${encodeURIComponent(provider)}`, { cache: "no-store" });
+  const payload = await readCompanionResponse(response);
+  if (!response.ok) {
+    throw new Error(payload.message || "Local provider status is unavailable.");
+  }
+  return payload;
 }
 
 async function readLocalCompanionToken(): Promise<string> {
@@ -789,11 +894,13 @@ export function App() {
   const [selectedGenerationProviderId, setSelectedGenerationProviderId] = useState("provider-local-mock");
   const [oauthLabel, setOauthLabel] = useState("");
   const [oauthConnection, setOauthConnection] = useState<LocalOAuthConnection>({ status: "idle", message: "" });
+  const [localCompanionStatus, setLocalCompanionStatus] = useState<LocalCompanionStatus>(() => defaultLocalCompanionStatus());
   const [onboardingError, setOnboardingError] = useState("");
   const [health, setHealth] = useState<HealthState>({ status: "pending" });
   const sessionRef = useRef(session);
   const restoredSessionRef = useRef(session !== null);
   const evidenceDetailRequestRef = useRef(0);
+  const companionHealthRequestRef = useRef(0);
 
   const membership = useMemo(() => primaryMembership(session), [session]);
   const selectedProvider = aiProviders.find((provider) => provider.id === selectedAiProvider) ?? aiProviders[0];
@@ -848,6 +955,11 @@ export function App() {
   useEffect(() => {
     setOauthConnection({ status: "idle", message: "" });
   }, [selectedAiProvider, selectedAuthMethod]);
+
+  useEffect(() => {
+    if (activePage !== "aiSetup" || selectedAuthMethod !== "oauth" || !selectedProvider.oauth) return;
+    void refreshLocalCompanionHealth();
+  }, [activePage, selectedAuthMethod, selectedAiProvider, selectedProvider.oauth]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -1200,7 +1312,12 @@ export function App() {
               <div className="oauth-connect-row">
                 <button
                   className="secondary-button"
-                  disabled={oauthConnection.status === "starting" || oauthConnection.status === "running"}
+                  disabled={
+                    oauthConnection.status === "starting" ||
+                    oauthConnection.status === "running" ||
+                    isCompanionIssue(localCompanionStatus) ||
+                    oauthConnection.status === "provider_missing"
+                  }
                   onClick={startOAuthConnection}
                   type="button"
                 >
@@ -1208,9 +1325,31 @@ export function App() {
                   {oauthConnection.status === "starting" || oauthConnection.status === "running" ? "Connecting" : `Connect ${selectedProvider.label}`}
                 </button>
                 <span aria-live="polite" className={`oauth-status oauth-status-${oauthConnection.status}`}>
-                  {oauthStatusLabel(oauthConnection.status)}
+                  {oauthStatusLabel(oauthConnection.status, selectedAiProvider)}
                 </span>
               </div>
+              <div className="oauth-companion-row">
+                <span className={`oauth-status oauth-companion-status oauth-companion-status-${localCompanionStatus.state}`}>
+                  {localCompanionStatusLabel(localCompanionStatus)}
+                </span>
+                <button
+                  className="secondary-button oauth-refresh-button"
+                  disabled={localCompanionStatus.state === "checking"}
+                  onClick={() => void refreshLocalCompanionHealth()}
+                  type="button"
+                >
+                  <RefreshCw aria-hidden="true" size={16} />
+                  {localCompanionStatus.state === "checking" ? "Checking" : "Refresh companion"}
+                </button>
+              </div>
+              {isCompanionIssue(localCompanionStatus) ? (
+                <div className="oauth-recovery-callout">
+                  <strong>{localCompanionStatusLabel(localCompanionStatus)}</strong>
+                  <p>{localCompanionRecoveryMessage(localCompanionStatus)}</p>
+                  <small>Checked URL: {localCompanionStatus.checkedUrl}</small>
+                  <code>{localCompanionStatus.command}</code>
+                </div>
+              ) : null}
               <label>
                 <span>Local OAuth profile</span>
                 <input
@@ -3108,9 +3247,78 @@ export function App() {
     setActivePage("dashboard");
   }
 
+  async function refreshLocalCompanionHealth(checkProvider = true): Promise<LocalCompanionStatus> {
+    const requestId = companionHealthRequestRef.current + 1;
+    companionHealthRequestRef.current = requestId;
+    setLocalCompanionStatus({
+      ...defaultLocalCompanionStatus(),
+      state: "checking",
+      message: "Checking local OAuth companion."
+    });
+
+    const nextStatus = await readLocalCompanionHealth();
+    if (companionHealthRequestRef.current !== requestId) return nextStatus;
+
+    setLocalCompanionStatus(nextStatus);
+    if (selectedAuthMethod !== "oauth") return nextStatus;
+
+    if (isCompanionIssue(nextStatus)) {
+      setOauthConnection({
+        status: oauthStatusForCompanion(nextStatus),
+        message: localCompanionRecoveryMessage(nextStatus)
+      });
+      return nextStatus;
+    }
+
+    if (checkProvider && nextStatus.state === "online") {
+      void refreshOAuthProviderReadiness(selectedAiProvider, requestId);
+    }
+    return nextStatus;
+  }
+
+  async function refreshOAuthProviderReadiness(provider: LocalAiProvider, requestId = companionHealthRequestRef.current): Promise<CompanionOAuthResponse | null> {
+    try {
+      const payload = await readLocalProviderStatus(provider);
+      if (companionHealthRequestRef.current !== requestId) return payload;
+      if (payload.status === "connected" || payload.status === "missing" || payload.status === "failed") {
+        applyOAuthConnectionPayload(payload, provider);
+      } else if (
+        payload.status === "idle" &&
+        (oauthConnection.status === "unavailable" || oauthConnection.status === "blocked" || oauthConnection.status === "provider_missing")
+      ) {
+        setOauthConnection({ status: "idle", message: "" });
+      }
+      return payload;
+    } catch (error) {
+      if (companionHealthRequestRef.current === requestId) {
+        setOauthConnection({
+          status: "failed",
+          message: error instanceof Error ? error.message : "Local provider status is unavailable."
+        });
+      }
+      return null;
+    }
+  }
+
   async function startOAuthConnection() {
     if (!selectedProvider.oauth) return;
     setOnboardingError("");
+
+    const companionStatus =
+      localCompanionStatus.state === "online"
+        ? localCompanionStatus
+        : await refreshLocalCompanionHealth(false);
+    if (isCompanionIssue(companionStatus)) {
+      setOauthConnection({
+        status: oauthStatusForCompanion(companionStatus),
+        message: localCompanionRecoveryMessage(companionStatus)
+      });
+      return;
+    }
+
+    const providerStatus = await refreshOAuthProviderReadiness(selectedAiProvider);
+    if (providerStatus?.status === "connected" || providerStatus?.status === "missing") return;
+
     setOauthConnection({ status: "starting", message: "Opening local OAuth connection." });
 
     try {
@@ -3133,7 +3341,7 @@ export function App() {
         status: "unavailable",
         message:
           error instanceof TypeError
-            ? "Local OAuth companion is not running. Start ./scripts/local-ai-companion.sh and try again."
+            ? "Local OAuth companion is not running. Start ./scripts/local-ai-companion.sh start and try again."
             : error instanceof Error
               ? error.message
               : "Local OAuth connection failed."
@@ -3161,7 +3369,7 @@ export function App() {
       setOauthLabel(credentialLabel);
       setOauthConnection({ status: "running", message: payload.message || "Complete the OAuth prompt opened by the local companion." });
     } else if (payload.status === "missing") {
-      setOauthConnection({ status: "failed", message: payload.message || `${oauthCommand(provider)} is not available on this machine.` });
+      setOauthConnection({ status: "provider_missing", message: payload.message || `${oauthCommand(provider)} is not available on this machine.` });
     } else if (payload.status === "failed") {
       setOauthConnection({ status: "failed", message: payload.message || "OAuth connection failed." });
     }

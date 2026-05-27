@@ -19,6 +19,8 @@ const oauthLabel = `Gemini OAuth ${Date.now()}`;
 const companionToken = `local-token-${Date.now()}`;
 const postedRequests = [];
 const companionRequests = [];
+let companionMode = "healthy";
+let offlineAuthTokenRequests = 0;
 const demoProblemId = "problem-demo-practice-workbench";
 const fakeProvider = await startFakeOpenAiProvider();
 const fakeProviderBackendBaseUrl = process.env.E2E_FAKE_PROVIDER_BASE_URL ?? defaultFakeProviderBackendBaseUrl(fakeProvider.port);
@@ -51,6 +53,38 @@ await page.route("http://127.0.0.1:4317/**", async (route) => {
   };
   if (route.request().method() === "OPTIONS") {
     await route.fulfill({ status: 204, headers: corsHeaders });
+    return;
+  }
+  const localCompanionPaths = new Set(["/health", "/providers/status", "/auth/token", "/oauth/start", "/oauth/status"]);
+  if (companionMode === "offline" && localCompanionPaths.has(url.pathname)) {
+    if (url.pathname === "/auth/token") {
+      offlineAuthTokenRequests += 1;
+    }
+    await route.abort("failed");
+    return;
+  }
+  if (url.pathname === "/health") {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({ status: "ok" })
+    });
+    return;
+  }
+  if (url.pathname === "/providers/status") {
+    const provider = url.searchParams.get("provider") ?? "codex";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({
+        status: "idle",
+        provider,
+        credentialLabel: provider === "gemini" ? "Google OAuth" : "Codex CLI OAuth",
+        message: ""
+      })
+    });
     return;
   }
   if (url.pathname === "/auth/token") {
@@ -305,6 +339,16 @@ try {
   assert.equal(await page.getByRole("button", { name: /^Login$/i }).count(), 0);
   await page.getByRole("button", { name: /AI setup/i }).click();
   await page.getByRole("heading", { name: /Choose your coding assistant/i }).waitFor();
+  companionMode = "offline";
+  await page.getByRole("radio", { name: /Codex/i }).click();
+  await page.getByRole("button", { name: /^OAuth$/i }).click();
+  await page.getByText(/Companion offline/i).first().waitFor({ timeout: 10_000 });
+  await page.locator("code", { hasText: "./scripts/local-ai-companion.sh start" }).waitFor({ timeout: 10_000 });
+  assert.equal(await page.getByRole("button", { name: /Connect Codex/i }).isDisabled(), true);
+  assert.equal(offlineAuthTokenRequests, 0);
+  companionMode = "healthy";
+  await page.getByRole("button", { name: /Refresh companion/i }).click();
+  await page.getByText(/Companion online/i).first().waitFor({ timeout: 10_000 });
   await page.getByRole("button", { name: /Overview/i }).click();
   await page.getByRole("heading", { name: /Generated code becomes curated practice/i }).waitFor();
   assert.equal(await page.getByRole("heading", { name: /Choose your coding assistant/i }).count(), 0);
@@ -482,7 +526,8 @@ export function formatTag(input: string): string {
     localStorageAuthMethod: storedOauthSettings.authMethod,
     registrationDisabled: true,
     apiKeyLeakedOutsideProviderSave,
-    oauthLabelLeakedToServer
+    oauthLabelLeakedToServer,
+    offlineAuthTokenRequests
   }, null, 2));
 } finally {
   await browser.close();

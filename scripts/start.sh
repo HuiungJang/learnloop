@@ -42,5 +42,5 @@ else
   docker compose --env-file .env -f docker-compose.install.yml up -d
 fi
 
-./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh."
+./scripts/local-ai-companion.sh start || echo "Local AI companion is not running. Start it with ./scripts/local-ai-companion.sh start."
 ./scripts/status.sh --wait

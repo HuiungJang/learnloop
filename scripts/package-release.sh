@@ -136,6 +136,7 @@ APP_DATABASE_NAME=learnloop
 APP_DATABASE_USERNAME=learnloop
 APP_DATABASE_PASSWORD=release-build-only
 APP_DEMO_PASSWORD=release-build-only
+APP_CREDENTIAL_ENCRYPTION_KEY=release-build-only-not-used
 APP_OPENAPI_ENABLED=true
 EOF
 
